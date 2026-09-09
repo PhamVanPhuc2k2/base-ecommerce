@@ -1,16 +1,25 @@
 # Go
 /apps/api/bin/
+/apps/api/api
 *.exe
 coverage.out
+*.log
+go.work
+go.work.sum
+__debug_bin*
 
 # Node
 node_modules/
 .next/
 out/
+dist/
+.turbo/
 
 # Env & secrets
 .env
-.env.local
+.env.*
+!.env.example
+.vercel/
 *.enc.yaml.dec
 
 # IDE / OS

@@ -33,6 +33,7 @@ tasks:
     cmd: go test ./... -race
 
   lint:
+    desc: Chạy linter
     dir: apps/api
     cmd: golangci-lint run
 
@@ -41,5 +42,6 @@ tasks:
     cmd: bash scripts/check-arch.sh
 
   run:
+    desc: Chạy API server
     dir: apps/api
     cmd: go run ./cmd/api
