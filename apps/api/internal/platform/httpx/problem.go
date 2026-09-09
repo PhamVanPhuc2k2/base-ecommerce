@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"base-ecommerce/api/internal/platform/errs"
+
 	"github.com/go-chi/chi/v5/middleware"
 )
 

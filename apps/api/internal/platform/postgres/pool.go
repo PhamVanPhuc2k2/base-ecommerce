@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"base-ecommerce/api/internal/platform/config"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
