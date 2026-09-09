@@ -552,15 +552,25 @@ Làm đúng thứ tự này cho mọi module từ P1 trở đi:
 
 ### 10.1. Dịch vụ trong `compose.dev.yml`
 
-| Dịch vụ | Cổng | Thêm ở giai đoạn |
+Bảng cổng host đã cấp phát. **Kiểm tra bảng này trước khi thêm dịch vụ mới** —
+mọi cổng chỉ bind vào `127.0.0.1`, không mở ra mạng LAN.
+
+| Dịch vụ | Cổng host | Thêm ở giai đoạn |
 |---|---|---|
+| API (Go) | 8080 | P0 |
 | PostgreSQL | 5432 | P0 |
-| Redis | 6379 | P0 |
+| Redis | 6380 | P0 |
 | RabbitMQ + management UI | 5672 / 15672 | P0 |
+| `redis-cache` / `redis-data` | 6380 / 6381 | P0.2 — tách hai instance, xem [thiết kế 03](docs/design/03-redis-cache.md) |
 | MinIO | 9000 / 9001 | P1 |
-| imgproxy | 8080 | P1 |
+| imgproxy | 8081 | P1 |
 | Meilisearch | 7700 | P7 |
 | Mailpit (bắt email khi dev) | 8025 | P10 |
+| Web (Next.js) | 3000 | P0.4 |
+
+Hai chỗ lệch so với cổng mặc định, đều có lý do:
+- **Redis 6380** thay vì 6379 — máy dev đã có một Redis của dự án khác chiếm 6379.
+- **imgproxy 8081** thay vì 8080 — 8080 đã dành cho API.
 
 ### 10.2. Config
 

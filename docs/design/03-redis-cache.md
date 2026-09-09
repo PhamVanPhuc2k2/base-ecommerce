@@ -15,16 +15,27 @@ có yêu cầu độ bền hoàn toàn trái ngược nhau**:
 Trộn hai loại vào một instance với `maxmemory-policy allkeys-lru` thì khi đầy bộ
 nhớ, Redis sẽ xóa giỏ hàng của khách để lấy chỗ cache sản phẩm.
 
-**Quyết định:** dùng **hai database logic** trên cùng một instance ở giai đoạn đầu,
-tách thành hai instance khi lên production thật.
+⚠️ **Không tách được bằng database logic.** `maxmemory` và `maxmemory-policy` là
+tham số **toàn server** — các database logic (DB 0, DB 1...) dùng chung một ngưỡng
+bộ nhớ và một chính sách xóa. Không có cách nào đặt `allkeys-lru` cho DB 0 và
+`noeviction` cho DB 1 trên cùng một instance. Đây là hiểu nhầm phổ biến.
 
-| | DB | Chính sách |
-|---|---|---|
-| `cache` | 0 | `maxmemory-policy allkeys-lru`, **không** cần persistence |
-| `data` | 1 | `maxmemory-policy noeviction`, **bật AOF** `appendfsync everysec` |
+**Quyết định: hai instance Redis riêng biệt**, ngay từ P0.2 khi bắt đầu dùng Redis.
+
+| Instance | Cổng dev | Chính sách | Persistence |
+|---|---|---|---|
+| `redis-cache` | 6380 | `maxmemory 512mb` + `maxmemory-policy allkeys-lru` | Tắt — mất là đọc lại từ Postgres |
+| `redis-data` | 6381 | `maxmemory-policy noeviction` | **Bật AOF**, `appendfsync everysec` |
+
+Hai container trong `compose.dev.yml`, hai service trong production. Chi phí gần
+như bằng không so với rủi ro xóa nhầm giỏ hàng của khách.
 
 Với `noeviction`, khi đầy bộ nhớ Redis trả lỗi ghi thay vì âm thầm xóa dữ liệu —
-lỗi ồn ào tốt hơn mất giỏ hàng im lặng.
+lỗi ồn ào tốt hơn mất giỏ hàng im lặng. Còn `redis-cache` thì ngược lại: xóa key cũ
+là hành vi đúng, vì mọi thứ trong đó đều dựng lại được.
+
+*(Ở P0.1 compose chỉ có một Redis chạy mặc định `noeviction` + AOF — an toàn cho cả
+hai vai trò vì chưa có code nào dùng tới. P0.2 tách thành hai instance.)*
 
 ---
 
