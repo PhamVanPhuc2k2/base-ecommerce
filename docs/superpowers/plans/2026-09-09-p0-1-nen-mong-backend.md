@@ -218,7 +218,10 @@ tasks:
   test-unit:
     desc: Test nhanh, không cần Docker
     dir: apps/api
-    cmd: go test ./internal/platform/errs/... ./internal/platform/httpx/... ./internal/platform/config/...
+    # -short thay vì liệt kê cứng tên package: danh sách cứng vừa hỏng khi
+    # package chưa tồn tại, vừa phải sửa mỗi lần thêm module. Package nào cần
+    # Docker thì tự thoát sớm trong TestMain khi thấy testing.Short().
+    cmd: go test -short ./...
 
   test:
     desc: Toàn bộ test (cần Docker)
@@ -1509,6 +1512,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 package postgres_test
 
 import (
+	"flag"
 	"os"
 	"testing"
 
@@ -1516,6 +1520,12 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	// flag.Parse trước khi đọc testing.Short: m.Run mới là chỗ parse mặc định,
+	// mà ta cần biết -short TRƯỚC khi khởi động container.
+	flag.Parse()
+	if testing.Short() {
+		os.Exit(0) // task test-unit bỏ qua mọi test cần Docker
+	}
 	os.Exit(testdb.Setup(m))
 }
 ```

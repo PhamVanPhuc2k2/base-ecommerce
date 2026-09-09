@@ -33,7 +33,10 @@ tasks:
   test-unit:
     desc: Test nhanh, không cần Docker
     dir: apps/api
-    cmd: go test ./internal/platform/errs/... ./internal/platform/httpx/... ./internal/platform/config/...
+    # -short thay vì liệt kê cứng tên package: danh sách cứng vừa hỏng khi
+    # package chưa tồn tại, vừa phải sửa mỗi lần thêm module. Package nào cần
+    # Docker thì tự thoát sớm trong TestMain khi thấy testing.Short().
+    cmd: go test -short ./...
 
   test:
     desc: Toàn bộ test (cần Docker)
