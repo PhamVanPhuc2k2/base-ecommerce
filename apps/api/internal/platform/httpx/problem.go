@@ -1,0 +1,75 @@
+package httpx
+
+import (
+	"encoding/json"
+	"log/slog"
+	"net/http"
+	"strings"
+
+	"base-ecommerce/api/internal/platform/errs"
+	"github.com/go-chi/chi/v5/middleware"
+)
+
+// Problem là body lỗi theo RFC 7807, thêm hai trường ngoài chuẩn:
+// code (hợp đồng ổn định cho client) và request_id (để tra log).
+type Problem struct {
+	Type      string            `json:"type"`
+	Title     string            `json:"title"`
+	Status    int               `json:"status"`
+	Detail    string            `json:"detail,omitempty"`
+	Code      string            `json:"code"`
+	RequestID string            `json:"request_id,omitempty"`
+	Errors    []errs.FieldError `json:"errors,omitempty"`
+}
+
+func statusOf(k errs.Kind) int {
+	switch k {
+	case errs.KindInvalid:
+		return http.StatusBadRequest
+	case errs.KindUnauthenticated:
+		return http.StatusUnauthorized
+	case errs.KindForbidden:
+		return http.StatusForbidden
+	case errs.KindNotFound:
+		return http.StatusNotFound
+	case errs.KindConflict:
+		return http.StatusConflict
+	case errs.KindValidation:
+		return http.StatusUnprocessableEntity
+	case errs.KindRateLimited:
+		return http.StatusTooManyRequests
+	case errs.KindUnavailable:
+		return http.StatusServiceUnavailable
+	default:
+		return http.StatusInternalServerError
+	}
+}
+
+// WriteError là nơi DUY NHẤT map lỗi sang HTTP response.
+func WriteError(w http.ResponseWriter, r *http.Request, err error) {
+	e := errs.From(err)
+	status := statusOf(e.Kind)
+	reqID := middleware.GetReqID(r.Context())
+
+	// Lỗi từ 500 trở lên là lỗi của mình — phải ghi log kèm nguyên nhân gốc.
+	if status >= http.StatusInternalServerError {
+		slog.ErrorContext(r.Context(), "request thất bại",
+			"err", err, "request_id", reqID, "path", r.URL.Path)
+	}
+
+	// Chỉ những trường dưới đây được ra ngoài. e.cause KHÔNG bao giờ có mặt.
+	p := Problem{
+		Type:      "/errors/" + strings.ToLower(strings.ReplaceAll(e.Code, "_", "-")),
+		Title:     e.Message,
+		Status:    status,
+		Code:      e.Code,
+		RequestID: reqID,
+		Errors:    e.Fields,
+	}
+
+	w.Header().Set("Content-Type", "application/problem+json; charset=utf-8")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(p); err != nil {
+		slog.Error("không mã hóa được problem response", "err", err)
+	}
+}
