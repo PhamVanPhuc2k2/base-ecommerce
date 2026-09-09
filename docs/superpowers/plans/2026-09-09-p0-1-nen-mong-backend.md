@@ -914,8 +914,27 @@ Mở terminal thứ hai:
 | 4 | `curl -i localhost:8080/khong-ton-tai` | `404`. Terminal server in một dòng JSON có `"status":404`, `"path"`, `"duration_ms"`, và `"request_id"` khác rỗng |
 | 5 | `docker compose -f deploy/compose.dev.yml stop postgres` rồi `curl -i localhost:8080/readyz` | `503`, `"checks":{"postgres":"fail"}` |
 | 6 | ngay sau đó `curl -i localhost:8080/healthz` | **Vẫn `200`** — điểm mấu chốt của việc tách hai endpoint. Nếu nó cũng 503 là đã cài sai |
-| 7 | `docker compose -f deploy/compose.dev.yml start postgres`, rồi `Ctrl+C` ở terminal server | Log lần lượt `"nhận tín hiệu tắt, bắt đầu dừng êm"` rồi `"đã dừng"`, thoát mã 0 |
+| 7 | `docker compose -f deploy/compose.dev.yml start postgres`, rồi `Ctrl+C` ở terminal server | Log lần lượt `"nhận tín hiệu tắt, bắt đầu dừng êm"` rồi `"đã dừng"`, thoát mã 0. Xem ghi chú bên dưới nếu ở Windows |
 | 8 | `cd apps/api && DATABASE_URL= go run ./cmd/api; echo "exit=$?"` | In `khởi động thất bại: cấu hình không hợp lệ: thiếu biến môi trường bắt buộc DATABASE_URL` và `exit=1` |
+
+**Ghi chú cho máy Windows — mục 7 khó kiểm hơn tưởng.** `Ctrl+C` trong terminal
+thì được, nhưng nếu server chạy nền thì không gửi tín hiệu tới được: Git Bash
+`kill -INT` dùng PID của MSYS chứ không phải PID Windows, còn `taskkill` không có
+`/F` cần tiến trình có cửa sổ. Cách kiểm chắc chắn là chạy trong container Linux
+với **binary làm PID 1**:
+
+```bash
+docker run -d --name api-stop-test --network base-ecommerce-dev_default   -v "D:/Projects/base-ecommerce/apps/api:/src" -w /src   -e "DATABASE_URL=postgres://app:app@postgres:5432/base_ecommerce?sslmode=disable"   golang:1.25-alpine sh -c 'go build -o /tmp/api ./cmd/api && exec /tmp/api'
+
+docker stop api-stop-test
+docker logs api-stop-test | tail -3          # phải có "nhận tín hiệu tắt" rồi "đã dừng"
+docker inspect api-stop-test --format '{{.State.ExitCode}}'   # phải là 0
+docker rm -f api-stop-test
+```
+
+⚠️ `exec` là bắt buộc. Bỏ nó đi — hoặc dùng thẳng `go run ./cmd/api` — thì PID 1
+là shell hoặc `go run`, SIGTERM dừng ở đó và không tới code của ta: container
+thoát mã 2 sau 0,3 giây, không có dòng log tắt nào. Xem tài liệu 05 mục 4.
 
 - [ ] **Step 4: Commit**
 

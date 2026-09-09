@@ -167,6 +167,28 @@ lúc server đã bắt đầu tắt → khách nhận 502 ngay giữa lúc thanh
 Đặt `stop_grace_period: 45s` trong compose — dài hơn tổng thời gian trên, nếu
 không Docker sẽ `SIGKILL` giữa chừng.
 
+⚠️ **Binary phải là PID 1 trong container, nếu không toàn bộ đoạn trên vô nghĩa.**
+
+`docker stop` gửi SIGTERM cho **PID 1**. Nếu PID 1 là `go run` hay một shell bọc
+ngoài thì tín hiệu dừng ở đó và không bao giờ tới code của ta — server bị giết
+cứng sau thời gian chờ, mất hết request đang xử lý.
+
+Chuyện này đã xảy ra khi kiểm chứng P0.1: chạy `go run ./cmd/api` làm entrypoint
+thì container thoát sau 0,3 giây với **mã 2** và **không có dòng log tắt nào**.
+Đổi thành `exec /tmp/api` (binary làm PID 1) thì đúng ngay: `"nhận tín hiệu tắt"`
+→ `"đã dừng"` → thoát mã 0.
+
+Dockerfile ở mục 2.1 đã đúng vì dùng `ENTRYPOINT ["/api"]` dạng exec. Hai điều
+tuyệt đối tránh:
+
+```dockerfile
+ENTRYPOINT /api                      # SAI: dạng shell, PID 1 là /bin/sh
+CMD ["sh", "-c", "go run ./cmd/api"] # SAI: PID 1 là sh, và go run không chuyển tín hiệu
+```
+
+Kiểm nhanh: `docker exec <container> ps -o pid,comm | head -2` — PID 1 phải là tên
+binary của bạn.
+
 ### 4.2. `worker`
 
 ```
