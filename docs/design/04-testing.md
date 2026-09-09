@@ -125,26 +125,18 @@ database mẫu, mỗi test `CREATE DATABASE ... TEMPLATE`.
 
 ```go
 // internal/platform/testdb/testdb.go
-var pool *pgxpool.Pool   // trỏ tới database 'postgres' để tạo/xóa DB
+var pool *pgxpool.Pool   // trỏ tới database quản trị để tạo/xóa DB
 
-func Setup(m *testing.M) int {
-    ctx := context.Background()
-    c, err := tcpostgres.Run(ctx, "postgres:17-alpine",
-        tcpostgres.WithDatabase("template_test"),
-        testcontainers.WithWaitStrategy(wait.ForListeningPort("5432/tcp")),
-    )
-    if err != nil { panic(err) }
-    defer c.Terminate(ctx)
-
-    dsn, _ := c.ConnectionString(ctx, "sslmode=disable")
-    goose.Up(sqlDB(dsn), "db/migrations")     // chạy MỘT lần
-    pool, _ = pgxpool.New(ctx, dsn)
-    return m.Run()
-}
+// Start dựng container và chạy migration. KHÔNG gọi m.Run() thay bạn.
+func Start() (stop func(), err error) { ... }
 
 // New tạo database riêng cho một test, tự dọn khi test xong.
+// Chạy với -short thì không có container → bỏ qua test một cách nhìn thấy được.
 func New(t *testing.T) *pgxpool.Pool {
     t.Helper()
+    if pool == nil {
+        t.Skip("cần Docker; bỏ qua vì -short")
+    }
     name := "t_" + strings.ReplaceAll(uuid.NewString(), "-", "")[:16]
     _, err := pool.Exec(context.Background(),
         fmt.Sprintf("CREATE DATABASE %s TEMPLATE template_test", name))
@@ -159,6 +151,34 @@ không có test nào phụ thuộc thứ tự chạy của test khác.
 
 *(Cách đơn giản hơn cho P0: một database dùng chung, `TRUNCATE ... CASCADE` giữa
 các test. Chấp nhận được cho tới khi bộ test lớn lên và cần chạy song song.)*
+
+### 5.1b. `TestMain` phải LUÔN gọi `m.Run()`
+
+Package nào cần database thì viết `TestMain` đúng mẫu này:
+
+```go
+func TestMain(m *testing.M) {
+    flag.Parse()                       // bắt buộc trước khi đọc testing.Short()
+
+    var stop func()
+    if !testing.Short() {
+        var err error
+        if stop, err = testdb.Start(); err != nil {
+            log.Fatalf("không khởi động được database test: %v", err)
+        }
+    }
+
+    code := m.Run()                    // LUÔN chạy, kể cả khi -short
+    if stop != nil { stop() }
+    os.Exit(code)
+}
+```
+
+⚠️ **Đừng viết `if testing.Short() { os.Exit(0) }`.** Nó bỏ qua **toàn bộ** package
+chứ không riêng test cần Docker: một test thuần thêm vào package đó sau này sẽ im
+lặng ngừng chạy, mà `go test` vẫn in `ok`. Với mẫu trên, test cần database tự
+`t.Skip` bên trong `testdb.New(t)` và `go test` in ra dòng `SKIP` nhìn thấy được,
+còn test thuần vẫn chạy bình thường.
 
 ### 5.2. Những gì phải test ở tầng này
 
@@ -286,7 +306,9 @@ quen bỏ qua CI đỏ.
 
 ```yaml
 test-unit:    # nhanh, không cần Docker — chạy khi đang code
-  cmd: go test ./internal/*/domain/... ./internal/*/app/...
+  # -short chứ không liệt kê cứng tên package: danh sách cứng vừa hỏng khi
+  # package chưa tồn tại, vừa phải sửa mỗi lần thêm module.
+  cmd: go test -short ./...
 
 test:         # cần Docker
   cmd: go test ./...

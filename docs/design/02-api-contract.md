@@ -229,7 +229,7 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
         slog.ErrorContext(r.Context(), "request failed", "err", err)  // log lỗi gốc
         sentry.CaptureException(err)
     }
-    // KHÔNG bao giờ đưa e.err hay err.Error() vào response
+    // KHÔNG bao giờ đưa e.cause hay err.Error() vào response
     writeProblem(w, r, status, e)
 }
 ```

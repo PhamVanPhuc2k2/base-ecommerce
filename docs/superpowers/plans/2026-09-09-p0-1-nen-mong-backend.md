@@ -1387,17 +1387,18 @@ func migrationsDir() (string, error) {
 	}
 }
 
-// Setup khởi động container, chạy migration một lần vào database mẫu.
-// Gọi từ TestMain của package cần database, không cần truyền đường dẫn:
+// Start khởi động container và chạy migration một lần vào database mẫu.
+// Trả về hàm dọn dẹp; gọi nó sau khi m.Run() xong.
 //
-//	func TestMain(m *testing.M) { os.Exit(testdb.Setup(m)) }
-func Setup(m *testing.M) int {
+// Start KHÔNG gọi m.Run() thay bạn. Đây là chủ đích: TestMain phải luôn chạy
+// m.Run(), nếu không thì mọi test thuần trong package cũng bị bỏ qua trong im
+// lặng và `go test` vẫn báo ok.
+func Start() (stop func(), err error) {
 	ctx := context.Background()
 
 	migDir, err := migrationsDir()
 	if err != nil {
-		log.Printf("không tìm được thư mục migration: %v", err)
-		return 1
+		return nil, fmt.Errorf("không tìm được thư mục migration: %w", err)
 	}
 
 	container, err := tcpostgres.Run(ctx, "postgres:17-alpine",
@@ -1411,48 +1412,53 @@ func Setup(m *testing.M) int {
 		),
 	)
 	if err != nil {
-		log.Printf("không khởi động được container postgres: %v", err)
-		return 1
+		return nil, fmt.Errorf("khởi động container postgres: %w", err)
 	}
-	defer func() { _ = testcontainers.TerminateContainer(container) }()
+	cleanup := func() { _ = testcontainers.TerminateContainer(container) }
 
 	adminDSN, err = container.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {
-		log.Printf("không lấy được DSN: %v", err)
-		return 1
+		cleanup()
+		return nil, fmt.Errorf("lấy DSN: %w", err)
 	}
 
 	// Chạy migration MỘT lần vào database mẫu.
 	sqlDB, err := sql.Open("pgx", adminDSN)
 	if err != nil {
-		log.Printf("không mở được kết nối cho goose: %v", err)
-		return 1
+		cleanup()
+		return nil, fmt.Errorf("mở kết nối cho goose: %w", err)
 	}
 	if err := goose.SetDialect("postgres"); err != nil {
-		log.Printf("goose dialect: %v", err)
-		return 1
+		cleanup()
+		return nil, fmt.Errorf("goose dialect: %w", err)
 	}
 	if err := goose.Up(sqlDB, migDir); err != nil {
-		log.Printf("chạy migration thất bại: %v", err)
-		return 1
+		cleanup()
+		return nil, fmt.Errorf("chạy migration: %w", err)
 	}
 	_ = sqlDB.Close()
 
 	adminPool, err = pgxpool.New(ctx, adminDSN)
 	if err != nil {
-		log.Printf("không tạo được admin pool: %v", err)
-		return 1
+		cleanup()
+		return nil, fmt.Errorf("tạo admin pool: %w", err)
 	}
-	defer adminPool.Close()
 
-	return m.Run()
+	return func() {
+		adminPool.Close()
+		cleanup()
+	}, nil
 }
 
 // New tạo một database sạch riêng cho test này và trả về pool trỏ tới nó.
 // Database được xóa tự động khi test kết thúc.
 func New(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	require.NotNil(t, adminPool, "chưa gọi testdb.Setup trong TestMain")
+	if adminPool == nil {
+		// Chạy với -short (task test-unit) → không có database. Bỏ qua test này,
+		// và bỏ qua một cách CÓ THỂ NHÌN THẤY: go test in ra dòng SKIP.
+		t.Skip("cần Docker; bỏ qua vì -short")
+	}
 
 	ctx := context.Background()
 	name := "t_" + strings.ReplaceAll(uuid.NewString(), "-", "")[:20]
@@ -1513,6 +1519,7 @@ package postgres_test
 
 import (
 	"flag"
+	"log"
 	"os"
 	"testing"
 
@@ -1523,10 +1530,23 @@ func TestMain(m *testing.M) {
 	// flag.Parse trước khi đọc testing.Short: m.Run mới là chỗ parse mặc định,
 	// mà ta cần biết -short TRƯỚC khi khởi động container.
 	flag.Parse()
-	if testing.Short() {
-		os.Exit(0) // task test-unit bỏ qua mọi test cần Docker
+
+	var stop func()
+	if !testing.Short() {
+		var err error
+		if stop, err = testdb.Start(); err != nil {
+			log.Fatalf("không khởi động được database test: %v", err)
+		}
 	}
-	os.Exit(testdb.Setup(m))
+
+	// LUÔN gọi m.Run(), kể cả khi -short. Thoát sớm bằng os.Exit(0) sẽ bỏ qua
+	// cả những test thuần không cần database, mà go test vẫn báo "ok" —
+	// nghĩa là test biến mất trong im lặng.
+	code := m.Run()
+	if stop != nil {
+		stop()
+	}
+	os.Exit(code)
 }
 ```
 
