@@ -878,8 +878,19 @@ func healthcheck() int {
 		host = "127.0.0.1"
 	}
 
-	client := &http.Client{Timeout: 3 * time.Second}
-	res, err := client.Get(fmt.Sprintf("http://%s:%s/healthz", host, port))
+	// Dùng context thay vì client.Timeout: client.Get không hủy được, nên
+	// linter noctx chặn. Cùng một mốc 3s nhưng hủy được đúng cách.
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		fmt.Sprintf("http://%s:%s/healthz", host, port), nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "healthcheck thất bại: %v\n", err)
+		return 1
+	}
+
+	res, err := (&http.Client{}).Do(req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "healthcheck thất bại: %v\n", err)
 		return 1
