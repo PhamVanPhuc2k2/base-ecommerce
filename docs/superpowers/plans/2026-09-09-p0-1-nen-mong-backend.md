@@ -79,30 +79,55 @@ Mỗi file một trách nhiệm. `errs` không import `net/http` — đó là đ
 ```bash
 cd /d/Projects/base-ecommerce
 git init
+git checkout -b feat/p0-1-nen-mong-backend      # không commit thẳng lên main
 mkdir -p apps/api/cmd/api apps/api/internal/platform apps/api/db/migrations scripts .github/workflows
-cd apps/api && go mod init base-ecommerce/api && cd ../..
+cd apps/api
+go mod init base-ecommerce/api
+go mod edit -go=1.24                            # xem giải thích bên dưới
+cd ../..
 ```
 
 Module path `base-ecommerce/api` là đường dẫn cục bộ, không phải URL. Hợp lệ với Go
 vì repo này không được `go get` từ nơi khác. Đổi sang `github.com/<org>/...` sau khi
 có remote nếu muốn.
 
+⚠️ **Phải chỉnh `go` directive.** `go mod init` ghi phiên bản của toolchain đang cài
+trên máy, kèm cả số patch (ví dụ `go 1.26.4`). Directive này là **mức tối thiểu**,
+nên CI pin Go 1.24 (Task 13) sẽ hỏng ngay với `go.mod requires go >= 1.26.4`. Ngoài
+ra pin tới số patch buộc mọi người phải dùng đúng bản đó mà không có lý do. Đặt
+`go 1.24` — máy bạn dùng toolchain mới hơn vẫn build được bình thường.
+
+⚠️ **Và kiểm lại sau mỗi lần `go get`.** `go get` sẽ tự nâng `go` directive nếu một
+thư viện khai mức tối thiểu cao hơn. Điều này rất dễ xảy ra ở Task 4, 5 và 7
+(testify, chi, pgx, testcontainers). Sau mỗi lần cài thư viện, chạy
+`git diff apps/api/go.mod` — nếu directive bị nâng lên quá `1.24` thì hoặc hạ lại,
+hoặc nâng `GO_VERSION` trong CI ở Task 13 cho khớp. Hai chỗ này phải luôn đi cùng nhau.
+
 - [ ] **Step 2: Tạo `.gitignore`**
 
 ```gitignore
 # Go
 /apps/api/bin/
+/apps/api/api
 *.exe
+*.log
 coverage.out
+go.work
+go.work.sum
+__debug_bin*
 
 # Node
 node_modules/
 .next/
 out/
+dist/
+.turbo/
 
 # Env & secrets
 .env
-.env.local
+.env.*
+!.env.example
+.vercel/
 *.enc.yaml.dec
 
 # IDE / OS
@@ -111,6 +136,10 @@ out/
 .DS_Store
 Thumbs.db
 ```
+
+Mẫu `.env.*` kèm ngoại lệ `!.env.example` là bắt buộc: Next.js đặt credential
+production ở `.env.production.local`, mà mẫu `.env.local` đơn lẻ không bắt được
+file đó.
 
 - [ ] **Step 3: Tạo `.editorconfig`**
 
@@ -127,10 +156,27 @@ indent_size = 2
 
 [*.go]
 indent_style = tab
+indent_size = 4
 
-[Makefile]
-indent_style = tab
+[*.md]
+trim_trailing_whitespace = false
 ```
+
+`[*.md]` tắt cắt khoảng trắng cuối dòng vì trong Markdown hai dấu cách cuối dòng
+là ngắt dòng cứng — repo này đã có vài nghìn dòng Markdown. Không có section
+`[Makefile]` vì dự án dùng go-task, không có Makefile.
+
+- [ ] **Step 3b: Tạo `.gitattributes`**
+
+```gitattributes
+* text=auto eol=lf
+*.sh text eol=lf
+*.png -text
+```
+
+Máy Windows thường bật `core.autocrlf=true`, làm bản clone mới có CRLF trong khi
+`.editorconfig` khai `end_of_line = lf`. File này ép LF trong repo, quan trọng cho
+script shell chạy trong Docker và WSL.
 
 - [ ] **Step 4: Tạo `Taskfile.yml`**
 
@@ -170,6 +216,7 @@ tasks:
     cmd: go test ./... -race
 
   lint:
+    desc: Chạy linter
     dir: apps/api
     cmd: golangci-lint run
 
@@ -178,19 +225,29 @@ tasks:
     cmd: bash scripts/check-arch.sh
 
   run:
+    desc: Chạy API server
     dir: apps/api
     cmd: go run ./cmd/api
 ```
+
+Mọi task đều phải có `desc` — `task --list` chỉ hiện những task có mô tả, và `run`
+là task dùng nhiều nhất.
 
 - [ ] **Step 5: Cài công cụ**
 
 ```bash
 go install github.com/go-task/task/v3/cmd/task@latest
 go install github.com/pressly/goose/v3/cmd/goose@latest
-go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
 ```
 
-Kiểm tra: `task --version` in ra số phiên bản.
+⚠️ **Chú ý đường dẫn `/v2` của golangci-lint.** Đường dẫn không có `/v2` chỉ giải
+ra bản v1.x, mà file `.golangci.yml` ở Task 13 dùng schema `version: "2"` — v1 sẽ
+từ chối thẳng với `you are using a configuration file for golangci-lint v2 with
+golangci-lint v1`.
+
+Kiểm tra: `task --version` in ra số phiên bản, và `golangci-lint --version` phải
+báo bản **2.x**.
 
 - [ ] **Step 6: Commit**
 
@@ -2658,8 +2715,11 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: apps/api/go.sum
-      - uses: golangci/golangci-lint-action@v6
+      # Phải là v7 trở lên: action v6 cài golangci-lint v1, không đọc được
+      # file cấu hình schema version "2".
+      - uses: golangci/golangci-lint-action@v7
         with:
+          version: v2.13.2      # pin cứng để CI và máy dev dùng cùng một bản
           working-directory: apps/api
 
   arch:
