@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  GO_VERSION: '1.25'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: apps/api/go.sum
+      - name: Build
+        working-directory: apps/api
+        run: go build ./...
+      - name: Vet
+        working-directory: apps/api
+        run: go vet ./...
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: apps/api/go.sum
+      # Phải là v7 trở lên: action v6 cài golangci-lint v1, không đọc được
+      # file cấu hình schema version "2".
+      - uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.13.2      # pin cứng để CI và máy dev dùng cùng một bản
+          working-directory: apps/api
+
+  arch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: apps/api/go.sum
+      - run: bash scripts/check-arch.sh

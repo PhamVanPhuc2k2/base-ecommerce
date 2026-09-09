@@ -19,7 +19,7 @@
 ### 2.1. Go
 
 ```dockerfile
-FROM golang:1.24-alpine AS build
+FROM golang:1.25-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download                       # tầng này được cache khi go.mod không đổi
@@ -89,6 +89,29 @@ ghcr.io/<org>/base-ecommerce-api:v1.4.0       # tag release
 | `postgres` | 1 | Máy riêng khi đủ lớn |
 | `redis` | 2 instance logic | `cache` và `data` — xem tài liệu 03 |
 
+### ⚠️ Việc bắt buộc khi lên production: cấu hình IP client
+
+Router hiện dùng `middleware.ClientIPFromRemoteAddr` — chỉ lấy IP từ socket, không
+tin header nào. Đó là mặc định an toàn cho môi trường dev không có proxy.
+
+Nhưng ở sơ đồ trên, API nằm sau **hai** lớp (Cloudflare rồi Caddy), nên IP socket
+sẽ luôn là IP của Caddy. Mọi request trông như đến từ cùng một IP → log vô dụng và
+rate limit theo IP chặn nhầm toàn bộ khách cùng lúc.
+
+Trước khi mở cho khách thật, đổi trong `internal/server/router.go`:
+
+```go
+r.Use(middleware.ClientIPFromXFFTrustedProxies(2))   // Cloudflare + Caddy
+```
+
+Con số phải khớp **chính xác** số proxy đứng trước. Đặt cao quá thì client bịa
+thêm phần tử vào `X-Forwarded-For` là giả mạo được IP; đặt thấp quá thì lấy nhầm
+IP của proxy. Kiểm chứng bằng cách gọi qua đường công khai rồi so `ip` trong log
+với IP thật của máy gọi.
+
+**Không dùng `middleware.RealIP`** — đã deprecated vì tin header vô điều kiện
+(GHSA-3fxj-6jh8-hvhx).
+
 **Cấu hình VPS khởi điểm:** 4 vCPU / 8 GB cho tầng ứng dụng, 4 vCPU / 8 GB riêng
 cho Postgres. Không đặt Postgres chung máy với app khi đã có đơn hàng thật — một
 đợt build ngốn CPU sẽ kéo theo cả database.
@@ -143,6 +166,28 @@ lúc server đã bắt đầu tắt → khách nhận 502 ngay giữa lúc thanh
 
 Đặt `stop_grace_period: 45s` trong compose — dài hơn tổng thời gian trên, nếu
 không Docker sẽ `SIGKILL` giữa chừng.
+
+⚠️ **Binary phải là PID 1 trong container, nếu không toàn bộ đoạn trên vô nghĩa.**
+
+`docker stop` gửi SIGTERM cho **PID 1**. Nếu PID 1 là `go run` hay một shell bọc
+ngoài thì tín hiệu dừng ở đó và không bao giờ tới code của ta — server bị giết
+cứng sau thời gian chờ, mất hết request đang xử lý.
+
+Chuyện này đã xảy ra khi kiểm chứng P0.1: chạy `go run ./cmd/api` làm entrypoint
+thì container thoát sau 0,3 giây với **mã 2** và **không có dòng log tắt nào**.
+Đổi thành `exec /tmp/api` (binary làm PID 1) thì đúng ngay: `"nhận tín hiệu tắt"`
+→ `"đã dừng"` → thoát mã 0.
+
+Dockerfile ở mục 2.1 đã đúng vì dùng `ENTRYPOINT ["/api"]` dạng exec. Hai điều
+tuyệt đối tránh:
+
+```dockerfile
+ENTRYPOINT /api                      # SAI: dạng shell, PID 1 là /bin/sh
+CMD ["sh", "-c", "go run ./cmd/api"] # SAI: PID 1 là sh, và go run không chuyển tín hiệu
+```
+
+Kiểm nhanh: `docker exec <container> ps -o pid,comm | head -2` — PID 1 phải là tên
+binary của bạn.
 
 ### 4.2. `worker`
 

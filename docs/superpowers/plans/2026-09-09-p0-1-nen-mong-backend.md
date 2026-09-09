@@ -4,7 +4,7 @@
 
 **Architecture:** Modular monolith + Hexagonal. Kế hoạch này chỉ dựng `internal/platform/*` (hạ tầng dùng chung) và `internal/server` — chưa có module nghiệp vụ nào. Chiều phụ thuộc `adapter → app → domain` được CI kiểm bằng máy.
 
-**Tech Stack:** Go 1.24 · Chi v5 · pgx/v5 (pgxpool) · goose · log/slog · go-task · Docker Compose · GitHub Actions
+**Tech Stack:** Go 1.25 · Chi v5 · pgx/v5 (pgxpool) · goose · log/slog · go-task · Docker Compose · GitHub Actions
 
 **Tài liệu thiết kế:** [01-transaction-outbox](../../design/01-transaction-outbox.md) · [02-api-contract](../../design/02-api-contract.md) · [04-kiem-chung](../../design/04-kiem-chung.md) · [05-deployment](../../design/05-deployment.md)
 
@@ -70,8 +70,11 @@ Chi tiết đầy đủ nằm trong lịch sử git; đây là bản tóm tắt 
 
 **Năm quyết định các task sau phải tôn trọng:**
 
-1. **`go 1.24`** trong `go.mod`. Sau mỗi `go get`, kiểm `git diff apps/api/go.mod` —
-   `go get` tự nâng directive nếu thư viện đòi bản cao hơn, mà CI pin 1.24.
+1. **`go 1.25`** trong `go.mod`, CI cũng pin 1.25. Sau mỗi `go get`, kiểm
+   `git diff apps/api/go.mod`. Nếu một thư viện đòi bản Go cao hơn thì **nâng sàn
+   Go lên**, đừng hạ phiên bản thư viện xuống — mốc Go là do ta tự đặt, còn hãm
+   thư viện sẽ làm mọi lần cài đặt sau đều vấp lại đúng chỗ đó. Nhớ sửa cả
+   `GO_VERSION` trong CI ở Task 11 cho khớp.
 2. **Migration luôn tạo bằng `task migrate-create`** (version timestamp). Tự đặt tên
    `00002_...` sẽ khiến goose panic khi hai nhánh trùng số.
 3. **`errs` không được import `net/http`** — đó là điều kiện để `domain` import nó.
@@ -89,7 +92,7 @@ Chi tiết đầy đủ nằm trong lịch sử git; đây là bản tóm tắt 
 
 ```bash
 cd apps/api && go get github.com/jackc/pgx/v5@latest
-git diff go.mod          # go directive phải vẫn là 1.24
+git diff go.mod          # xem sàn Go có bị nâng không, xem ghi chú ở trên
 ```
 
 - [ ] **Step 2: `dbtx.go`**
@@ -538,7 +541,7 @@ func RequestLogger(log *slog.Logger) func(http.Handler) http.Handler {
 				slog.Int("bytes", ww.BytesWritten()),
 				slog.Float64("duration_ms", float64(time.Since(start).Microseconds())/1000),
 				slog.String("request_id", middleware.GetReqID(r.Context())),
-				slog.String("ip", r.RemoteAddr),
+				slog.String("ip", middleware.GetClientIP(r.Context())),
 			)
 		})
 	}
@@ -681,14 +684,27 @@ import (
 // New dựng router với chuỗi middleware chuẩn.
 //
 // Thứ tự middleware quan trọng:
-//   - RequestID trước RequestLogger, nếu không log sẽ không có request_id.
+//   - RequestID và ClientIPFromRemoteAddr trước RequestLogger, nếu không thì
+//     request_id và ip trong log sẽ rỗng.
 //   - Recoverer sau RequestLogger, để panic vẫn được ghi thành một dòng log request.
 //   - Timeout cuối cùng, chỉ bao quanh handler nghiệp vụ.
 func New(log *slog.Logger, h *health.Handler) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
+
+	// ClientIPFromRemoteAddr lấy IP từ socket TCP và KHÔNG tin bất kỳ header nào.
+	//
+	// Không dùng middleware.RealIP: nó đã bị deprecated vì ghi đè r.RemoteAddr
+	// bằng X-Forwarded-For / True-Client-IP / X-Real-IP mà không kiểm tra ai gửi
+	// (GHSA-3fxj-6jh8-hvhx). Nghĩa là client tự bịa header là đổi được IP —
+	// hỏng cả log lẫn rate limit theo IP ở P0.2.
+	//
+	// Khi lên production sau Caddy/Cloudflare, đổi sang
+	// middleware.ClientIPFromXFFTrustedProxies(n) với n = số proxy thật sự đứng
+	// trước. Đọc IP luôn qua middleware.GetClientIP(ctx), đừng đọc r.RemoteAddr.
+	r.Use(middleware.ClientIPFromRemoteAddr)
+
 	r.Use(observability.RequestLogger(log))
 	r.Use(middleware.Recoverer)
 
@@ -862,8 +878,19 @@ func healthcheck() int {
 		host = "127.0.0.1"
 	}
 
-	client := &http.Client{Timeout: 3 * time.Second}
-	res, err := client.Get(fmt.Sprintf("http://%s:%s/healthz", host, port))
+	// Dùng context thay vì client.Timeout: client.Get không hủy được, nên
+	// linter noctx chặn. Cùng một mốc 3s nhưng hủy được đúng cách.
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		fmt.Sprintf("http://%s:%s/healthz", host, port), nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "healthcheck thất bại: %v\n", err)
+		return 1
+	}
+
+	res, err := (&http.Client{}).Do(req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "healthcheck thất bại: %v\n", err)
 		return 1
@@ -898,8 +925,27 @@ Mở terminal thứ hai:
 | 4 | `curl -i localhost:8080/khong-ton-tai` | `404`. Terminal server in một dòng JSON có `"status":404`, `"path"`, `"duration_ms"`, và `"request_id"` khác rỗng |
 | 5 | `docker compose -f deploy/compose.dev.yml stop postgres` rồi `curl -i localhost:8080/readyz` | `503`, `"checks":{"postgres":"fail"}` |
 | 6 | ngay sau đó `curl -i localhost:8080/healthz` | **Vẫn `200`** — điểm mấu chốt của việc tách hai endpoint. Nếu nó cũng 503 là đã cài sai |
-| 7 | `docker compose -f deploy/compose.dev.yml start postgres`, rồi `Ctrl+C` ở terminal server | Log lần lượt `"nhận tín hiệu tắt, bắt đầu dừng êm"` rồi `"đã dừng"`, thoát mã 0 |
+| 7 | `docker compose -f deploy/compose.dev.yml start postgres`, rồi `Ctrl+C` ở terminal server | Log lần lượt `"nhận tín hiệu tắt, bắt đầu dừng êm"` rồi `"đã dừng"`, thoát mã 0. Xem ghi chú bên dưới nếu ở Windows |
 | 8 | `cd apps/api && DATABASE_URL= go run ./cmd/api; echo "exit=$?"` | In `khởi động thất bại: cấu hình không hợp lệ: thiếu biến môi trường bắt buộc DATABASE_URL` và `exit=1` |
+
+**Ghi chú cho máy Windows — mục 7 khó kiểm hơn tưởng.** `Ctrl+C` trong terminal
+thì được, nhưng nếu server chạy nền thì không gửi tín hiệu tới được: Git Bash
+`kill -INT` dùng PID của MSYS chứ không phải PID Windows, còn `taskkill` không có
+`/F` cần tiến trình có cửa sổ. Cách kiểm chắc chắn là chạy trong container Linux
+với **binary làm PID 1**:
+
+```bash
+docker run -d --name api-stop-test --network base-ecommerce-dev_default   -v "D:/Projects/base-ecommerce/apps/api:/src" -w /src   -e "DATABASE_URL=postgres://app:app@postgres:5432/base_ecommerce?sslmode=disable"   golang:1.25-alpine sh -c 'go build -o /tmp/api ./cmd/api && exec /tmp/api'
+
+docker stop api-stop-test
+docker logs api-stop-test | tail -3          # phải có "nhận tín hiệu tắt" rồi "đã dừng"
+docker inspect api-stop-test --format '{{.State.ExitCode}}'   # phải là 0
+docker rm -f api-stop-test
+```
+
+⚠️ `exec` là bắt buộc. Bỏ nó đi — hoặc dùng thẳng `go run ./cmd/api` — thì PID 1
+là shell hoặc `go run`, SIGTERM dừng ở đó và không tới code của ta: container
+thoát mã 2 sau 0,3 giây, không có dòng log tắt nào. Xem tài liệu 05 mục 4.
 
 - [ ] **Step 4: Commit**
 
@@ -925,32 +971,49 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 #
 # Dự án không có unit test, nên script này cùng golangci-lint là toàn bộ lưới an
 # toàn tự động. Đừng làm yếu nó đi.
+#
+# ⚠️ KHÔNG dùng mẫu kiểu ./internal/*/domain/... cho go list. Bash chỉ mở rộng `*`
+# khi TOÀN BỘ mẫu khớp đường dẫn có thật, mà không có thư mục nào tên `...`, nên
+# nó truyền nguyên chuỗi cho go list, go list lỗi, và lỗi bị nuốt — script luôn
+# báo OK dù có vi phạm. Cách đúng: liệt kê ./internal/... rồi lọc bằng grep.
 set -euo pipefail
 
 cd "$(dirname "$0")/../apps/api"
 fail=0
 
+# Danh sách package hạ tầng mà domain và app không được chạm tới.
+FORBIDDEN='^(github\.com/go-chi/|github\.com/jackc/pgx|github\.com/redis/|github\.com/rabbitmq/|net/http)$'
+
+all_pkgs="$(go list ./internal/... 2>/dev/null || true)"
+
 # 1. domain không được chạm hạ tầng.
 #    Danh sách trắng: stdlib, platform/errs, google/uuid, shopspring/decimal.
-for pkg in $(go list ./internal/*/domain/... 2>/dev/null || true); do
-  if go list -deps "$pkg" | grep -Eq 'go-chi|jackc/pgx|redis|amqp|net/http$'; then
+for pkg in $(printf '%s\n' "$all_pkgs" | grep -E '/domain(/|$)' || true); do
+  hits="$(go list -deps "$pkg" 2>/dev/null | grep -E "$FORBIDDEN" || true)"
+  if [ -n "$hits" ]; then
     echo "LỖI KIẾN TRÚC: $pkg import package hạ tầng"
-    go list -deps "$pkg" | grep -E 'go-chi|jackc/pgx|redis|amqp|net/http$' | sed 's/^/    /'
+    printf '%s\n' "$hits" | sed 's/^/    /'
     fail=1
   fi
 done
 
 # 2. app không được import net/http hay adapter.
-for pkg in $(go list ./internal/*/app/... 2>/dev/null || true); do
-  if go list -f '{{join .Imports "\n"}}' "$pkg" | grep -Eq 'net/http|/adapter/'; then
+for pkg in $(printf '%s\n' "$all_pkgs" | grep -E '/app(/|$)' || true); do
+  hits="$(go list -f '{{join .Imports "\n"}}' "$pkg" 2>/dev/null \
+          | grep -E '^net/http$|/adapter/' || true)"
+  if [ -n "$hits" ]; then
     echo "LỖI KIẾN TRÚC: $pkg import net/http hoặc adapter"
+    printf '%s\n' "$hits" | sed 's/^/    /'
     fail=1
   fi
 done
 
 # 3. repository phải dùng DBTX, không được giữ pool trực tiếp.
-if grep -rn 'pgxpool\.Pool' internal/*/adapter/ 2>/dev/null; then
+adapter_hits="$(grep -rn --include='*.go' 'pgxpool\.Pool' internal/ 2>/dev/null \
+                | grep '/adapter/' || true)"
+if [ -n "$adapter_hits" ]; then
   echo "LỖI KIẾN TRÚC: adapter giữ *pgxpool.Pool — phải nhận DBTX qua Manager.DB(ctx)"
+  printf '%s\n' "$adapter_hits" | sed 's/^/    /'
   fail=1
 fi
 
@@ -961,6 +1024,28 @@ exit "$fail"
 ```
 
 Chạy thử: `chmod +x scripts/check-arch.sh && task arch` → `Kiểm tra kiến trúc: OK`
+
+⚠️ **`OK` chưa chứng minh được gì — phải thử cho nó ĐỎ.** Khi chưa có module nghiệp
+vụ nào thì hai quy tắc đầu duyệt qua không package nào, nên chúng luôn báo OK kể cả
+khi script hỏng. Bản đầu tiên của script này đúng là hỏng như vậy: nó dùng
+`go list ./internal/*/domain/...`, mà bash chỉ mở rộng `*` khi toàn bộ mẫu khớp một
+đường dẫn có thật — không có thư mục nào tên `...` nên chuỗi được truyền nguyên văn,
+`go list` lỗi, và lỗi bị `|| true` nuốt. Script báo OK vĩnh viễn.
+
+Bắt buộc kiểm bằng cách cố ý vi phạm rồi xóa đi:
+
+```bash
+mkdir -p apps/api/internal/probe/domain
+printf 'package domain
+
+import "net/http"
+
+var _ = http.StatusOK
+'   > apps/api/internal/probe/domain/probe.go
+task arch      # PHẢI đỏ và gọi đúng tên package
+rm -rf apps/api/internal/probe
+task arch      # xanh trở lại
+```
 
 - [ ] **Step 2: `apps/api/.golangci.yml`**
 
@@ -1008,7 +1093,7 @@ on:
   pull_request:
 
 env:
-  GO_VERSION: '1.24'
+  GO_VERSION: '1.25'
 
 jobs:
   build:

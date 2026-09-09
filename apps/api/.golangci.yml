@@ -1,0 +1,26 @@
+version: "2"
+
+linters:
+  enable:
+    - errcheck        # không được bỏ qua lỗi trả về
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - bodyclose       # response body phải được đóng
+    - rowserrcheck    # rows.Err() phải được kiểm tra
+    - sqlclosecheck
+    - contextcheck    # context phải được truyền xuống
+    - errorlint       # dùng errors.Is/As thay vì so sánh trực tiếp
+    - noctx           # không gọi HTTP mà thiếu context
+    - nilerr          # return nil trong khi err != nil
+    - copyloopvar
+
+  settings:
+    errcheck:
+      check-type-assertions: true
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
