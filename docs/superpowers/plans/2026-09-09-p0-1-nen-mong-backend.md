@@ -203,9 +203,17 @@ tasks:
     cmd: goose -dir db/migrations postgres "$DATABASE_URL" up
 
   migrate-down:
-    desc: Lùi một migration
+    desc: Lùi một migration (chỉ dùng khi phát triển)
     dir: apps/api
     cmd: goose -dir db/migrations postgres "$DATABASE_URL" down
+
+  migrate-create:
+    desc: 'Tạo migration mới, ví dụ: task migrate-create -- them_bang_products'
+    dir: apps/api
+    # goose create mặc định đánh version bằng timestamp. Bắt buộc dùng lệnh này
+    # thay vì tự đặt tên 00002_..., vì hai nhánh song song sẽ cùng chọn số 00002
+    # và goose panic khi thấy trùng version.
+    cmd: goose -dir db/migrations create {{.CLI_ARGS}} sql
 
   test-unit:
     desc: Test nhanh, không cần Docker
@@ -403,6 +411,26 @@ DROP EXTENSION IF EXISTS pg_trgm;
 
 Không cài `pgcrypto`: UUID v7 sinh ở tầng `domain` bằng Go, không dùng hàm sinh
 UUID của Postgres (xem tài liệu thiết kế 02 mục 1.1).
+
+### Ba quy ước migration phải nhớ từ đây trở đi
+
+**1. Không bao giờ tự đặt tên file migration.** Luôn dùng
+`task migrate-create -- ten_migration`, để goose đánh version bằng **timestamp**.
+Lý do: P0.2 và P0.3 chạy song song, cả hai đều sẽ chọn `00002_...` và goose
+**panic** khi thấy trùng version — không phải báo lỗi tử tế, mà panic kèm stack
+trace. File `00001_extensions.sql` giữ nguyên được vì timestamp luôn sắp sau nó.
+Trước khi phát hành có thể chạy `goose fix` để đổi timestamp về số tuần tự.
+
+**2. Phần `Down` là công cụ phát triển, không phải cơ chế rollback.** Nó sẽ ngừng
+chạy được từ P1 khi có index phụ thuộc vào `pg_trgm` (SQLSTATE 2BP01). Đó là hành
+vi đúng. **Không thêm `CASCADE`** — `CASCADE` xóa im lặng cả index đang dùng.
+Rollback ở production là deploy lại image cũ, xem tài liệu 05 mục 1 và 5.
+
+**3. `CREATE INDEX CONCURRENTLY` cần `-- +goose NO TRANSACTION`.** Goose bọc mọi
+migration trong một transaction, mà `CONCURRENTLY` không chạy được trong
+transaction block. Tài liệu 05 mục 5 bắt buộc dùng `CONCURRENTLY` trên bảng lớn,
+nên từ P1 trở đi migration tạo index sẽ cần dòng đó ở đầu file. Đánh đổi: migration
+đó mất tính nguyên tử, hỏng giữa chừng thì phải dọn tay.
 
 - [ ] **Step 2: Chạy migration**
 
@@ -1273,8 +1301,12 @@ package testdb
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -1296,12 +1328,42 @@ var (
 	adminDSN  string
 )
 
-// Setup khởi động container, chạy migration một lần vào database mẫu.
-// Gọi từ TestMain của package cần database:
+// migrationsDir tìm thư mục migration bằng cách đi ngược từ file nguồn này lên
+// tới khi gặp go.mod.
 //
-//	func TestMain(m *testing.M) { os.Exit(testdb.Setup(m, "../../../db/migrations")) }
-func Setup(m *testing.M, migrationsDir string) int {
+// Không nhận đường dẫn tương đối từ bên gọi: "../../../db/migrations" đúng với
+// internal/platform/postgres/ nhưng sai với mọi package lồng sâu hơn, và lỗi chỉ
+// lộ ra dưới dạng "chạy migration thất bại" rất khó truy.
+func migrationsDir() (string, error) {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		return "", errors.New("không xác định được đường dẫn file nguồn")
+	}
+	dir := filepath.Dir(file)
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return filepath.Join(dir, "db", "migrations"), nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", errors.New("không tìm thấy go.mod khi đi ngược lên")
+		}
+		dir = parent
+	}
+}
+
+// Setup khởi động container, chạy migration một lần vào database mẫu.
+// Gọi từ TestMain của package cần database, không cần truyền đường dẫn:
+//
+//	func TestMain(m *testing.M) { os.Exit(testdb.Setup(m)) }
+func Setup(m *testing.M) int {
 	ctx := context.Background()
+
+	migDir, err := migrationsDir()
+	if err != nil {
+		log.Printf("không tìm được thư mục migration: %v", err)
+		return 1
+	}
 
 	container, err := tcpostgres.Run(ctx, "postgres:17-alpine",
 		tcpostgres.WithDatabase(templateDB),
@@ -1335,7 +1397,7 @@ func Setup(m *testing.M, migrationsDir string) int {
 		log.Printf("goose dialect: %v", err)
 		return 1
 	}
-	if err := goose.Up(sqlDB, migrationsDir); err != nil {
+	if err := goose.Up(sqlDB, migDir); err != nil {
 		log.Printf("chạy migration thất bại: %v", err)
 		return 1
 	}
@@ -1422,7 +1484,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	os.Exit(testdb.Setup(m, "../../../db/migrations"))
+	os.Exit(testdb.Setup(m))
 }
 ```
 

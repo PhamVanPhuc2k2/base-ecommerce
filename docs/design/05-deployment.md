@@ -183,6 +183,19 @@ Rườm rà, nhưng đây là cái giá của việc rollback được bất c�
 - `CREATE INDEX` không có `CONCURRENTLY` trên bảng lớn (khóa ghi toàn bảng)
 - `UPDATE` toàn bảng trong một transaction (bloat + khóa lâu) — chia lô 1000 dòng
 
+⚠️ **`CONCURRENTLY` không chạy được trong transaction block**, mà goose bọc mọi
+migration trong một transaction. Migration tạo index phải mở đầu bằng:
+
+```sql
+-- +goose NO TRANSACTION
+-- +goose Up
+CREATE INDEX CONCURRENTLY IF NOT EXISTS products_attrs_idx ON products USING gin (attributes);
+```
+
+Đánh đổi: migration đó **mất tính nguyên tử**. Hỏng giữa chừng sẽ để lại index ở
+trạng thái `INVALID` — phải `DROP INDEX CONCURRENTLY` rồi tạo lại bằng tay. Kiểm
+tra bằng `SELECT indexrelid::regclass FROM pg_index WHERE NOT indisvalid;`
+
 **Chạy migration:**
 
 ```bash

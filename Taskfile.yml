@@ -18,9 +18,17 @@ tasks:
     cmd: goose -dir db/migrations postgres "$DATABASE_URL" up
 
   migrate-down:
-    desc: Lùi một migration
+    desc: Lùi một migration (chỉ dùng khi phát triển)
     dir: apps/api
     cmd: goose -dir db/migrations postgres "$DATABASE_URL" down
+
+  migrate-create:
+    desc: 'Tạo migration mới, ví dụ: task migrate-create -- them_bang_products'
+    dir: apps/api
+    # goose create mặc định đánh version bằng timestamp. Bắt buộc dùng lệnh này
+    # thay vì tự đặt tên 00002_..., vì hai nhánh song song sẽ cùng chọn số 00002
+    # và goose panic khi thấy trùng version.
+    cmd: goose -dir db/migrations create {{.CLI_ARGS}} sql
 
   test-unit:
     desc: Test nhanh, không cần Docker
