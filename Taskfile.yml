@@ -6,7 +6,7 @@ env:
 tasks:
   up:
     desc: Khởi động hạ tầng dev
-    cmd: docker compose -f deploy/compose.dev.yml up -d
+    cmd: docker compose -f deploy/compose.dev.yml up -d --wait
 
   down:
     desc: Dừng hạ tầng dev

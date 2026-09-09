@@ -7,10 +7,10 @@ services:
       POSTGRES_USER: app
       POSTGRES_PASSWORD: app
       POSTGRES_DB: base_ecommerce
-    ports: ["5432:5432"]
+    ports: ["127.0.0.1:5432:5432"]
     volumes: ["pgdata:/var/lib/postgresql/data"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U app -d base_ecommerce"]
+      test: ["CMD-SHELL", "pg_isready -U app -d base_ecommerce -h 127.0.0.1"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -20,23 +20,24 @@ services:
     command: ["redis-server", "--appendonly", "yes"]
     # Cổng host là 6380 vì máy dev đã có một Redis khác chiếm 6379.
     # Bên trong container vẫn là 6379, nên production không bị ảnh hưởng.
-    ports: ["6380:6379"]
+    ports: ["127.0.0.1:6380:6379"]
     volumes: ["redisdata:/data"]
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
       interval: 5s
       timeout: 3s
       retries: 10
 
   rabbitmq:
     image: rabbitmq:4-management-alpine
+    hostname: rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: app
       RABBITMQ_DEFAULT_PASS: app
-    ports: ["5672:5672", "15672:15672"]
+    ports: ["127.0.0.1:5672:5672", "127.0.0.1:15672:15672"]
     volumes: ["rabbitdata:/var/lib/rabbitmq"]
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
       interval: 10s
       timeout: 5s
       retries: 10
