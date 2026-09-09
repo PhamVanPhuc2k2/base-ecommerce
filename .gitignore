@@ -1,0 +1,20 @@
+# Go
+/apps/api/bin/
+*.exe
+coverage.out
+
+# Node
+node_modules/
+.next/
+out/
+
+# Env & secrets
+.env
+.env.local
+*.enc.yaml.dec
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
