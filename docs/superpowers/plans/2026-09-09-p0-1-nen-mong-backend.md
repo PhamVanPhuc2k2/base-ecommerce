@@ -288,7 +288,9 @@ services:
   redis:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
-    ports: ["6379:6379"]
+    # Cổng host là 6380 vì máy dev đã có một Redis khác chiếm 6379.
+    # Bên trong container vẫn là 6379, nên production không bị ảnh hưởng.
+    ports: ["6380:6379"]
     volumes: ["redisdata:/data"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -334,6 +336,9 @@ DATABASE_URL=postgres://app:app@localhost:5432/base_ecommerce?sslmode=disable
 DB_MAX_CONNS=20
 DB_MIN_CONNS=2
 DB_MAX_CONN_LIFETIME=1h
+
+# Redis — chưa có code nào đọc tới P0.2, ghi sẵn để nhớ cổng đã đổi
+REDIS_ADDR=localhost:6380
 ```
 
 - [ ] **Step 3: Khởi động và kiểm tra**
