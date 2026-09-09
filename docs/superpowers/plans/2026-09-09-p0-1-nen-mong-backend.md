@@ -4,7 +4,7 @@
 
 **Architecture:** Modular monolith + Hexagonal. Kế hoạch này chỉ dựng `internal/platform/*` (hạ tầng dùng chung) và `internal/server` — chưa có module nghiệp vụ nào. Chiều phụ thuộc `adapter → app → domain` được CI kiểm bằng máy.
 
-**Tech Stack:** Go 1.24 · Chi v5 · pgx/v5 (pgxpool) · goose · log/slog · go-task · Docker Compose · GitHub Actions
+**Tech Stack:** Go 1.25 · Chi v5 · pgx/v5 (pgxpool) · goose · log/slog · go-task · Docker Compose · GitHub Actions
 
 **Tài liệu thiết kế:** [01-transaction-outbox](../../design/01-transaction-outbox.md) · [02-api-contract](../../design/02-api-contract.md) · [04-kiem-chung](../../design/04-kiem-chung.md) · [05-deployment](../../design/05-deployment.md)
 
@@ -70,8 +70,11 @@ Chi tiết đầy đủ nằm trong lịch sử git; đây là bản tóm tắt 
 
 **Năm quyết định các task sau phải tôn trọng:**
 
-1. **`go 1.24`** trong `go.mod`. Sau mỗi `go get`, kiểm `git diff apps/api/go.mod` —
-   `go get` tự nâng directive nếu thư viện đòi bản cao hơn, mà CI pin 1.24.
+1. **`go 1.25`** trong `go.mod`, CI cũng pin 1.25. Sau mỗi `go get`, kiểm
+   `git diff apps/api/go.mod`. Nếu một thư viện đòi bản Go cao hơn thì **nâng sàn
+   Go lên**, đừng hạ phiên bản thư viện xuống — mốc Go là do ta tự đặt, còn hãm
+   thư viện sẽ làm mọi lần cài đặt sau đều vấp lại đúng chỗ đó. Nhớ sửa cả
+   `GO_VERSION` trong CI ở Task 11 cho khớp.
 2. **Migration luôn tạo bằng `task migrate-create`** (version timestamp). Tự đặt tên
    `00002_...` sẽ khiến goose panic khi hai nhánh trùng số.
 3. **`errs` không được import `net/http`** — đó là điều kiện để `domain` import nó.
@@ -89,7 +92,7 @@ Chi tiết đầy đủ nằm trong lịch sử git; đây là bản tóm tắt 
 
 ```bash
 cd apps/api && go get github.com/jackc/pgx/v5@latest
-git diff go.mod          # go directive phải vẫn là 1.24
+git diff go.mod          # xem sàn Go có bị nâng không, xem ghi chú ở trên
 ```
 
 - [ ] **Step 2: `dbtx.go`**
@@ -1008,7 +1011,7 @@ on:
   pull_request:
 
 env:
-  GO_VERSION: '1.24'
+  GO_VERSION: '1.25'
 
 jobs:
   build:

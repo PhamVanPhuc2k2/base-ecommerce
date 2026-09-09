@@ -19,7 +19,7 @@
 ### 2.1. Go
 
 ```dockerfile
-FROM golang:1.24-alpine AS build
+FROM golang:1.25-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download                       # tầng này được cache khi go.mod không đổi
