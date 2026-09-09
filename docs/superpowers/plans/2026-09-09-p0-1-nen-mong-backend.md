@@ -189,7 +189,9 @@ env:
 tasks:
   up:
     desc: Khởi động hạ tầng dev
-    cmd: docker compose -f deploy/compose.dev.yml up -d
+    # --wait: chờ tới khi healthcheck xanh rồi mới trả về. Không có nó thì
+    # `task up && task migrate` chạy migration lúc Postgres chưa sẵn sàng.
+    cmd: docker compose -f deploy/compose.dev.yml up -d --wait
 
   down:
     desc: Dừng hạ tầng dev
@@ -277,10 +279,13 @@ services:
       POSTGRES_USER: app
       POSTGRES_PASSWORD: app
       POSTGRES_DB: base_ecommerce
-    ports: ["5432:5432"]
+    ports: ["127.0.0.1:5432:5432"]
     volumes: ["pgdata:/var/lib/postgresql/data"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U app -d base_ecommerce"]
+      # Phải có -h: không có nó pg_isready đi qua Unix socket, mà socket đã
+      # lắng nghe ngay trong giai đoạn initdb → container báo healthy trong
+      # khi cổng TCP 5432 vẫn từ chối kết nối.
+      test: ["CMD-SHELL", "pg_isready -U app -d base_ecommerce -h 127.0.0.1"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -290,23 +295,29 @@ services:
     command: ["redis-server", "--appendonly", "yes"]
     # Cổng host là 6380 vì máy dev đã có một Redis khác chiếm 6379.
     # Bên trong container vẫn là 6379, nên production không bị ảnh hưởng.
-    ports: ["6380:6379"]
+    ports: ["127.0.0.1:6380:6379"]
     volumes: ["redisdata:/data"]
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
       interval: 5s
       timeout: 3s
       retries: 10
 
   rabbitmq:
     image: rabbitmq:4-management-alpine
+    # BẮT BUỘC. RabbitMQ lấy tên node Erlang từ hostname và lưu Mnesia ở
+    # /var/lib/rabbitmq/mnesia/rabbit@<hostname>. Không cố định hostname thì
+    # mỗi lần tạo lại container sẽ sinh node mới rỗng và bỏ rơi dữ liệu cũ —
+    # toàn bộ queue/exchange durable mất trong im lặng.
+    hostname: rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: app
       RABBITMQ_DEFAULT_PASS: app
-    ports: ["5672:5672", "15672:15672"]
+    ports: ["127.0.0.1:5672:5672", "127.0.0.1:15672:15672"]
     volumes: ["rabbitdata:/var/lib/rabbitmq"]
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      # ping chỉ kiểm node Erlang, đi qua trước khi cổng AMQP nhận kết nối.
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -316,6 +327,14 @@ volumes:
   redisdata:
   rabbitdata:
 ```
+
+Ba điểm dễ sai đã xử lý sẵn trong file trên — **đừng bỏ**:
+
+1. `hostname: rabbitmq` — không có thì volume RabbitMQ coi như vô dụng.
+2. `-h 127.0.0.1` trong `pg_isready` — không có thì `task migrate` ở Task 3 thỉnh
+   thoảng lỗi `connection refused` khi khởi động nguội.
+3. Mọi cổng bind `127.0.0.1` — không có thì Postgres với mật khẩu `app/app` mở ra
+   toàn mạng LAN.
 
 - [ ] **Step 2: Tạo `.env.example`**
 
