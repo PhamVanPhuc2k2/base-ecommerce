@@ -325,5 +325,7 @@ tcp-keepalive 60
 - [ ] Middleware rate limit bằng Lua script, cấu hình theo nhóm
 - [ ] Middleware `Idempotency-Key`
 - [ ] Worker nghe `product.updated` → xóa cache + gọi `revalidateTag` của Next.js
-- [ ] Test: Redis chết thì API vẫn trả đúng dữ liệu (dừng container giữa test)
-- [ ] Test: 100 goroutine cùng trượt cache → chỉ 1 query xuống DB
+- [ ] Kiểm chứng bằng tay: `docker compose stop redis` → API vẫn trả đúng dữ liệu,
+      chỉ chậm hơn; bật lại thì tỉ lệ hit hồi phục
+- [ ] Kiểm chứng singleflight bằng kịch bản `cmd/scratch` tạm: 100 goroutine cùng
+      trượt cache, đếm số query xuống DB (bật `log_statement=all` ở Postgres) → phải là 1

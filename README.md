@@ -51,7 +51,7 @@ trả lời được câu hỏi "nó giải quyết vấn đề gì" — nếu k
 
 | Hạng mục | Công nghệ | Ghi chú |
 |---|---|---|
-| Ngôn ngữ | **Go** (1.22+) | `http.ServeMux` chuẩn đã hỗ trợ method + path param |
+| Ngôn ngữ | **Go** 1.24 | `http.ServeMux` chuẩn đã hỗ trợ method + path param |
 | Router | **Chi** | Router mỏng trên `net/http`, không che giấu stdlib |
 | Database | **PostgreSQL** | Source of truth |
 | Driver | **pgx/v5** (`pgxpool`) | Không dùng chế độ `database/sql` |
@@ -62,7 +62,7 @@ trả lời được câu hỏi "nó giải quyết vấn đề gì" — nếu k
 | Message queue | **RabbitMQ** | Async job, **luôn** đi kèm outbox pattern |
 | Log | **`log/slog`** (stdlib) | JSON ra stdout |
 | Validate | ⬜ `go-playground/validator` | Validate DTO ở tầng handler |
-| Test | **testify** + **testcontainers-go** | Test với Postgres/Redis/Rabbit thật |
+| Kiểm chứng | **Thủ công** — không dùng unit test | Xem [thiết kế 04](docs/design/04-kiem-chung.md) |
 | Lint | ⬜ `golangci-lint` | |
 
 ### 2.2. Frontend ✅
@@ -84,7 +84,7 @@ Chi tiết: [`docs/design/06-frontend.md`](docs/design/06-frontend.md)
 | API client | **openapi-typescript** | Sinh type từ `api/openapi.yaml` |
 | Ảnh | `next/image` + custom loader → imgproxy | |
 | Format/lint | **Biome** | Một công cụ thay ESLint + Prettier |
-| Test | **Vitest** (unit) + **Playwright** (E2E) | |
+| Kiểm chứng | **Thủ công** — mở trình duyệt, xem tab Network | |
 
 **Không dùng:** Redux · axios · CSS-in-JS runtime · MUI/Antd.
 
@@ -268,7 +268,6 @@ base-ecommerce/
 │       │   │   └── client.ts                 # wrapper: base URL, auth, xử lý lỗi
 │       │   ├── format.ts                     # tiền tệ VND, ngày giờ
 │       │   └── seo.ts                        # JSON-LD helper
-│       ├── e2e/                              # Playwright
 │       └── Dockerfile
 ├── deploy/
 │   ├── compose.dev.yml
@@ -497,7 +496,8 @@ Sửa api/openapi.yaml  →  task openapi  →  type TS được sinh lại  →
 `api/openapi.yaml` là **nguồn sự thật**. Sửa backend mà quên cập nhật spec thì web
 sẽ không compile — đó là chủ đích.
 
-Backend viết handler tay (để học), nhưng có test kiểm tra response khớp spec.
+Backend viết handler tay (để học). Không có contract test tự động, nên phải tự
+đối chiếu response thật với spec bằng `curl` sau mỗi lần đổi endpoint.
 
 ### 8.2. Đã chốt ✅
 
@@ -531,11 +531,11 @@ Làm đúng thứ tự này cho mọi module từ P1 trở đi:
 
 **Backend**
 1. Viết migration goose trong `db/migrations/`
-2. Viết `domain/` trước — entity, value object, quy tắc, lỗi. **Unit test ngay**, không cần DB
+2. Viết `domain/` trước — entity, value object, quy tắc, lỗi
 3. Khai báo port trong `app/ports.go` — chỉ những gì use case thật sự cần
-4. Viết use case trong `app/`, test bằng fake repository (struct đơn giản, không mock framework)
+4. Viết use case trong `app/`
 5. Viết `queries/*.sql` → `sqlc generate` → cài đặt repository trong `adapter/pgstore/`.
-   Test bằng testcontainers với Postgres thật
+   Kiểm chứng bằng `psql`: lưu entity → đọc lại → so từng trường
 6. Cập nhật `api/openapi.yaml` **trước** khi viết handler
 7. Viết handler trong `adapter/httpapi/`
 8. Lắp ráp trong `module.go`, đăng ký route ở `server/router.go`
@@ -544,7 +544,7 @@ Làm đúng thứ tự này cho mọi module từ P1 trở đi:
 9. `task openapi` sinh lại type TS
 10. Viết page/component, ưu tiên Server Component
 11. Bổ sung `generateMetadata` + JSON-LD nếu là trang công khai
-12. Viết E2E Playwright cho luồng chính
+12. Kiểm chứng luồng chính bằng tay trên trình duyệt
 
 ---
 
@@ -596,7 +596,6 @@ Hai cái khác nhau, đừng gộp.
 ### 10.4. CI (GitHub Actions)
 
 - `lint`: golangci-lint + eslint + tsc
-- `test`: Go test (có testcontainers) + Vitest
 - `arch`: kiểm tra chiều phụ thuộc (mục 3.1)
 - `openapi-drift`: sinh lại client TS, nếu git diff khác rỗng → fail
 - `build`: build image cho api / worker / outboxrelay / web
@@ -621,7 +620,7 @@ nghiệp vụ thật đi xuyên mọi tầng, thay vì khung xương trên lý t
 ### Chuẩn bị
 - [ ] `git init`, `.gitignore`, `.editorconfig`
 - [ ] Cài công cụ: `goose`, `sqlc`, `golangci-lint`, `openapi-typescript`
-- [ ] `Taskfile.yml`: `up`, `down`, `migrate`, `sqlc`, `openapi`, `test`, `lint`, `arch`
+- [ ] `Taskfile.yml`: `up`, `down`, `migrate`, `sqlc`, `openapi`, `build`, `vet`, `lint`, `arch`, `check`
 - [ ] `deploy/compose.dev.yml`: PostgreSQL, Redis, RabbitMQ
 - [ ] `.env.example` + `platform/config` đọc env và validate lúc khởi động
 
@@ -662,16 +661,14 @@ nghiệp vụ thật đi xuyên mọi tầng, thay vì khung xương trên lý t
 - [ ] `error.tsx` + `loading.tsx`
 - [ ] `sitemap.ts` + `robots.ts`
 
-### Test & CI
-- [ ] Unit test cho `domain` (không cần Docker)
-- [ ] Test use case với fake repository
-- [ ] Integration test repository bằng testcontainers-go
+### Kiểm chứng & CI
+- [ ] Chạy hết danh sách kiểm chứng thủ công của từng task trong kế hoạch
 - [ ] E2E: tạo sản phẩm → đọc lại → có bản ghi trong outbox
-- [ ] Playwright: mở trang danh sách → vào chi tiết
-- [ ] GitHub Actions: lint + test + arch + openapi-drift + build
+- [ ] Mở trình duyệt: trang danh sách → vào chi tiết, xem tab Network không có lỗi
+- [ ] GitHub Actions: build + vet + lint + arch + openapi-drift
 
 ### Tiêu chí hoàn thành P0
-`task up && task migrate && task test` chạy xanh; mở trình duyệt thấy trang sản
+`task up && task migrate && task check` chạy xanh; mở trình duyệt thấy trang sản
 phẩm lấy dữ liệu từ Go/Postgres thật; tạo một sản phẩm mới thì thấy event xuất
 hiện ở RabbitMQ management UI.
 
@@ -793,9 +790,9 @@ README này là bản tóm tắt và mục lục. Chi tiết nằm ở `docs/des
 | Tài liệu | Nội dung |
 |---|---|
 | [01 — Transaction & Outbox](docs/design/01-transaction-outbox.md) | `TxManager` truyền `pgx.Tx` qua `context` để `app` không biết pgx · isolation level và retry lỗi 40001 · schema outbox · relay có publisher confirm · consumer idempotent · cấu hình exchange/queue/DLQ |
-| [02 — Hợp đồng API](docs/design/02-api-contract.md) | Quy ước JSON · **UUID v7 cho toàn bộ ID** và mã hiển thị cho khách · mô hình lỗi RFC 7807 + `platform/errs` · phân trang offset và cursor · quy trình OpenAPI + contract test · CORS, rate limit, timeout |
+| [02 — Hợp đồng API](docs/design/02-api-contract.md) | Quy ước JSON · **UUID v7 cho toàn bộ ID** và mã hiển thị cho khách · mô hình lỗi RFC 7807 + `platform/errs` · phân trang offset và cursor · quy trình OpenAPI · CORS, rate limit, timeout |
 | [03 — Redis](docs/design/03-redis-cache.md) | Tách cache và dữ liệu gốc · quy ước key có version · bảng TTL · cache-aside + singleflight + jitter · vô hiệu hóa cache · giỏ hàng · rate limit · **khi nào KHÔNG được dùng khóa Redis** |
-| [04 — Test](docs/design/04-testing.md) | Bản đồ test theo tầng · fake viết tay thay mock framework · testcontainers theo mẫu template database · **test song song chống bán vượt** · Playwright |
+| [04 — Kiểm chứng](docs/design/04-kiem-chung.md) | Dự án **không dùng unit test** · `task check` là lưới an toàn tự động duy nhất · cách kiểm chứng thủ công theo loại thay đổi · **danh sách rủi ro đã chấp nhận** · khi nào nên xem lại quyết định |
 | [05 — Triển khai](docs/design/05-deployment.md) | Dockerfile distroless · bố trí production · graceful shutdown đúng thứ tự · **migration expand/contract** · quy trình deploy và rollback · sao lưu · ngưỡng cảnh báo · sổ tay sự cố |
 | [06 — Frontend](docs/design/06-frontend.md) | Stack đã chốt · chiến lược render từng loại trang · gọi API · state ở URL · xác thực bằng cookie · SEO và JSON-LD · Core Web Vitals |
 

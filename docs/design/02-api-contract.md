@@ -341,8 +341,9 @@ sửa api/openapi.yaml  →  make openapi  →  sinh lại type TS  →  code c�
 **Lớp 1 — CI kiểm drift.** Sinh lại client TS, nếu `git diff` khác rỗng thì fail.
 Nghĩa là quên chạy `make openapi` sau khi sửa spec sẽ bị chặn.
 
-**Lớp 2 — Contract test.** Dùng `kin-openapi` nạp spec, mỗi test handler sẽ
-validate response thật có khớp schema không:
+**Lớp 2 — Đối chiếu bằng tay.** Dự án không dùng test tự động, nên sau mỗi lần đổi
+endpoint phải tự gọi `curl` và so response với spec. Ví dụ đoạn code dưới đây là
+cách làm nếu sau này đổi ý và thêm test tự động — hiện KHÔNG dùng:
 
 ```go
 func assertMatchesSpec(t *testing.T, req *http.Request, res *http.Response) {
@@ -412,6 +413,6 @@ api/
 - [ ] `api/openapi.yaml` + cấu trúc `paths/` `components/`
 - [ ] `make openapi`: redocly bundle + openapi-typescript
 - [ ] CI job `openapi-drift`
-- [ ] Helper contract test bằng `kin-openapi`
+- [ ] Danh sách `curl` mẫu cho từng endpoint, lưu trong `api/examples.http` để đối chiếu nhanh
 - [ ] `apps/web/lib/errors.ts`: map `code` → thông điệp tiếng Việt
 - [ ] CI kiểm enum `code` trong spec khớp với `errors.ts`

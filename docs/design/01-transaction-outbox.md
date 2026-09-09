@@ -347,12 +347,15 @@ if tag.RowsAffected() == 0 {
 ## 8. Việc cần làm
 
 - [ ] `platform/postgres/tx.go`: `Manager`, `DB(ctx)`, `Run`, `RunWith`, retry
-- [ ] Unit test `Manager`: lồng transaction, rollback khi lỗi, retry khi 40001
+- [ ] Kiểm chứng `Manager` bằng kịch bản `cmd/scratch` tạm: commit, rollback, lồng
+      transaction, context bị hủy, và `pool.Stat().AcquiredConns() == 0`
 - [ ] Migration bảng `outbox` + `processed_events`
 - [ ] `internal/outbox`: `Append`, `FetchUnpublished`, `MarkPublished`, `MarkFailed`
 - [ ] `cmd/outboxrelay`: vòng lặp poll + publisher confirm + graceful shutdown
 - [ ] `platform/rabbitmq`: publisher (confirm), consumer (prefetch, manual ack, retry, DLQ)
 - [ ] Helper `worker.Idempotent(consumer, fn)` bọc `processed_events`
 - [ ] Job dọn outbox cũ
-- [ ] Integration test: tạo product → có dòng outbox → relay publish → worker nhận
-- [ ] Test: publish cùng event 2 lần → chỉ xử lý 1 lần
+- [ ] Kiểm chứng bằng tay: tạo product → `psql` thấy dòng outbox → relay publish →
+      worker nhận (xem log) → `published_at` được cập nhật
+- [ ] Kiểm chứng bằng tay: publish lại cùng `event_id` → worker bỏ qua, `processed_events`
+      không thêm dòng mới

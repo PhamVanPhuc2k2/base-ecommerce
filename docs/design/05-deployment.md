@@ -211,7 +211,7 @@ không tranh nhau.
 ## 6. Quy trình deploy
 
 ```
-1. CI xanh trên main (lint, test, arch, openapi-drift)
+1. CI xanh trên main (build, vet, lint, arch, openapi-drift)
 2. Build và push image, tag = git SHA
 3. Sao lưu database (snapshot nhanh trước mọi lần deploy có migration)
 4. Chạy migration

@@ -17,7 +17,7 @@
 | State toàn cục | **Zustand** | Chỉ giỏ hàng + UI state. Không dùng cho dữ liệu server |
 | Form | **react-hook-form + zod** | |
 | Type API | **openapi-typescript** | Sinh từ `api/openapi.yaml` |
-| Test | **Vitest** + **Playwright** | |
+| Kiểm chứng | **Thủ công** — trình duyệt + tab Network | Dự án không dùng test tự động |
 | Format/lint | **Biome** | Nhanh hơn ESLint + Prettier, một công cụ thay hai |
 
 **Không dùng:** Redux (thừa cho nhu cầu này) · axios (`fetch` đã đủ và tích hợp với
@@ -59,7 +59,6 @@ apps/web/
 │   ├── format.ts                     # tiền VND, ngày giờ
 │   ├── seo.ts                        # helper JSON-LD
 │   └── cart-store.ts                 # Zustand
-├── e2e/                              # Playwright
 └── next.config.js                    # output: 'standalone'
 ```
 
@@ -279,12 +278,11 @@ Không chỉ vì đúng đắn — Google dùng nhiều tín hiệu trong số n
 
 ---
 
-## 13. Test
+## 13. Kiểm chứng
 
-**Vitest** — hàm thuần: `formatVND`, dựng query bộ lọc, map mã lỗi.
-
-**Playwright** — luồng người dùng thật, chọn phần tử bằng `data-testid` hoặc role,
-**không** dùng class CSS hay chuỗi hiển thị:
+Không có test tự động. Sau mỗi thay đổi, tự chạy các luồng dưới đây trên trình
+duyệt, mở sẵn tab **Network** (không được có request đỏ) và **Console** (không
+được có lỗi):
 1. Danh mục → lọc theo thương hiệu → URL đổi → kết quả đúng
 2. Chi tiết sản phẩm → thêm vào giỏ → badge tăng
 3. (từ P4) Đặt hàng đến khi có mã đơn
@@ -307,4 +305,4 @@ Không chỉ vì đúng đắn — Google dùng nhiều tín hiệu trong số n
 - [ ] `sitemap.ts`, `robots.ts`
 - [ ] `app/api/revalidate/route.ts` (xác thực bằng secret)
 - [ ] Kiểm tra ngân sách bundle trong CI
-- [ ] Cấu hình Playwright + 3 luồng ở mục 13
+- [ ] Chạy tay 3 luồng ở mục 13 sau mỗi thay đổi lớn
