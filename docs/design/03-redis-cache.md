@@ -229,6 +229,14 @@ Giới hạn theo **cả IP và định danh tài khoản** cho các endpoint x�
 IP thì một mạng công ty dùng chung NAT sẽ bị chặn oan; chỉ theo tài khoản thì kẻ
 tấn công đổi email là thoát.
 
+⚠️ **IP phải lấy đúng, nếu không rate limit vô nghĩa.** Không bao giờ đọc
+`X-Forwarded-For` một cách mù quáng: client tự đặt header đó được, nên mỗi request
+là một "IP" mới và giới hạn bị vượt qua trong một dòng code. Luôn lấy IP qua
+`middleware.GetClientIP(ctx)`. Hiện router dùng `ClientIPFromRemoteAddr` (chỉ tin
+socket, không tin header). **Trước khi bật rate limit ở production phải đổi sang**
+`ClientIPFromXFFTrustedProxies(n)` với `n` là số proxy thật sự đứng trước — xem
+tài liệu 05 mục 3.
+
 Vượt giới hạn → 429 kèm `Retry-After`. Redis chết → **cho qua** (fail-open), vì
 chặn hết khách hàng còn tệ hơn là để lọt vài request.
 

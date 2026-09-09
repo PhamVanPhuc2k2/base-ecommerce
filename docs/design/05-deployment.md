@@ -89,6 +89,29 @@ ghcr.io/<org>/base-ecommerce-api:v1.4.0       # tag release
 | `postgres` | 1 | Máy riêng khi đủ lớn |
 | `redis` | 2 instance logic | `cache` và `data` — xem tài liệu 03 |
 
+### ⚠️ Việc bắt buộc khi lên production: cấu hình IP client
+
+Router hiện dùng `middleware.ClientIPFromRemoteAddr` — chỉ lấy IP từ socket, không
+tin header nào. Đó là mặc định an toàn cho môi trường dev không có proxy.
+
+Nhưng ở sơ đồ trên, API nằm sau **hai** lớp (Cloudflare rồi Caddy), nên IP socket
+sẽ luôn là IP của Caddy. Mọi request trông như đến từ cùng một IP → log vô dụng và
+rate limit theo IP chặn nhầm toàn bộ khách cùng lúc.
+
+Trước khi mở cho khách thật, đổi trong `internal/server/router.go`:
+
+```go
+r.Use(middleware.ClientIPFromXFFTrustedProxies(2))   // Cloudflare + Caddy
+```
+
+Con số phải khớp **chính xác** số proxy đứng trước. Đặt cao quá thì client bịa
+thêm phần tử vào `X-Forwarded-For` là giả mạo được IP; đặt thấp quá thì lấy nhầm
+IP của proxy. Kiểm chứng bằng cách gọi qua đường công khai rồi so `ip` trong log
+với IP thật của máy gọi.
+
+**Không dùng `middleware.RealIP`** — đã deprecated vì tin header vô điều kiện
+(GHSA-3fxj-6jh8-hvhx).
+
 **Cấu hình VPS khởi điểm:** 4 vCPU / 8 GB cho tầng ứng dụng, 4 vCPU / 8 GB riêng
 cho Postgres. Không đặt Postgres chung máy với app khi đã có đơn hàng thật — một
 đợt build ngốn CPU sẽ kéo theo cả database.
