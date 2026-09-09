@@ -601,6 +601,9 @@ const (
 	KindValidation
 	KindRateLimited
 	KindUnavailable
+	// KindTooLarge phải nằm CUỐI khối iota. Chèn vào giữa sẽ đổi giá trị số
+	// của mọi Kind đứng sau nó.
+	KindTooLarge
 )
 
 // FieldError mô tả một lỗi ở cấp trường dữ liệu.
@@ -879,6 +882,7 @@ package httpx
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 
@@ -889,17 +893,29 @@ import (
 // presigned URL của object storage, không qua endpoint JSON.
 const MaxBodyBytes = 1 << 20 // 1 MB
 
-// JSON ghi response JSON. Gọi sau khi đã ghi header, trước khi return nil.
-func JSON(w http.ResponseWriter, status int, v any) {
+// JSON ghi response JSON. Trả về error để handler viết `return httpx.JSON(...)`.
+//
+// Mã hóa TRƯỚC khi ghi header: nếu ghi 200 rồi mới phát hiện không mã hóa được
+// thì client nhận một body rỗng, không phải JSON, mà vẫn tưởng thành công.
+func JSON(w http.ResponseWriter, status int, v any) error {
+	if v == nil {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(status)
+		return nil
+	}
+
+	b, err := json.Marshal(v)
+	if err != nil {
+		return errs.Wrap(err, errs.KindInternal, "INTERNAL_ERROR", "Đã có lỗi xảy ra")
+	}
+
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
-	if v == nil {
-		return
+	if _, err := w.Write(b); err != nil {
+		// Client đã ngắt kết nối. Không sửa được gì nữa, chỉ ghi log.
+		slog.Error("không ghi được response", "err", err)
 	}
-	if err := json.NewEncoder(w).Encode(v); err != nil {
-		// Header đã gửi đi rồi, không sửa được status nữa — chỉ còn cách ghi log.
-		slog.Error("không mã hóa được response", "err", err)
-	}
+	return nil
 }
 
 // NoContent trả 204 không body.
@@ -916,6 +932,11 @@ func Decode[T any](w http.ResponseWriter, r *http.Request) (T, error) {
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&v); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			return v, errs.Wrap(err, errs.KindTooLarge, "PAYLOAD_TOO_LARGE",
+				"Dữ liệu gửi lên vượt quá giới hạn cho phép")
+		}
 		return v, errs.Wrap(err, errs.KindInvalid, "MALFORMED_REQUEST",
 			"Dữ liệu gửi lên không hợp lệ")
 	}
@@ -946,9 +967,8 @@ type Problem struct {
 	Type      string            `json:"type"`
 	Title     string            `json:"title"`
 	Status    int               `json:"status"`
-	Detail    string            `json:"detail,omitempty"`
 	Code      string            `json:"code"`
-	RequestID string            `json:"request_id,omitempty"`
+	RequestID string            `json:"request_id"` // luôn có mặt, kể cả rỗng
 	Errors    []errs.FieldError `json:"errors,omitempty"`
 }
 
@@ -970,6 +990,8 @@ func statusOf(k errs.Kind) int {
 		return http.StatusTooManyRequests
 	case errs.KindUnavailable:
 		return http.StatusServiceUnavailable
+	case errs.KindTooLarge:
+		return http.StatusRequestEntityTooLarge
 	default:
 		return http.StatusInternalServerError
 	}
@@ -1012,18 +1034,51 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 ```go
 package httpx
 
-import "net/http"
+import (
+	"log/slog"
+	"net/http"
+)
 
 // Handler giống http.HandlerFunc nhưng trả error, nhờ vậy handler không phải
 // tự xử lý response lỗi và việc map lỗi được dồn về một chỗ duy nhất.
 type Handler func(w http.ResponseWriter, r *http.Request) error
 
+// committedWriter ghi nhớ response đã bắt đầu được gửi đi hay chưa.
+type committedWriter struct {
+	http.ResponseWriter
+	committed bool
+}
+
+func (w *committedWriter) WriteHeader(code int) {
+	w.committed = true
+	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *committedWriter) Write(b []byte) (int, error) {
+	w.committed = true
+	return w.ResponseWriter.Write(b)
+}
+
 // Wrap chuyển Handler thành http.HandlerFunc để gắn vào router.
 func Wrap(h Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if err := h(w, r); err != nil {
-			WriteError(w, r, err)
+		cw := &committedWriter{ResponseWriter: w}
+
+		err := h(cw, r)
+		if err == nil {
+			return
 		}
+
+		// Header đã gửi đi rồi thì không sửa status được nữa. Ghi đè sẽ tạo ra
+		// body chứa hai JSON document nối nhau, client đọc document đầu và
+		// tưởng request thành công — nguy hiểm hơn hẳn việc mất thông tin lỗi.
+		if cw.committed {
+			slog.ErrorContext(r.Context(), "handler lỗi sau khi đã ghi response",
+				"err", err, "path", r.URL.Path)
+			return
+		}
+
+		WriteError(cw, r, err)
 	}
 }
 ```
@@ -1338,7 +1393,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -2550,6 +2604,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -2590,6 +2645,14 @@ func run() error {
 	}
 
 	log := observability.NewLogger(os.Stdout, cfg.LogLevel, cfg.Env, cfg.Version)
+
+	// BẮT BUỘC. httpx.WriteError ghi log lỗi 5xx qua slog mặc định của package
+	// (nó được gọi từ Wrap, không có chỗ nào truyền logger vào). Không đặt dòng
+	// này thì đúng những dòng log quan trọng nhất — 5xx kèm nguyên nhân gốc —
+	// sẽ ra stderr dạng text, không có env/version và bỏ qua LOG_LEVEL, trong
+	// khi log request lại là JSON ra stdout.
+	slog.SetDefault(log)
+
 	log.Info("đang khởi động", "config", cfg.String())
 
 	// Nhận tín hiệu tắt trước khi mở tài nguyên, để Ctrl+C lúc đang kết nối

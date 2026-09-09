@@ -88,7 +88,6 @@ API tra cứu công khai (tra đơn, tra bảo hành) dùng `code`; API nội b�
   "type":       "/errors/product-not-found",
   "title":      "Không tìm thấy sản phẩm",
   "status":     404,
-  "detail":     "Sản phẩm với slug 'asus-rog-g16' không tồn tại",
   "code":       "PRODUCT_NOT_FOUND",
   "request_id": "01937f3e-8a2c-7c1e-9f3b-2d4e5a6b7c8d"
 }
@@ -110,7 +109,7 @@ Lỗi validate có thêm `errors`:
 }
 ```
 
-**`code` là hợp đồng, `title`/`detail` là để người đọc.** Frontend map `code` sang
+**`code` là hợp đồng, `title` là để người đọc.** Frontend map `code` sang
 thông điệp tiếng Việt của nó; không bao giờ so sánh chuỗi `title`. `code` một khi
 đã công bố thì không đổi.
 
@@ -196,9 +195,16 @@ Lộ ra ngoài là lộ tên bảng, tên cột, tên ràng buộc. Hai lớp b�
 1. `cause` **không xuất khẩu**, nên `json.Marshal(*Error)` không thể chạm tới nó.
 2. `WriteError` dựng `Problem` bằng từng trường cụ thể, không marshal thẳng `*Error`.
 
-Cả hai đều là bảo vệ về mặt cấu trúc. Thứ duy nhất còn hở là ai đó tự viết
-`http.Error(w, err.Error(), 500)` — đừng làm vậy, luôn `return err` để `httpx.Wrap`
-xử lý.
+Cả hai đều là bảo vệ về mặt cấu trúc. Còn lại hai đường hở mà code không thể tự
+chặn, vì chúng nằm ở phía người gọi:
+
+1. Tự viết `http.Error(w, err.Error(), 500)` — đừng làm vậy, luôn `return err` để
+   `httpx.Wrap` xử lý.
+2. **Nhét lỗi gốc vào `Message` hoặc `FieldError.Message`.** `Message` được thiết
+   kế để hiển thị cho người dùng, nên nó ra thẳng `title` trong response. Viết
+   `errs.Wrap(err, ..., fmt.Sprintf("Không lưu được: %v", err))` là tự tay dán tên
+   bảng và tên ràng buộc vào body. Message phải là câu tiếng Việt viết sẵn, không
+   bao giờ nội suy từ lỗi.
 
 `KindInternal` để ở vị trí 0 là có chủ đích: quên gán `Kind` thì mặc định thành
 500, không phải 200 hay 404.
