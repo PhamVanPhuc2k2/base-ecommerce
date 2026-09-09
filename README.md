@@ -559,9 +559,9 @@ mọi cổng chỉ bind vào `127.0.0.1`, không mở ra mạng LAN.
 |---|---|---|
 | API (Go) | 8080 | P0 |
 | PostgreSQL | 5432 | P0 |
-| Redis | 6380 | P0 |
+| Redis (một instance) | 6380 | P0 |
+| ↳ tách thành `redis-cache` / `redis-data` | 6380 / 6381 | P0.2 — instance 6380 ở trên **đổi vai** thành `redis-cache`, thêm mới 6381. Xem [thiết kế 03](docs/design/03-redis-cache.md) |
 | RabbitMQ + management UI | 5672 / 15672 | P0 |
-| `redis-cache` / `redis-data` | 6380 / 6381 | P0.2 — tách hai instance, xem [thiết kế 03](docs/design/03-redis-cache.md) |
 | MinIO | 9000 / 9001 | P1 |
 | imgproxy | 8081 | P1 |
 | Meilisearch | 7700 | P7 |

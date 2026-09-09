@@ -10,6 +10,9 @@ services:
     ports: ["127.0.0.1:5432:5432"]
     volumes: ["pgdata:/var/lib/postgresql/data"]
     healthcheck:
+      # Phải có -h. Không có nó pg_isready đi qua Unix socket, mà socket đã lắng
+      # nghe ngay trong giai đoạn initdb → container báo healthy trong khi cổng
+      # TCP 5432 vẫn từ chối kết nối, làm `task migrate` lỗi lúc khởi động nguội.
       test: ["CMD-SHELL", "pg_isready -U app -d base_ecommerce -h 127.0.0.1"]
       interval: 5s
       timeout: 3s
@@ -30,6 +33,10 @@ services:
 
   rabbitmq:
     image: rabbitmq:4-management-alpine
+    # ĐỪNG XÓA. RabbitMQ lấy tên node Erlang từ hostname và lưu Mnesia ở
+    # /var/lib/rabbitmq/mnesia/rabbit@<hostname>. Không cố định hostname thì mỗi
+    # lần tạo lại container sinh node mới rỗng và bỏ rơi dữ liệu cũ — toàn bộ
+    # queue, exchange và message durable mất trong im lặng, không có lỗi nào.
     hostname: rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: app
@@ -37,6 +44,8 @@ services:
     ports: ["127.0.0.1:5672:5672", "127.0.0.1:15672:15672"]
     volumes: ["rabbitdata:/var/lib/rabbitmq"]
     healthcheck:
+      # check_port_connectivity chứ không phải ping: ping chỉ kiểm node Erlang
+      # và xanh trước khi cổng AMQP 5672 nhận kết nối.
       test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
       interval: 10s
       timeout: 5s

@@ -10,7 +10,7 @@ có yêu cầu độ bền hoàn toàn trái ngược nhau**:
 | Loại | Dùng cho | Mất dữ liệu thì sao |
 |---|---|---|
 | **Cache** — dữ liệu phái sinh | Chi tiết sản phẩm, cây danh mục, số đếm | Không sao, đọc lại từ Postgres |
-| **Dữ liệu gốc** — không có ở nơi khác | Giỏ hàng khách vãng lai, idempotency key, rate limit | **Mất là mất thật** |
+| **Dữ liệu gốc** — không có ở nơi khác | Giỏ hàng khách vãng lai, idempotency key | **Mất là mất thật** |
 
 Trộn hai loại vào một instance với `maxmemory-policy allkeys-lru` thì khi đầy bộ
 nhớ, Redis sẽ xóa giỏ hàng của khách để lấy chỗ cache sản phẩm.
@@ -36,6 +36,11 @@ là hành vi đúng, vì mọi thứ trong đó đều dựng lại được.
 
 *(Ở P0.1 compose chỉ có một Redis chạy mặc định `noeviction` + AOF — an toàn cho cả
 hai vai trò vì chưa có code nào dùng tới. P0.2 tách thành hai instance.)*
+
+**Việc P0.2 phải làm khi tách:** biến `REDIS_ADDR` hiện có trong `.env.example`
+không diễn tả được hai instance, phải đổi thành `REDIS_CACHE_ADDR` (6380) và
+`REDIS_DATA_ADDR` (6381). Lưu ý cổng 6380 sẽ **đổi ngữ nghĩa**: từ `noeviction` +
+AOF sang `allkeys-lru` + không persistence. Đừng để giỏ hàng nằm lại trên cổng đó.
 
 ---
 
@@ -82,8 +87,8 @@ Nguyên tắc: **TTL tỉ lệ nghịch với hậu quả khi dữ liệu cũ.**
 | **Giá** | **Không cache riêng** | Nằm trong payload sản phẩm, hết hạn cùng nhau |
 | **Tồn kho** | **Không cache** | Đọc thẳng Postgres. Sai tồn kho = bán vượt = mất tiền thật |
 | Kết quả 404 (negative cache) | 60 giây | Chặn bot dò slug làm ngập database |
-| Session / giỏ khách vãng lai | 7 ngày, gia hạn mỗi lần chạm | DB `data` |
-| Idempotency key | 24 giờ | DB `data` |
+| Session / giỏ khách vãng lai | 7 ngày, gia hạn mỗi lần chạm | instance `redis-data` |
+| Idempotency key | 24 giờ | instance `redis-data` |
 
 **Tồn kho tuyệt đối không cache.** Cám dỗ rất lớn vì nó bị đọc nhiều nhất, nhưng
 hiển thị "còn hàng" khi đã hết là con đường ngắn nhất tới bán vượt và hủy đơn.
@@ -177,7 +182,7 @@ Không cần xóa gì, key cũ tự hết hạn theo TTL của nó.
 
 | | Khách vãng lai | Đã đăng nhập |
 |---|---|---|
-| Lưu ở | Redis (DB `data`) | **PostgreSQL** |
+| Lưu ở | Redis (instance `redis-data`) | **PostgreSQL** |
 | Key / bảng | `bec:v1:cart:{cart_id}` | `carts` + `cart_items` |
 | Định danh | `cart_id` (UUIDv7) trong cookie HttpOnly, `SameSite=Lax` | `user_id` |
 | TTL | 7 ngày, gia hạn mỗi lần chạm | Không hết hạn |
@@ -226,6 +231,14 @@ tấn công đổi email là thoát.
 
 Vượt giới hạn → 429 kèm `Retry-After`. Redis chết → **cho qua** (fail-open), vì
 chặn hết khách hàng còn tệ hơn là để lọt vài request.
+
+**Counter rate limit đặt ở `redis-cache`, không phải `redis-data`.** Đây là ngoại
+lệ so với bảng phân vai ở mục 1, và có lý do: counter sinh ra rất nhiều key ngắn
+hạn. Để chúng trên instance `noeviction` thì bộ nhớ chỉ tăng không giảm, tới lúc
+đầy Redis sẽ từ chối mọi lệnh ghi — nghĩa là **giỏ hàng và idempotency key chết
+theo**, đúng hai thứ quan trọng nhất. Đổi lại, khi `redis-cache` khởi động lại thì
+counter mất và kẻ tấn công được một nhịp burst. Đó là đánh đổi chấp nhận được:
+rate limit là lớp phòng thủ, không phải lớp bảo đảm tính đúng đắn.
 
 ---
 
