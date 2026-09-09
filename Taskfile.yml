@@ -30,29 +30,15 @@ tasks:
     # và goose panic khi thấy trùng version.
     cmd: goose -dir db/migrations create {{.CLI_ARGS}} sql
 
-  test-unit:
-    desc: Test nhanh, không cần Docker
+  build:
+    desc: Biên dịch toàn bộ
     dir: apps/api
-    # -short thay vì liệt kê cứng tên package: danh sách cứng vừa hỏng khi
-    # package chưa tồn tại, vừa phải sửa mỗi lần thêm module. Package nào cần
-    # Docker thì tự thoát sớm trong TestMain khi thấy testing.Short().
-    cmd: go test -short ./...
+    cmd: go build ./...
 
-  test:
-    desc: Toàn bộ test (cần Docker)
+  vet:
+    desc: Phân tích tĩnh của Go
     dir: apps/api
-    cmd: go test ./...
-
-  test-race:
-    desc: 'Toàn bộ test kèm race detector (cần CGO: gcc/mingw-w64 trên PATH)'
-    dir: apps/api
-    # -race đòi cgo. Máy dev Windows này chưa có trình biên dịch C nên chạy sẽ
-    # báo "requires cgo". CI (ubuntu-latest) luôn chạy với -race, xem
-    # .github/workflows/ci.yml ở Task 13 — nên chỗ này chỉ là tiện ích khi máy
-    # dev có sẵn toolchain.
-    env:
-      CGO_ENABLED: 1
-    cmd: go test ./... -race
+    cmd: go vet ./...
 
   lint:
     desc: Chạy linter
@@ -62,6 +48,17 @@ tasks:
   arch:
     desc: Kiểm tra chiều phụ thuộc kiến trúc
     cmd: bash scripts/check-arch.sh
+
+  check:
+    desc: Chạy tất cả kiểm tra tĩnh — chạy trước mỗi lần commit
+    # Dự án không dùng unit test. Đây là lưới an toàn duy nhất chạy tự động,
+    # nên hãy chạy nó thường xuyên. Mọi thứ còn lại phải kiểm chứng bằng tay
+    # theo các bước ghi trong kế hoạch.
+    cmds:
+      - task: build
+      - task: vet
+      - task: lint
+      - task: arch
 
   run:
     desc: Chạy API server
