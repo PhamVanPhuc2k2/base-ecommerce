@@ -22,6 +22,13 @@ func TestError_ErrorsIs_KhacCodeThiKhongKhop(t *testing.T) {
 	require.NotErrorIs(t, other, errProductNotFound)
 }
 
+func TestError_ErrorsIs_KhacKindThiKhongKhop(t *testing.T) {
+	// Cùng Code nhưng khác Kind phải KHÔNG khớp: nếu khớp thì errors.Is báo
+	// "đây là lỗi không tìm thấy" trong khi client nhận mã HTTP của Kind kia.
+	conflict := errs.Wrap(errors.New("db"), errs.KindConflict, "PRODUCT_NOT_FOUND", "Trùng")
+	require.NotErrorIs(t, conflict, errProductNotFound)
+}
+
 func TestError_Unwrap_GiuLoiGoc(t *testing.T) {
 	cause := errors.New("connection refused")
 	e := errs.Wrap(cause, errs.KindUnavailable, "SERVICE_UNAVAILABLE", "Dịch vụ tạm thời gián đoạn")
@@ -41,6 +48,14 @@ func TestFrom_TrichDuocErrorDaBoc(t *testing.T) {
 	wrapped := fmt.Errorf("app: %w", errProductNotFound)
 	e := errs.From(wrapped)
 	require.Equal(t, "PRODUCT_NOT_FOUND", e.Code)
+}
+
+func TestFrom_NilThiVanTraVeErrorNoiBo(t *testing.T) {
+	// WriteError gọi From trên mọi lỗi; From(nil) không được panic.
+	e := errs.From(nil)
+	require.NotNil(t, e)
+	require.Equal(t, errs.KindInternal, e.Kind)
+	require.Equal(t, "INTERNAL_ERROR", e.Code)
 }
 
 func TestValidation_GomNhieuLoiTruong(t *testing.T) {

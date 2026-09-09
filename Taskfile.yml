@@ -33,11 +33,22 @@ tasks:
   test-unit:
     desc: Test nhanh, không cần Docker
     dir: apps/api
-    cmd: go test ./internal/platform/errs/... ./internal/platform/httpx/... ./internal/platform/config/... -race
+    cmd: go test ./internal/platform/errs/... ./internal/platform/httpx/... ./internal/platform/config/...
 
   test:
     desc: Toàn bộ test (cần Docker)
     dir: apps/api
+    cmd: go test ./...
+
+  test-race:
+    desc: 'Toàn bộ test kèm race detector (cần CGO: gcc/mingw-w64 trên PATH)'
+    dir: apps/api
+    # -race đòi cgo. Máy dev Windows này chưa có trình biên dịch C nên chạy sẽ
+    # báo "requires cgo". CI (ubuntu-latest) luôn chạy với -race, xem
+    # .github/workflows/ci.yml ở Task 13 — nên chỗ này chỉ là tiện ích khi máy
+    # dev có sẵn toolchain.
+    env:
+      CGO_ENABLED: 1
     cmd: go test ./... -race
 
   lint:

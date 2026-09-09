@@ -39,7 +39,7 @@ type FieldError struct {
 // Message là tiếng Việt, hiển thị được cho người dùng cuối.
 // cause là lỗi gốc, chỉ dùng để ghi log — không bao giờ lộ ra response.
 type Error struct {
-	Kind    Kind
+	Kind    Kind `json:"-"`
 	Code    string
 	Message string
 	Fields  []FieldError
@@ -72,14 +72,17 @@ func (e *Error) Error() string {
 
 func (e *Error) Unwrap() error { return e.cause }
 
-// Is so sánh theo Code thay vì theo con trỏ, nhờ vậy errors.Is vẫn đúng
+// Is so sánh theo Code và Kind thay vì theo con trỏ, nhờ vậy errors.Is vẫn đúng
 // khi lỗi được tạo lại ở tầng khác hoặc đã bị bọc nhiều lần.
+//
+// Phải so cả Kind: nếu chỉ so Code thì một lỗi Wrap nhầm Kind vẫn khớp với
+// sentinel của domain, và client nhận sai mã HTTP trong khi errors.Is báo đúng.
 func (e *Error) Is(target error) bool {
-	var t *Error
-	if !errors.As(target, &t) {
+	t, ok := target.(*Error)
+	if !ok {
 		return false
 	}
-	return e.Code == t.Code
+	return e.Code == t.Code && e.Kind == t.Kind
 }
 
 // From trích *Error ra khỏi chuỗi lỗi.
