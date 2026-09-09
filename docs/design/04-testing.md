@@ -284,20 +284,31 @@ quen bỏ qua CI đỏ.
 
 ## 10. Chạy test
 
-```makefile
-test-unit:   ## nhanh, không cần Docker — chạy khi đang code
-	go test ./internal/*/domain/... ./internal/*/app/... -race
+```yaml
+test-unit:    # nhanh, không cần Docker — chạy khi đang code
+  cmd: go test ./internal/*/domain/... ./internal/*/app/...
 
-test-int:    ## cần Docker
-	go test ./... -race -tags=integration
+test:         # cần Docker
+  cmd: go test ./...
 
-test-e2e:
-	docker compose -f deploy/compose.dev.yml up -d
-	go test ./e2e/... -tags=e2e
+test-race:    # cần CGO (gcc/mingw-w64 trên PATH)
+  env: { CGO_ENABLED: 1 }
+  cmd: go test ./... -race
 ```
 
-Luôn bật **`-race`**. Với hệ thống có worker và cache, race condition là loại lỗi
-tốn nhiều thời gian nhất để tìm bằng tay.
+**`-race` là bắt buộc ở CI, tùy chọn ở máy dev.** Với hệ thống có worker và cache,
+race condition là loại lỗi tốn nhiều thời gian nhất để tìm bằng tay — nên không
+được phép merge mà chưa qua race detector.
+
+Nhưng `-race` **đòi cgo**, mà máy dev Windows thường không có trình biên dịch C:
+
+```
+go: -race requires cgo; enable cgo by setting CGO_ENABLED=1
+```
+
+Nếu để `-race` trong lệnh test mặc định thì lập trình viên trên Windows không chạy
+được test nào cả. Vì vậy: local mặc định không bật, CI (ubuntu-latest, có sẵn gcc)
+luôn bật. Ai cài mingw-w64 thì dùng được `task test-race` ở máy.
 
 **Mục tiêu thời gian:** `test-unit` dưới 5 giây (chạy được mỗi lần lưu file),
 toàn bộ dưới 3 phút trên CI. Vượt quá thì người ta sẽ ngừng chạy nó.

@@ -157,16 +157,48 @@ const (
 )
 
 type Error struct {
-    Kind    Kind
-    Code    string        // ổn định, dùng cho client: "PRODUCT_NOT_FOUND"
-    Message string        // tiếng Việt, hiển thị được cho người dùng
-    Fields  []FieldError  // chỉ dùng cho KindValidation
-    err     error         // lỗi gốc, KHÔNG lộ ra ngoài
+    Kind    Kind `json:"-"`    // không bao giờ serialize giá trị iota này
+    Code    string             // ổn định, dùng cho client: "PRODUCT_NOT_FOUND"
+    Message string             // tiếng Việt, hiển thị được cho người dùng
+    Fields  []FieldError       // chỉ dùng cho KindValidation
+    cause   error              // lỗi gốc, không xuất khẩu → không thể marshal
 }
 
-func (e *Error) Error() string { return e.Code + ": " + e.Message }
-func (e *Error) Unwrap() error { return e.err }
+func (e *Error) Unwrap() error { return e.cause }
+
+// Error() CÓ kèm cause — chuỗi này dành cho log, không dành cho response.
+func (e *Error) Error() string {
+    if e.cause != nil {
+        return fmt.Sprintf("%s: %s: %v", e.Code, e.Message, e.cause)
+    }
+    return fmt.Sprintf("%s: %s", e.Code, e.Message)
+}
+
+// Is so cả Code VÀ Kind. Chỉ so Code là không đủ: một lỗi Wrap nhầm Kind sẽ
+// vẫn khớp sentinel của domain, khiến errors.Is báo đúng trong khi client
+// nhận sai mã HTTP.
+func (e *Error) Is(target error) bool {
+    t, ok := target.(*Error)
+    return ok && e.Code == t.Code && e.Kind == t.Kind
+}
 ```
+
+🚫 **Quy tắc cho người viết handler: không bao giờ đưa `err.Error()` vào response body.**
+
+`Error()` cố ý kèm `cause` để `slog` ghi được nguyên nhân gốc. Chuỗi đó trông như:
+
+```
+SKU_DUPLICATE: SKU đã tồn tại: pq: duplicate key value violates unique constraint "products_sku_key"
+```
+
+Lộ ra ngoài là lộ tên bảng, tên cột, tên ràng buộc. Hai lớp bảo vệ:
+
+1. `cause` **không xuất khẩu**, nên `json.Marshal(*Error)` không thể chạm tới nó.
+2. `WriteError` dựng `Problem` bằng từng trường cụ thể, không marshal thẳng `*Error`.
+
+Cả hai đều là bảo vệ về mặt cấu trúc. Thứ duy nhất còn hở là ai đó tự viết
+`http.Error(w, err.Error(), 500)` — đừng làm vậy, luôn `return err` để `httpx.Wrap`
+xử lý.
 
 `KindInternal` để ở vị trí 0 là có chủ đích: quên gán `Kind` thì mặc định thành
 500, không phải 200 hay 404.

@@ -218,11 +218,20 @@ tasks:
   test-unit:
     desc: Test nhanh, không cần Docker
     dir: apps/api
-    cmd: go test ./internal/platform/errs/... ./internal/platform/httpx/... ./internal/platform/config/... -race
+    cmd: go test ./internal/platform/errs/... ./internal/platform/httpx/... ./internal/platform/config/...
 
   test:
     desc: Toàn bộ test (cần Docker)
     dir: apps/api
+    cmd: go test ./...
+
+  test-race:
+    desc: 'Toàn bộ test kèm race detector (cần CGO: gcc/mingw-w64 trên PATH)'
+    dir: apps/api
+    # -race đòi cgo. Máy dev Windows chưa chắc có trình biên dịch C, nên local
+    # mặc định không bật. CI (ubuntu-latest) LUÔN chạy -race — xem Task 13.
+    env:
+      CGO_ENABLED: 1
     cmd: go test ./... -race
 
   lint:
@@ -531,6 +540,21 @@ func TestValidation_GomNhieuLoiTruong(t *testing.T) {
 	require.Len(t, e.Fields, 2)
 }
 
+func TestError_ErrorsIs_KhacKindThiKhongKhop(t *testing.T) {
+	// Cùng Code nhưng khác Kind phải KHÔNG khớp: nếu khớp thì errors.Is báo
+	// "đây là lỗi không tìm thấy" trong khi client nhận mã HTTP của Kind kia.
+	conflict := errs.Wrap(errors.New("db"), errs.KindConflict, "PRODUCT_NOT_FOUND", "Trùng")
+	require.NotErrorIs(t, conflict, errProductNotFound)
+}
+
+func TestFrom_NilThiVanTraVeErrorNoiBo(t *testing.T) {
+	// WriteError gọi From trên mọi lỗi; From(nil) không được panic.
+	e := errs.From(nil)
+	require.NotNil(t, e)
+	require.Equal(t, errs.KindInternal, e.Kind)
+	require.Equal(t, "INTERNAL_ERROR", e.Code)
+}
+
 func TestKindInternal_LaGiaTriKhong(t *testing.T) {
 	// Quên gán Kind thì phải mặc định thành lỗi nội bộ (500), không phải 200/404.
 	var e errs.Error
@@ -589,7 +613,7 @@ type FieldError struct {
 // Message là tiếng Việt, hiển thị được cho người dùng cuối.
 // cause là lỗi gốc, chỉ dùng để ghi log — không bao giờ lộ ra response.
 type Error struct {
-	Kind    Kind
+	Kind    Kind `json:"-"` // đừng để lộ giá trị iota nếu lỡ bị serialize
 	Code    string
 	Message string
 	Fields  []FieldError
@@ -622,14 +646,22 @@ func (e *Error) Error() string {
 
 func (e *Error) Unwrap() error { return e.cause }
 
-// Is so sánh theo Code thay vì theo con trỏ, nhờ vậy errors.Is vẫn đúng
-// khi lỗi được tạo lại ở tầng khác hoặc đã bị bọc nhiều lần.
+// Is so sánh theo Code và Kind thay vì theo con trỏ, nhờ vậy errors.Is vẫn
+// đúng khi lỗi được tạo lại ở tầng khác hoặc đã bị bọc nhiều lần.
+//
+// Phải so CẢ Kind. Nếu chỉ so Code thì một lỗi Wrap nhầm Kind vẫn khớp với
+// sentinel của domain — errors.Is báo "đúng là lỗi không tìm thấy" trong khi
+// client nhận 409 thay vì 404.
+//
+// Dùng type assertion chứ không dùng errors.As trên target: errors.Is đã tự
+// duyệt chuỗi của tham số thứ nhất, unwrap thêm cả target là không chuẩn và
+// làm phép so sánh mất tính đối xứng.
 func (e *Error) Is(target error) bool {
-	var t *Error
-	if !errors.As(target, &t) {
+	t, ok := target.(*Error)
+	if !ok {
 		return false
 	}
-	return e.Code == t.Code
+	return e.Code == t.Code && e.Kind == t.Kind
 }
 
 // From trích *Error ra khỏi chuỗi lỗi.
@@ -1984,7 +2016,7 @@ func IsRetryable(err error) bool {
 
 - [ ] **Step 4: Chạy test để xác nhận đã xanh**
 
-Run: `cd apps/api && go test ./internal/platform/postgres/... -race -v`
+Run: `cd apps/api && go test ./internal/platform/postgres/... -v`  (CI chạy thêm `-race`)
 Expected: PASS — 11 test (gồm 4 sub-test của `TestIsRetryable`)
 
 - [ ] **Step 5: Commit**
