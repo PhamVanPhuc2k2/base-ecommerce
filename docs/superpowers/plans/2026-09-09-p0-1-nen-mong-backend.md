@@ -971,32 +971,49 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 #
 # Dự án không có unit test, nên script này cùng golangci-lint là toàn bộ lưới an
 # toàn tự động. Đừng làm yếu nó đi.
+#
+# ⚠️ KHÔNG dùng mẫu kiểu ./internal/*/domain/... cho go list. Bash chỉ mở rộng `*`
+# khi TOÀN BỘ mẫu khớp đường dẫn có thật, mà không có thư mục nào tên `...`, nên
+# nó truyền nguyên chuỗi cho go list, go list lỗi, và lỗi bị nuốt — script luôn
+# báo OK dù có vi phạm. Cách đúng: liệt kê ./internal/... rồi lọc bằng grep.
 set -euo pipefail
 
 cd "$(dirname "$0")/../apps/api"
 fail=0
 
+# Danh sách package hạ tầng mà domain và app không được chạm tới.
+FORBIDDEN='^(github\.com/go-chi/|github\.com/jackc/pgx|github\.com/redis/|github\.com/rabbitmq/|net/http)$'
+
+all_pkgs="$(go list ./internal/... 2>/dev/null || true)"
+
 # 1. domain không được chạm hạ tầng.
 #    Danh sách trắng: stdlib, platform/errs, google/uuid, shopspring/decimal.
-for pkg in $(go list ./internal/*/domain/... 2>/dev/null || true); do
-  if go list -deps "$pkg" | grep -Eq 'go-chi|jackc/pgx|redis|amqp|net/http$'; then
+for pkg in $(printf '%s\n' "$all_pkgs" | grep -E '/domain(/|$)' || true); do
+  hits="$(go list -deps "$pkg" 2>/dev/null | grep -E "$FORBIDDEN" || true)"
+  if [ -n "$hits" ]; then
     echo "LỖI KIẾN TRÚC: $pkg import package hạ tầng"
-    go list -deps "$pkg" | grep -E 'go-chi|jackc/pgx|redis|amqp|net/http$' | sed 's/^/    /'
+    printf '%s\n' "$hits" | sed 's/^/    /'
     fail=1
   fi
 done
 
 # 2. app không được import net/http hay adapter.
-for pkg in $(go list ./internal/*/app/... 2>/dev/null || true); do
-  if go list -f '{{join .Imports "\n"}}' "$pkg" | grep -Eq 'net/http|/adapter/'; then
+for pkg in $(printf '%s\n' "$all_pkgs" | grep -E '/app(/|$)' || true); do
+  hits="$(go list -f '{{join .Imports "\n"}}' "$pkg" 2>/dev/null \
+          | grep -E '^net/http$|/adapter/' || true)"
+  if [ -n "$hits" ]; then
     echo "LỖI KIẾN TRÚC: $pkg import net/http hoặc adapter"
+    printf '%s\n' "$hits" | sed 's/^/    /'
     fail=1
   fi
 done
 
 # 3. repository phải dùng DBTX, không được giữ pool trực tiếp.
-if grep -rn 'pgxpool\.Pool' internal/*/adapter/ 2>/dev/null; then
+adapter_hits="$(grep -rn --include='*.go' 'pgxpool\.Pool' internal/ 2>/dev/null \
+                | grep '/adapter/' || true)"
+if [ -n "$adapter_hits" ]; then
   echo "LỖI KIẾN TRÚC: adapter giữ *pgxpool.Pool — phải nhận DBTX qua Manager.DB(ctx)"
+  printf '%s\n' "$adapter_hits" | sed 's/^/    /'
   fail=1
 fi
 
@@ -1007,6 +1024,28 @@ exit "$fail"
 ```
 
 Chạy thử: `chmod +x scripts/check-arch.sh && task arch` → `Kiểm tra kiến trúc: OK`
+
+⚠️ **`OK` chưa chứng minh được gì — phải thử cho nó ĐỎ.** Khi chưa có module nghiệp
+vụ nào thì hai quy tắc đầu duyệt qua không package nào, nên chúng luôn báo OK kể cả
+khi script hỏng. Bản đầu tiên của script này đúng là hỏng như vậy: nó dùng
+`go list ./internal/*/domain/...`, mà bash chỉ mở rộng `*` khi toàn bộ mẫu khớp một
+đường dẫn có thật — không có thư mục nào tên `...` nên chuỗi được truyền nguyên văn,
+`go list` lỗi, và lỗi bị `|| true` nuốt. Script báo OK vĩnh viễn.
+
+Bắt buộc kiểm bằng cách cố ý vi phạm rồi xóa đi:
+
+```bash
+mkdir -p apps/api/internal/probe/domain
+printf 'package domain
+
+import "net/http"
+
+var _ = http.StatusOK
+'   > apps/api/internal/probe/domain/probe.go
+task arch      # PHẢI đỏ và gọi đúng tên package
+rm -rf apps/api/internal/probe
+task arch      # xanh trở lại
+```
 
 - [ ] **Step 2: `apps/api/.golangci.yml`**
 
