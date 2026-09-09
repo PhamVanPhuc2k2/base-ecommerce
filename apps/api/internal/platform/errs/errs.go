@@ -24,6 +24,9 @@ const (
 	KindValidation
 	KindRateLimited
 	KindUnavailable
+	// KindTooLarge phải nằm CUỐI khối iota. Chèn vào giữa sẽ đổi giá trị số
+	// của mọi Kind đứng sau nó.
+	KindTooLarge
 )
 
 // FieldError mô tả một lỗi ở cấp trường dữ liệu.

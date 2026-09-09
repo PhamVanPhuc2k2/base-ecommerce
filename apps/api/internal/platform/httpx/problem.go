@@ -16,9 +16,8 @@ type Problem struct {
 	Type      string            `json:"type"`
 	Title     string            `json:"title"`
 	Status    int               `json:"status"`
-	Detail    string            `json:"detail,omitempty"`
 	Code      string            `json:"code"`
-	RequestID string            `json:"request_id,omitempty"`
+	RequestID string            `json:"request_id"`
 	Errors    []errs.FieldError `json:"errors,omitempty"`
 }
 
@@ -40,6 +39,8 @@ func statusOf(k errs.Kind) int {
 		return http.StatusTooManyRequests
 	case errs.KindUnavailable:
 		return http.StatusServiceUnavailable
+	case errs.KindTooLarge:
+		return http.StatusRequestEntityTooLarge
 	default:
 		return http.StatusInternalServerError
 	}

@@ -73,3 +73,8 @@ func TestKindInternal_LaGiaTriKhong(t *testing.T) {
 	var e errs.Error
 	require.Equal(t, errs.KindInternal, e.Kind)
 }
+
+func TestKindTooLarge_NamCuoiKhoiIota(t *testing.T) {
+	// Chèn Kind mới vào giữa sẽ đổi giá trị số của các Kind sau nó.
+	require.Greater(t, uint8(errs.KindTooLarge), uint8(errs.KindUnavailable))
+}

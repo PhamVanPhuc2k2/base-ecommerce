@@ -37,8 +37,7 @@ func doRequest(t *testing.T, h http.HandlerFunc, body string) (*httptest.Respons
 
 func TestWrap_KhongLoiThiKhongDungToiResponse(t *testing.T) {
 	h := httpx.Wrap(func(w http.ResponseWriter, r *http.Request) error {
-		httpx.JSON(w, http.StatusOK, map[string]string{"ok": "yes"})
-		return nil
+		return httpx.JSON(w, http.StatusOK, map[string]string{"ok": "yes"})
 	})
 	rec, _ := doRequest(t, h, "")
 	require.Equal(t, http.StatusOK, rec.Code)
@@ -142,10 +141,81 @@ func TestDecode_HopLe(t *testing.T) {
 	var got input
 	h := httpx.Wrap(func(w http.ResponseWriter, r *http.Request) error {
 		v, err := httpx.Decode[input](w, r)
+		if err != nil {
+			return err
+		}
 		got = v
-		return err
+		return httpx.JSON(w, http.StatusOK, v)
 	})
 	rec, _ := doRequest(t, h, `{"name":"Asus ROG"}`)
 	require.Equal(t, 200, rec.Code)
 	require.Equal(t, "Asus ROG", got.Name)
+}
+
+func TestWrap_DaGhiResponseRoiThiKhongGhiDe(t *testing.T) {
+	// Handler ghi response rồi mới lỗi: KHÔNG được ghi đè, vì body hai document
+	// khiến client đọc document đầu và tưởng thành công.
+	h := httpx.Wrap(func(w http.ResponseWriter, r *http.Request) error {
+		if err := httpx.JSON(w, http.StatusOK, map[string]string{"partial": "yes"}); err != nil {
+			return err
+		}
+		return errs.New(errs.KindNotFound, "TOO_LATE", "Quá muộn")
+	})
+	rec, _ := doRequest(t, h, "")
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.JSONEq(t, `{"partial":"yes"}`, rec.Body.String(),
+		"body phải là đúng MỘT document, không được nối thêm problem+json")
+}
+
+func TestJSON_KhongMaHoaDuocThiTraLoi(t *testing.T) {
+	// Marshal hỏng phải thành 500 tử tế, không phải 200 với body rỗng.
+	h := httpx.Wrap(func(w http.ResponseWriter, r *http.Request) error {
+		return httpx.JSON(w, http.StatusOK, map[string]any{"ch": make(chan int)})
+	})
+	rec, p := doRequest(t, h, "")
+
+	require.Equal(t, http.StatusInternalServerError, rec.Code)
+	require.Equal(t, "INTERNAL_ERROR", p.Code)
+	require.NotContains(t, rec.Body.String(), "chan int")
+}
+
+func TestDecode_BodyQuaLonTraVe413(t *testing.T) {
+	type input struct {
+		Name string `json:"name"`
+	}
+	h := httpx.Wrap(func(w http.ResponseWriter, r *http.Request) error {
+		_, err := httpx.Decode[input](w, r)
+		return err
+	})
+	big := `{"name":"` + strings.Repeat("a", 2<<20) + `"}`
+	rec, p := doRequest(t, h, big)
+
+	require.Equal(t, http.StatusRequestEntityTooLarge, rec.Code)
+	require.Equal(t, "PAYLOAD_TOO_LARGE", p.Code)
+}
+
+func TestDecode_BodyRongThiTraMalformed(t *testing.T) {
+	// Không gửi body là dạng request hỏng phổ biến nhất trong thực tế.
+	type input struct {
+		Name string `json:"name"`
+	}
+	h := httpx.Wrap(func(w http.ResponseWriter, r *http.Request) error {
+		_, err := httpx.Decode[input](w, r)
+		return err
+	})
+	rec, p := doRequest(t, h, "")
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Equal(t, "MALFORMED_REQUEST", p.Code)
+}
+
+func TestWriteError_LuonCoRequestID(t *testing.T) {
+	// request_id phải luôn xuất hiện, kể cả rỗng — tài liệu 02 mục 2.1 nói
+	// người dùng sẽ đọc mã này khi báo lỗi.
+	h := httpx.Wrap(func(w http.ResponseWriter, r *http.Request) error {
+		return errs.New(errs.KindNotFound, "X_NOT_FOUND", "Không thấy")
+	})
+	rec, _ := doRequest(t, h, "")
+	require.Contains(t, rec.Body.String(), `"request_id"`)
 }
