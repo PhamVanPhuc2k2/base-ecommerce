@@ -401,6 +401,26 @@ api/
 - Timeout: `ReadHeaderTimeout` 5s, `ReadTimeout` 15s, `WriteTimeout` 30s,
   `IdleTimeout` 60s. Bỏ trống là mở cửa cho Slowloris.
 
+⚠️ **`middleware.Timeout` không giết được handler.** Nó hủy `ctx` và trả 504 cho
+client, nhưng goroutine của handler **vẫn chạy tiếp tới khi xong**. Một handler
+không kiểm `ctx.Done()` sẽ tiếp tục giữ kết nối database và ghi dữ liệu sau khi
+client đã nhận 504 — quá tải càng làm số goroutine treo tăng thêm.
+
+Nghĩa là mọi handler và mọi truy vấn phải **nhận và tôn trọng `ctx`**:
+
+```go
+// ĐÚNG: pgx hủy truy vấn khi ctx hết hạn
+rows, err := db.Query(ctx, `SELECT ...`)
+
+// SAI: vòng lặp dài không bao giờ dừng dù đã 504
+for _, item := range items {
+    process(item)          // thiếu kiểm ctx.Done()
+}
+```
+
+Linter `contextcheck` và `noctx` bắt được phần lớn trường hợp, nhưng không bắt
+được vòng lặp thuần CPU — chỗ đó phải tự nhớ.
+
 ---
 
 ## 7. Việc cần làm
