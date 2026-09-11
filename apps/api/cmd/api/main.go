@@ -77,7 +77,7 @@ func run() error {
 
 	txManager := postgres.NewManager(pool)
 	cache := platformredis.NewCache(rdb, log)
-	catalogModule := catalog.New(txManager, cache, log, cfg.AdminKey)
+	catalogModule := catalog.New(txManager, cache, cfg.AdminKey)
 
 	h := health.New(cfg.Version,
 		postgres.NewHealthChecker(pool),

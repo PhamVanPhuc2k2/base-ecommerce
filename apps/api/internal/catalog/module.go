@@ -3,8 +3,6 @@
 package catalog
 
 import (
-	"log/slog"
-
 	"base-ecommerce/api/internal/catalog/adapter/httpapi"
 	"base-ecommerce/api/internal/catalog/adapter/outboxpub"
 	"base-ecommerce/api/internal/catalog/adapter/pgstore"
@@ -22,7 +20,7 @@ type Module struct {
 	adminKey string
 }
 
-func New(db *postgres.Manager, cache *platformredis.Cache, log *slog.Logger, adminKey string) *Module {
+func New(db *postgres.Manager, cache *platformredis.Cache, adminKey string) *Module {
 	productRepo := pgstore.NewProductRepository(db)
 	categoryRepo := pgstore.NewCategoryRepository(db)
 	c := rediscache.New(cache)

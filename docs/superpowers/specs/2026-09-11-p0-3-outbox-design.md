@@ -241,5 +241,9 @@ giải quyết, và cả ba đều **không** lộ ra khi mọi thứ chạy bì
   aggregate (chuỗi trạng thái đơn hàng ở P6) phải thêm cột `version`.
 - **Một bản relay.** Xem §8.
 - **Backoff cố định 30 giây.** Xem §5.1.
+- **`PATCH` không đổi được `category_id`.** `updateProductRequest` không có
+  trường đó, nên gửi lên bị `DisallowUnknownFields` từ chối với 400. Phát hiện
+  khi kiểm chứng Task 4. Không phải lỗi của P0.3 — nhưng chuyển sản phẩm sang
+  danh mục khác là thao tác admin rất thường gặp, và P1 phải bổ sung.
 - **Worker chỉ ghi log.** Nó là khung để P7 thay bằng indexer Meilisearch. Giá
   trị của nó ở P0.3 là chứng minh đường đi hoạt động, không phải làm việc gì.
