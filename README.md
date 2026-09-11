@@ -224,7 +224,7 @@ base-ecommerce/
 │   │   │   │   ├── observability/            # slog JSON, request ID
 │   │   │   │   ├── postgres/                 # pgxpool, DBTX, txmanager
 │   │   │   │   ├── redis/                    # client + cache-aside, singleflight, jitter
-│   │   │   │   └── rabbitmq/                 # ⬜ P0.3 — publisher, consumer, retry, DLQ
+│   │   │   │   └── rabbitmq/                 # topology + publisher có confirm (consumer: P0.3 Task 7)
 │   │   │   │
 │   │   │   ├── catalog/                      # MODULE = một hexagon hoàn chỉnh
 │   │   │   │   ├── domain/

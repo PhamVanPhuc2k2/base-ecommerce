@@ -21,6 +21,7 @@ type Config struct {
 	HTTP     HTTP
 	DB       DB
 	Redis    Redis
+	RabbitMQ RabbitMQ
 }
 
 type HTTP struct {
@@ -46,18 +47,26 @@ type Redis struct {
 	PoolSize int
 }
 
+type RabbitMQ struct {
+	// URL là AMQP URI đầy đủ, KÈM mật khẩu. Mọi chỗ in nó ra phải đi qua
+	// redactDSN — xem Config.String.
+	URL string
+}
+
 func (c *Config) IsProduction() bool { return c.Env == "production" }
 
 // String che các giá trị nhạy cảm để an toàn khi ghi log toàn bộ config.
 func (c *Config) String() string {
 	return fmt.Sprintf(
-		"Config{Env:%s Version:%s HTTP.Addr:%s DB.DSN:%s DB.MaxConns:%d Redis.Addr:%s AdminKey:%s}",
+		"Config{Env:%s Version:%s HTTP.Addr:%s DB.DSN:%s DB.MaxConns:%d Redis.Addr:%s "+
+			"RabbitMQ.URL:%s AdminKey:%s}",
 		c.Env, c.Version, c.HTTP.Addr, redactDSN(c.DB.DSN), c.DB.MaxConns,
-		c.Redis.Addr, redactSecret(c.AdminKey),
+		c.Redis.Addr, redactDSN(c.RabbitMQ.URL), redactSecret(c.AdminKey),
 	)
 }
 
-// redactDSN thay mật khẩu trong DSN bằng ***.
+// redactDSN thay mật khẩu bằng *** trong mọi URI dạng scheme://user:pass@host,
+// nên dùng được cho cả DATABASE_URL lẫn RABBITMQ_URL.
 func redactDSN(dsn string) string {
 	at := strings.LastIndex(dsn, "@")
 	scheme := strings.Index(dsn, "://")
@@ -106,6 +115,13 @@ func Load() (*Config, error) {
 		Redis: Redis{
 			Addr:     l.str("REDIS_ADDR", "localhost:6380"),
 			PoolSize: l.num("REDIS_POOL_SIZE", 20),
+		},
+		RabbitMQ: RabbitMQ{
+			// Không dùng required: cmd/api chạy được mà không cần broker (event
+			// chỉ được ghi xuống bảng outbox, relay đẩy sau), nên bắt buộc biến
+			// này sẽ chặn khởi động vì một phụ thuộc không chặn đường request.
+			// Dấu "/" cuối là vhost mặc định, bỏ đi là URI không hợp lệ.
+			URL: l.str("RABBITMQ_URL", "amqp://app:app@localhost:5672/"),
 		},
 	}
 
