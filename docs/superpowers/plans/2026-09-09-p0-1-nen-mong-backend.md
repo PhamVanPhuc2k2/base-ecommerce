@@ -4,7 +4,7 @@
 
 **Architecture:** Modular monolith + Hexagonal. Kế hoạch này chỉ dựng `internal/platform/*` (hạ tầng dùng chung) và `internal/server` — chưa có module nghiệp vụ nào. Chiều phụ thuộc `adapter → app → domain` được CI kiểm bằng máy.
 
-**Tech Stack:** Go 1.25 · Chi v5 · pgx/v5 (pgxpool) · goose · log/slog · go-task · Docker Compose · GitHub Actions
+**Tech Stack:** Go 1.26 · Chi v5 · pgx/v5 (pgxpool) · goose · log/slog · go-task · Docker Compose · GitHub Actions
 
 **Tài liệu thiết kế:** [01-transaction-outbox](../../design/01-transaction-outbox.md) · [02-api-contract](../../design/02-api-contract.md) · [04-kiem-chung](../../design/04-kiem-chung.md) · [05-deployment](../../design/05-deployment.md)
 
@@ -70,7 +70,7 @@ Chi tiết đầy đủ nằm trong lịch sử git; đây là bản tóm tắt 
 
 **Năm quyết định các task sau phải tôn trọng:**
 
-1. **`go 1.25`** trong `go.mod`, CI cũng pin 1.25. Sau mỗi `go get`, kiểm
+1. **`go 1.26`** trong `go.mod`, CI cũng pin 1.26. Sau mỗi `go get`, kiểm
    `git diff apps/api/go.mod`. Nếu một thư viện đòi bản Go cao hơn thì **nâng sàn
    Go lên**, đừng hạ phiên bản thư viện xuống — mốc Go là do ta tự đặt, còn hãm
    thư viện sẽ làm mọi lần cài đặt sau đều vấp lại đúng chỗ đó. Nhớ sửa cả
@@ -935,7 +935,7 @@ thì được, nhưng nếu server chạy nền thì không gửi tín hiệu t�
 với **binary làm PID 1**:
 
 ```bash
-docker run -d --name api-stop-test --network base-ecommerce-dev_default   -v "D:/Projects/base-ecommerce/apps/api:/src" -w /src   -e "DATABASE_URL=postgres://app:app@postgres:5432/base_ecommerce?sslmode=disable"   golang:1.25-alpine sh -c 'go build -o /tmp/api ./cmd/api && exec /tmp/api'
+docker run -d --name api-stop-test --network base-ecommerce-dev_default   -v "D:/Projects/base-ecommerce/apps/api:/src" -w /src   -e "DATABASE_URL=postgres://app:app@postgres:5432/base_ecommerce?sslmode=disable"   golang:1.26-alpine sh -c 'go build -o /tmp/api ./cmd/api && exec /tmp/api'
 
 docker stop api-stop-test
 docker logs api-stop-test | tail -3          # phải có "nhận tín hiệu tắt" rồi "đã dừng"
@@ -1093,7 +1093,7 @@ on:
   pull_request:
 
 env:
-  GO_VERSION: '1.25'
+  GO_VERSION: '1.26'
 
 jobs:
   build:

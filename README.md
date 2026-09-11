@@ -51,7 +51,7 @@ trả lời được câu hỏi "nó giải quyết vấn đề gì" — nếu k
 
 | Hạng mục | Công nghệ | Ghi chú |
 |---|---|---|
-| Ngôn ngữ | **Go** 1.25 | `http.ServeMux` chuẩn đã hỗ trợ method + path param |
+| Ngôn ngữ | **Go** 1.26 | `http.ServeMux` chuẩn đã hỗ trợ method + path param |
 | Router | **Chi** | Router mỏng trên `net/http`, không che giấu stdlib |
 | Database | **PostgreSQL** | Source of truth |
 | Driver | **pgx/v5** (`pgxpool`) | Không dùng chế độ `database/sql` |
