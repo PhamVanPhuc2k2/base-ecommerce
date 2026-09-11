@@ -1,0 +1,45 @@
+package app
+
+import (
+	"context"
+
+	"base-ecommerce/api/internal/catalog/domain"
+
+	"github.com/google/uuid"
+)
+
+type PublishProduct struct {
+	tx     TxManager
+	repo   ProductRepository
+	events EventPublisher
+	cache  Cache
+}
+
+func NewPublishProduct(tx TxManager, repo ProductRepository, events EventPublisher, cache Cache) *PublishProduct {
+	return &PublishProduct{tx: tx, repo: repo, events: events, cache: cache}
+}
+
+func (uc *PublishProduct) Execute(ctx context.Context, id uuid.UUID) (*domain.Product, error) {
+	var published *domain.Product
+
+	if err := uc.tx.Run(ctx, func(ctx context.Context) error {
+		p, err := uc.repo.ByID(ctx, id)
+		if err != nil {
+			return err
+		}
+		// Quy tắc nghiệp vụ nằm ở domain, không ở đây.
+		if err := p.Publish(); err != nil {
+			return err
+		}
+		if err := uc.repo.Save(ctx, p); err != nil {
+			return err
+		}
+		published = p
+		return uc.events.Publish(ctx, p.PullEvents()...)
+	}); err != nil {
+		return nil, err
+	}
+
+	uc.cache.Invalidate(ctx, KeyProductSlug(published.Slug))
+	return published, nil
+}
