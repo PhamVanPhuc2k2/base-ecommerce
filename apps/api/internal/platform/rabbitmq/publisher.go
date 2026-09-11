@@ -202,11 +202,22 @@ func (p *Publisher) Publish(ctx context.Context, msg Message) error {
 	// nhiên: P4 thêm module orders phát `order.created`, mà binding hiện tại
 	// chỉ có `product.*` — mọi sự kiện đơn hàng biến mất, không lỗi nào.
 	//
+	// Đọc KHÔNG chặn, không chờ một khe thời gian nào.
+	//
 	// AMQP gửi basic.return TRƯỚC basic.ack cho message không route được, và
-	// thư viện đẩy cả hai từ cùng một goroutine đọc socket theo đúng thứ tự.
-	// Nên tới thời điểm này, message trả về (nếu có) đã nằm sẵn trong buffer.
-	// Vẫn để một khe chờ rất ngắn cho chắc.
-	if r, returned := waitReturn(returns, returnGrace); returned {
+	// thư viện đẩy cả hai từ cùng MỘT goroutine đọc socket theo đúng thứ tự
+	// khung tin. Tới được dòng này nghĩa là khung ack đã được xử lý, nên khung
+	// return (nếu có) chắc chắn đã nằm trong buffer từ trước đó.
+	//
+	// Bản đầu chờ thêm 50 ms "cho chắc", và cái giá thì đo được: 51,9 ms cho
+	// mỗi message, tức 19 msg/s — relay chỉ tiêu hóa nổi 1,6 triệu sự kiện mỗi
+	// ngày và một đợt tồn đọng lớn sẽ rút rất chậm. Khe chờ đó không mua thêm
+	// gì cả, vì thứ tự khung tin đã bảo đảm điều nó định chờ.
+	//
+	// Điều kiện để lập luận này đúng: mỗi lần chỉ có MỘT message đang bay
+	// (pubMu tuần tự hóa) và buffer của returns đủ chỗ. Publish song song thì
+	// phải ghép theo MessageId thay vì theo thứ tự — đừng bỏ pubMu đi.
+	if r, returned := readReturn(returns); returned {
 		p.log.Error("rabbitmq TRẢ VỀ message: không queue nào nhận",
 			"exchange", r.Exchange, "routing_key", r.RoutingKey,
 			"reply_code", r.ReplyCode, "reply_text", r.ReplyText,
@@ -216,11 +227,6 @@ func (p *Publisher) Publish(ctx context.Context, msg Message) error {
 	}
 	return nil
 }
-
-// returnGrace là khe chờ message bị trả về sau khi đã nhận ack. Rất ngắn vì
-// theo giao thức thì nó đã tới trước ack rồi; khe này chỉ phòng trường hợp
-// lập lịch goroutine chậm.
-const returnGrace = 50 * time.Millisecond
 
 func drainReturns(returns <-chan amqp.Return) {
 	for {
@@ -232,18 +238,11 @@ func drainReturns(returns <-chan amqp.Return) {
 	}
 }
 
-func waitReturn(returns <-chan amqp.Return, d time.Duration) (amqp.Return, bool) {
+func readReturn(returns <-chan amqp.Return) (amqp.Return, bool) {
 	select {
 	case r, ok := <-returns:
 		return r, ok
 	default:
-	}
-	t := time.NewTimer(d)
-	defer t.Stop()
-	select {
-	case r, ok := <-returns:
-		return r, ok
-	case <-t.C:
 		return amqp.Return{}, false
 	}
 }
