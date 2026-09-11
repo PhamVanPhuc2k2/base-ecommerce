@@ -69,6 +69,31 @@ for pkg in $(printf '%s\n' "$all_pkgs" | grep -E '/adapter(/|$)' || true); do
   fi
 done
 
+# 4. Hạ tầng dùng chung không được biết tới module nghiệp vụ nào.
+#
+# internal/platform/** và internal/outbox là thứ MỌI module dùng. Chỉ cần một
+# lần "tiện tay" import catalog/domain để lấy một hằng số là module orders ở P4
+# sẽ kéo theo cả catalog vào đồ thị phụ thuộc của nó — và đó là lúc modular
+# monolith biến thành big ball of mud.
+#
+# Dùng -deps chứ không phải .Imports: vi phạm gián tiếp (hạ tầng A import hạ
+# tầng B, B import catalog) cũng nguy hiểm y hệt và khó thấy hơn nhiều.
+#
+# Danh sách module nghiệp vụ để ở một chỗ, thêm module mới thì thêm vào đây.
+business_modules='catalog'
+
+for pkg in $(printf '%s
+' "$all_pkgs" | grep -E '/internal/(platform/|outbox)' || true); do
+  for m in $business_modules; do
+    if go list -deps "$pkg" 2>/dev/null | grep -q "^base-ecommerce/api/internal/$m\(/\|$\)"; then
+      echo "LỖI KIẾN TRÚC: $pkg (hạ tầng dùng chung) phụ thuộc vào module nghiệp vụ $m"
+      echo "    → hạ tầng không được biết module nào tồn tại. Việc dịch từ kiểu"
+      echo "      nghiệp vụ sang kiểu hạ tầng là của adapter thuộc chính module đó."
+      fail=1
+    fi
+  done
+done
+
 if [ "$fail" -eq 0 ]; then
   echo "Kiểm tra kiến trúc: OK"
 fi
