@@ -270,16 +270,22 @@ base-ecommerce/
 │       │   ├── api/error.ts                  # ApiError — mọi hỏng hóc về đúng một dạng
 │       │   ├── api/server.ts                 # apiGet(), chỉ gọi từ Server Component
 │       │   ├── errors.ts                     # mã lỗi → thông điệp tiếng Việt, một chỗ duy nhất
-│       │   └── format.ts                     # formatVND (nhận chuỗi decimal), formatDate
+│       │   ├── format.ts                     # formatVND (nhận chuỗi decimal), formatDate
+│       │   └── search-params.ts              # dựng link lọc: giữ tham số khác, luôn reset page
 │       ├── app/                              # App Router
 │       │   ├── layout.tsx                    # <html lang="vi">, header, footer, metadata mặc định
+│       │   ├── page.tsx                      # trang chủ tối giản, dẫn sang /danh-muc
+│       │   ├── danh-muc/page.tsx             # danh sách sản phẩm: lọc trên URL, force-dynamic
 │       │   ├── error.tsx                     # lưới an toàn cuối; production KHÔNG còn mã lỗi để đọc
 │       │   ├── global-error.tsx              # phủ cả lỗi ném từ layout.tsx; tự khai <html>/<body>
 │       │   ├── loading.tsx                   # skeleton giữ chỗ, không phải chữ "Đang tải..."
 │       │   └── not-found.tsx                 # 404 tiếng Việt, dẫn về trang danh mục
 │       ├── components/
 │       │   ├── breadcrumb.tsx                # đường dẫn phân cấp; mục cuối không bao giờ là link
-│       │   └── error-state.tsx               # lỗi API hiện TRONG trang, còn nguyên code + request_id
+│       │   ├── category-filter.tsx           # cây danh mục dạng link, không dùng state
+│       │   ├── error-state.tsx               # lỗi API hiện TRONG trang, còn nguyên code + request_id
+│       │   ├── pagination.tsx                # theo meta.has_next/has_prev, KHÔNG tự tính total_pages
+│       │   └── product-card.tsx              # ô sản phẩm; khung ảnh cố định, chịu được ảnh hỏng
 │       ├── package.json                      # Next.js 16 + React 19
 │       ├── next.config.ts                    # output: standalone (cho Docker ở Task 6)
 │       ├── tsconfig.json                     # strict + noUncheckedIndexedAccess
@@ -730,7 +736,7 @@ nghiệp vụ thật đi xuyên mọi tầng, thay vì khung xương trên lý t
 - [ ] Khởi tạo Next.js + TypeScript strict + Tailwind + shadcn/ui
 - [ ] `lib/api/client.ts`: base URL, xử lý lỗi, request ID
 - [ ] `lib/format.ts`: format VND và ngày giờ
-- [ ] Trang danh sách sản phẩm (Server Component, có bộ lọc trên URL)
+- [x] Trang danh sách sản phẩm (Server Component, có bộ lọc trên URL) — `/danh-muc`
 - [ ] Trang chi tiết sản phẩm (`generateMetadata` + JSON-LD `Product`)
 - [ ] `error.tsx` + `loading.tsx`
 - [ ] `sitemap.ts` + `robots.ts`
