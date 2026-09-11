@@ -733,12 +733,12 @@ nghiệp vụ thật đi xuyên mọi tầng, thay vì khung xương trên lý t
 - [x] `task openapi` sinh client TS vào `apps/web/lib/api/generated`
 
 ### Frontend
-- [ ] Khởi tạo Next.js + TypeScript strict + Tailwind + shadcn/ui
-- [ ] `lib/api/client.ts`: base URL, xử lý lỗi, request ID
-- [ ] `lib/format.ts`: format VND và ngày giờ
+- [x] Khởi tạo Next.js 16 + TypeScript strict + Tailwind 4 + Biome (shadcn/ui để P1)
+- [x] `lib/api/server.ts`: base URL đọc lúc chạy, `ApiError` mang `code` + `request_id`
+- [x] `lib/format.ts`: format VND và ngày giờ
 - [x] Trang danh sách sản phẩm (Server Component, có bộ lọc trên URL) — `/danh-muc`
 - [ ] Trang chi tiết sản phẩm (`generateMetadata` + JSON-LD `Product`)
-- [ ] `error.tsx` + `loading.tsx`
+- [x] `error.tsx` + `global-error.tsx` + `loading.tsx` + `not-found.tsx`
 - [ ] `sitemap.ts` + `robots.ts`
 
 ### Kiểm chứng & CI
