@@ -334,7 +334,7 @@ Dự án không dùng unit test. Mười mục dưới đây thay thế, không 
 | 2 | Tạo sản phẩm thiếu `X-Admin-Key` | 401 `UNAUTHENTICATED` |
 | 3 | Tạo sản phẩm sai khóa | 401; xác nhận code dùng `subtle.ConstantTimeCompare` |
 | 4 | Tạo sản phẩm hợp lệ | 201 + `Location`; log có dòng event `product.created` |
-| 5 | Tạo trùng SKU | 409 `DUPLICATE_SKU`, **không** lộ tên ràng buộc Postgres |
+| 5 | Tạo trùng SKU | 409. Gửi lại y nguyên request thì đụng cả hai unique index, Postgres báo `products_slug_uq` trước nên `code` là `DUPLICATE_SLUG`; giữ SKU mà đổi tên thì mới ra `DUPLICATE_SKU`. Cả hai trường hợp đều **không** được lộ tên ràng buộc |
 | 6 | `Publish` sản phẩm chưa có ảnh | 422 `NO_IMAGE` |
 | 7 | **Cache có thật sự được dùng không** | Bật `log_statement=all`, gọi cùng slug hai lần → chỉ **một** truy vấn xuống DB |
 | 8 | **Cache bị xóa sau khi sửa** | `PATCH` xong gọi lại ngay → thấy dữ liệu mới, không phải bản cũ |
