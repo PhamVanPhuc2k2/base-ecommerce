@@ -201,9 +201,11 @@ Cùng lý do với `category_id`.
 
 | Quy tắc | Sentinel error | Kind |
 |---|---|---|
-| SKU rỗng hoặc dài quá 64 ký tự | `ErrInvalidSKU` | Validation |
+| SKU rỗng hoặc dài quá 64 ký tự (đếm **ký tự**, không phải byte) | `ErrInvalidSKU` | Validation |
 | Tên rỗng | `ErrNameRequired` | Validation |
-| Giá âm | `ErrInvalidPrice` | Validation |
+| Giá âm, hoặc nhiều hơn 2 chữ số thập phân, hoặc vượt 9.999.999.999.999,99 | `ErrInvalidPrice` | Validation |
+| Tiền tệ khác `VND` | `ErrUnsupportedCurrency` | Validation |
+| Tên dài quá 200 ký tự | `ErrNameTooLong` | Validation |
 | Slug không hợp lệ sau khi chuẩn hóa | `ErrInvalidSlug` | Validation |
 | `Publish()` khi chưa có ảnh nào | `ErrNoImage` | Validation |
 | `Publish()` khi giá bằng 0 | `ErrPriceRequired` | Validation |
@@ -217,6 +219,35 @@ HTTP mà không cần biết gì về catalog.
 
 ⚠️ `Message` phải là câu tiếng Việt viết sẵn, **không bao giờ nội suy từ lỗi gốc**
 — nó ra thẳng `title` của response và sẽ làm lộ tên bảng, tên ràng buộc.
+
+### 5.1. Mọi ràng buộc của database phải có một guard tương ứng ở domain
+
+Đây là quy tắc rút ra sau khi code review tìm được ba chỗ vi phạm nó. Ràng buộc ở
+database mà không có guard ở domain thì sai sót của người dùng biến thành **500**
+thay vì **422**, vì `mapErr` chỉ dịch được vài mã SQLSTATE đã biết trước.
+
+| Ràng buộc database | Guard ở domain |
+|---|---|
+| `NUMERIC(15,2)` — làm tròn im lặng | `NewMoney` từ chối quá 2 chữ số thập phân |
+| `NUMERIC(15,2)` — tràn số | `NewMoney` từ chối quá `9999999999999.99` |
+| `CHECK (currency = 'VND')` | `NewMoney` từ chối tiền tệ khác |
+| `CHECK (price >= 0)` | `NewMoney` từ chối số âm |
+| Kích thước tối đa của btree index trên `slug` | `NewProduct`/`Update` giới hạn tên 200 ký tự |
+| `CHECK (status IN (...))` | Kiểu `Status` và `Publish()` |
+
+Khi thêm ràng buộc database mới, **bắt buộc** thêm guard tương ứng trong cùng một
+lần thay đổi. Cách kiểm: duyệt `\d products` rồi với mỗi ràng buộc, chỉ ra guard
+nào ngăn không cho chạm tới nó.
+
+### 5.2. Bất biến phải được canh ở MỌI nơi ghi, không chỉ ở nơi tạo
+
+`Publish()` bảo đảm "đang bán ⇒ có ảnh và giá lớn hơn 0". Nhưng `Update()` cũng ghi
+`Price` và `Images`, nên nó phải canh lại đúng bất biến đó khi sản phẩm đang `live`
+— nếu không thì một lệnh `PATCH` tước sạch ảnh và giá của sản phẩm đang bán mà
+không báo lỗi gì.
+
+Quy tắc chung: mỗi bất biến phải được liệt kê cùng **danh sách mọi phương thức có
+thể phá nó**, không chỉ phương thức thiết lập nó.
 
 ---
 
@@ -294,6 +325,27 @@ cho kết quả đúng, chỉ khi đếm số truy vấn mới biết cache có 
 
 Mục 1 cũng đáng chú ý: `internal/catalog/domain` là package `domain` đầu tiên của
 dự án, nên đây là lần đầu `scripts/check-arch.sh` thật sự có việc để làm.
+
+---
+
+## 8.1. Hai giới hạn đã biết của slug — chấp nhận ở P0.2
+
+**Slug luôn suy ra từ tên, không nhận slug do người dùng đặt.** Hệ quả:
+`"Laptop ASUS"`, `"Laptop  ASUS"`, `"Laptop-ASUS"` và `"LAPTOP ASUS"` đều ra
+`laptop-asus`. Sản phẩm thứ hai bị từ chối với 409 `DUPLICATE_SLUG` — nói về một
+đường dẫn mà admin chưa từng nhập và không sửa được, trừ khi đổi tên sản phẩm.
+
+Từ chối là đúng (ghi đè im lặng còn tệ hơn), nhưng **không có lối thoát** mới là
+vấn đề. P1 phải thêm trường `slug` tùy chọn vào request tạo sản phẩm.
+
+**Đổi tên làm đổi slug, nên URL cũ trả 404.** `Update()` tính lại slug từ tên mới.
+Cache được xóa cả hai khóa nên không có dữ liệu cũ, nhưng đường dẫn cũ thì chết —
+với cửa hàng sống bằng tìm kiếm tự nhiên, sửa một lỗi chính tả trong tên sản phẩm
+là mất thứ hạng của trang đó.
+
+Chấp nhận ở P0.2 vì chưa có traffic và chưa có bảng chuyển hướng. P1 phải chọn một
+trong hai: bảng `product_slug_history` + 301, hoặc khóa slug sau lần đăng bán đầu
+tiên và cho admin đổi bằng thao tác riêng.
 
 ---
 
