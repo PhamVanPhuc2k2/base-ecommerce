@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"base-ecommerce/api/internal/catalog/domain"
-	"base-ecommerce/api/internal/platform/errs"
 )
 
 const (
@@ -12,9 +11,6 @@ const (
 	MaxLimit     = 100
 	MaxPage      = 200
 )
-
-var ErrPageTooDeep = errs.New(errs.KindInvalid, "PAGE_TOO_DEEP",
-	"Không hỗ trợ truy cập quá sâu vào danh sách")
 
 type ListProductsInput struct {
 	CategorySlug string
@@ -57,7 +53,17 @@ func (uc *ListProducts) Execute(ctx context.Context, in ListProductsInput) (*Lis
 	// Chặn offset sâu: Postgres phải quét và vứt bỏ offset dòng, nên trang 5000
 	// sẽ giết database. Google cũng không index sâu vậy — bot cào giá thì có.
 	if page > MaxPage {
-		return nil, ErrPageTooDeep
+		return nil, domain.ErrPageTooDeep
+	}
+
+	// sort là enum đóng. Bỏ qua giá trị lạ và im lặng dùng mặc định sẽ che mất
+	// lỗi phía client; trả 400 để họ sửa.
+	switch in.Sort {
+	case "":
+		in.Sort = SortNewest
+	case SortNewest, SortPriceAsc, SortPriceDesc:
+	default:
+		return nil, domain.ErrInvalidSort
 	}
 
 	f := ListFilter{

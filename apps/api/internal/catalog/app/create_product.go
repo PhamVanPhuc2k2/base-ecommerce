@@ -55,7 +55,11 @@ func (uc *CreateProduct) Execute(ctx context.Context, in CreateProductInput) (*d
 	// Xóa cache SAU khi commit. Xóa trước rồi commit lỗi thì cache có thể được
 	// nạp lại bằng dữ liệu chưa commit; xóa sau mà rollback thì chỉ tốn một
 	// lần đọc lại.
-	uc.cache.Invalidate(ctx, KeyProductSlug(p.Slug))
+	//
+	// WithoutCancel: transaction đã commit rồi, việc xóa cache KHÔNG được hủy
+	// theo. Client ngắt kết nối giữa chừng mà cache không xóa thì dữ liệu cũ
+	// nằm lại tới hết TTL.
+	uc.cache.Invalidate(context.WithoutCancel(ctx), KeyProductSlug(p.Slug))
 
 	return p, nil
 }

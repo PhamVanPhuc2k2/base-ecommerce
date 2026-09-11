@@ -37,4 +37,9 @@ var (
 		"Danh mục không tồn tại")
 	ErrBrandNotFound = errs.New(errs.KindValidation, "BRAND_NOT_FOUND",
 		"Thương hiệu không tồn tại")
+
+	ErrInvalidSort = errs.New(errs.KindInvalid, "INVALID_SORT",
+		"Giá trị sắp xếp không hợp lệ")
+	ErrPageTooDeep = errs.New(errs.KindInvalid, "PAGE_TOO_DEEP",
+		"Không hỗ trợ truy cập quá sâu vào danh sách")
 )

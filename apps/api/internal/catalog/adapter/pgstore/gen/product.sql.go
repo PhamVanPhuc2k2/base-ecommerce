@@ -17,12 +17,17 @@ const productByID = `-- name: ProductByID :one
 SELECT products.id, products.sku, products.slug, products.name, products.short_description, products.category_id, products.brand_id, products.price, products.currency, products.status, products.attributes, products.images, products.created_at, products.updated_at, products.deleted_at
 FROM products
 WHERE id = $1 AND deleted_at IS NULL
+FOR UPDATE
 `
 
 type ProductByIDRow struct {
 	Product Product
 }
 
+// FOR UPDATE: ByID chỉ được dùng trong các use case GHI (Update, Publish), và
+// cả hai đều đọc rồi ghi đè nguyên dòng. Không khóa thì hai request đồng thời
+// sẽ ghi đè lẫn nhau — Publish commit 'live' xong Update ghi đè lại 'draft',
+// sản phẩm bị gỡ bán mà không có lỗi nào.
 func (q *Queries) ProductByID(ctx context.Context, id uuid.UUID) (ProductByIDRow, error) {
 	row := q.db.QueryRow(ctx, productByID, id)
 	var i ProductByIDRow
@@ -49,7 +54,7 @@ func (q *Queries) ProductByID(ctx context.Context, id uuid.UUID) (ProductByIDRow
 const productBySlug = `-- name: ProductBySlug :one
 SELECT products.id, products.sku, products.slug, products.name, products.short_description, products.category_id, products.brand_id, products.price, products.currency, products.status, products.attributes, products.images, products.created_at, products.updated_at, products.deleted_at
 FROM products
-WHERE slug = $1 AND deleted_at IS NULL
+WHERE slug = $1 AND deleted_at IS NULL AND status = 'live'
 `
 
 type ProductBySlugRow struct {

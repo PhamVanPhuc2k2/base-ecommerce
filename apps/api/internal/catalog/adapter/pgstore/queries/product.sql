@@ -17,11 +17,16 @@ ON CONFLICT (id) DO UPDATE SET
     updated_at        = EXCLUDED.updated_at;
 
 -- name: ProductByID :one
+-- FOR UPDATE: ByID chỉ được dùng trong các use case GHI (Update, Publish), và
+-- cả hai đều đọc rồi ghi đè nguyên dòng. Không khóa thì hai request đồng thời
+-- sẽ ghi đè lẫn nhau — Publish commit 'live' xong Update ghi đè lại 'draft',
+-- sản phẩm bị gỡ bán mà không có lỗi nào.
 SELECT sqlc.embed(products)
 FROM products
-WHERE id = $1 AND deleted_at IS NULL;
+WHERE id = $1 AND deleted_at IS NULL
+FOR UPDATE;
 
 -- name: ProductBySlug :one
 SELECT sqlc.embed(products)
 FROM products
-WHERE slug = $1 AND deleted_at IS NULL;
+WHERE slug = $1 AND deleted_at IS NULL AND status = 'live';

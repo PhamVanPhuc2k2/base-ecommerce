@@ -34,6 +34,10 @@ func (uc *UpdateProduct) Execute(ctx context.Context, in UpdateProductInput) (*d
 		oldSlug string
 	)
 
+	// repo.ByID PHẢI nằm trong closure. TxManager chạy lại closure khi gặp lỗi
+	// tuần tự hóa, và cả sự kiện lẫn oldSlug đều phụ thuộc vào việc đọc lại
+	// aggregate ở mỗi lần thử. Nhấc nó ra ngoài thì lần thử thứ hai phát ra
+	// không sự kiện nào và xóa nhầm khóa cache.
 	if err := uc.tx.Run(ctx, func(ctx context.Context) error {
 		p, err := uc.repo.ByID(ctx, in.ID)
 		if err != nil {
@@ -55,7 +59,11 @@ func (uc *UpdateProduct) Execute(ctx context.Context, in UpdateProductInput) (*d
 
 	// Xóa cả slug cũ lẫn mới: đổi tên sản phẩm là đổi slug, để sót slug cũ thì
 	// đường dẫn cũ vẫn trả dữ liệu cũ cho tới khi hết TTL.
-	uc.cache.Invalidate(ctx, KeyProductSlug(oldSlug), KeyProductSlug(updated.Slug))
+	//
+	// WithoutCancel: transaction đã commit rồi, việc xóa cache KHÔNG được hủy
+	// theo. Client ngắt kết nối giữa chừng mà cache không xóa thì dữ liệu cũ
+	// nằm lại tới hết TTL.
+	uc.cache.Invalidate(context.WithoutCancel(ctx), KeyProductSlug(oldSlug), KeyProductSlug(updated.Slug))
 
 	return updated, nil
 }
