@@ -64,21 +64,27 @@ const deletePublishedBefore = `-- name: DeletePublishedBefore :execrows
 DELETE FROM outbox
 WHERE id IN (
     SELECT o.id FROM outbox o
-    WHERE o.published_at IS NOT NULL AND o.published_at < $1
+    WHERE o.published_at IS NOT NULL AND o.published_at < $1::timestamptz
     LIMIT $2
 )
 `
 
 type DeletePublishedBeforeParams struct {
-	PublishedAt *time.Time
-	Limit       int32
+	Before time.Time
+	Lim    int32
 }
 
 // Bí danh `o` ở truy vấn con là bắt buộc, không phải cho đẹp: thiếu nó sqlc từ
 // chối phân tích ("column reference published_at is ambiguous") vì cùng một tên
 // bảng xuất hiện ở hai tầng. Postgres hiểu, sqlc thì không.
+// DeletePublishedBefore xóa theo LÔ, không xóa một phát cả bảng: DELETE hàng
+// loạt trên bảng lớn giữ khóa rất lâu và làm phình WAL.
+//
+// Ép kiểu `::timestamptz` cho tham số là cố ý. Không có nó, sqlc suy nullability
+// của tham số từ cột published_at (vốn nullable) và sinh ra `*time.Time` —
+// trong khi mốc thời gian cắt luôn là giá trị bắt buộc, không bao giờ nil.
 func (q *Queries) DeletePublishedBefore(ctx context.Context, arg DeletePublishedBeforeParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deletePublishedBefore, arg.PublishedAt, arg.Limit)
+	result, err := q.db.Exec(ctx, deletePublishedBefore, arg.Before, arg.Lim)
 	if err != nil {
 		return 0, err
 	}

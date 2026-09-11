@@ -32,12 +32,19 @@ WHERE id = $1;
 -- Bí danh `o` ở truy vấn con là bắt buộc, không phải cho đẹp: thiếu nó sqlc từ
 -- chối phân tích ("column reference published_at is ambiguous") vì cùng một tên
 -- bảng xuất hiện ở hai tầng. Postgres hiểu, sqlc thì không.
+-- DeletePublishedBefore xóa theo LÔ, không xóa một phát cả bảng: DELETE hàng
+-- loạt trên bảng lớn giữ khóa rất lâu và làm phình WAL.
+--
+-- Ép kiểu `::timestamptz` cho tham số là cố ý. Không có nó, sqlc suy nullability
+-- của tham số từ cột published_at (vốn nullable) và sinh ra `*time.Time` —
+-- trong khi mốc thời gian cắt luôn là giá trị bắt buộc, không bao giờ nil.
+--
 -- name: DeletePublishedBefore :execrows
 DELETE FROM outbox
 WHERE id IN (
     SELECT o.id FROM outbox o
-    WHERE o.published_at IS NOT NULL AND o.published_at < $1
-    LIMIT $2
+    WHERE o.published_at IS NOT NULL AND o.published_at < sqlc.arg(before)::timestamptz
+    LIMIT sqlc.arg(lim)
 );
 
 -- name: DeleteProcessedBefore :execrows
