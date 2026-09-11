@@ -271,12 +271,19 @@ base-ecommerce/
 │       │   ├── api/server.ts                 # apiGet(), chỉ gọi từ Server Component
 │       │   ├── errors.ts                     # mã lỗi → thông điệp tiếng Việt, một chỗ duy nhất
 │       │   └── format.ts                     # formatVND (nhận chuỗi decimal), formatDate
-│       ├── app/                              # App Router; layout.tsx + page.tsx tạm
+│       ├── app/                              # App Router
+│       │   ├── layout.tsx                    # <html lang="vi">, header, footer, metadata mặc định
+│       │   ├── error.tsx                     # lưới an toàn cuối; production KHÔNG còn mã lỗi để đọc
+│       │   ├── global-error.tsx              # phủ cả lỗi ném từ layout.tsx; tự khai <html>/<body>
+│       │   ├── loading.tsx                   # skeleton giữ chỗ, không phải chữ "Đang tải..."
+│       │   └── not-found.tsx                 # 404 tiếng Việt, dẫn về trang danh mục
+│       ├── components/
+│       │   ├── breadcrumb.tsx                # đường dẫn phân cấp; mục cuối không bao giờ là link
+│       │   └── error-state.tsx               # lỗi API hiện TRONG trang, còn nguyên code + request_id
 │       ├── package.json                      # Next.js 16 + React 19
 │       ├── next.config.ts                    # output: standalone (cho Docker ở Task 6)
 │       ├── tsconfig.json                     # strict + noUncheckedIndexedAccess
-│       ├── biome.jsonc                       # thay ESLint + Prettier; bỏ qua lib/api/generated/
-│       └── components/                       # ⬜ P0.4
+│       └── biome.jsonc                       # thay ESLint + Prettier; bỏ qua lib/api/generated/
 ├── deploy/
 │   ├── compose.dev.yml                       # hạ tầng; service `api` nằm sau profile "app"
 │   ├── compose.prod.yml                      # image ghim theo git SHA, không mở cổng DB

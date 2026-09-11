@@ -1,26 +1,35 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/*
+ * Tailwind 4 KHÔNG có tailwind.config.js — token khai ngay tại đây bằng @theme.
+ * Mỗi biến trong @theme sinh ra lớp tiện ích tương ứng: --color-brand cho ra
+ * bg-brand / text-brand / border-brand, dùng được y như màu có sẵn.
+ */
+@theme {
+  /* Đỏ là màu quy ước của ngành bán lẻ máy tính ở Việt Nam (HACOM, Phong Vũ,
+     GearVN đều dùng). Khai một chỗ để lúc đổi nhận diện không phải đi lùng
+     từng chuỗi mã màu rải rác trong JSX. */
+  --color-brand: #d70018;
+  --color-brand-dark: #a50012;
+
+  /* Nối biến font của next/font vào token của Tailwind. Không có hai dòng này
+     thì next/font vẫn tải font về nhưng chẳng phần tử nào dùng tới, vì lớp
+     `font-sans` của Tailwind trỏ tới danh sách mặc định của nó. */
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/*
+ * Storefront cố ý CHỈ có giao diện sáng, không theo prefers-color-scheme.
+ *
+ * Lý do: ảnh sản phẩm do nhà cung cấp gửi gần như luôn nền trắng, và tem
+ * khuyến mãi cũng vẽ trên nền trắng. Đặt chúng lên nền tối thì mỗi ô sản phẩm
+ * thành một mảng trắng chói giữa trang đen — vừa xấu vừa làm giá và tem khó
+ * đọc. Muốn có chế độ tối đúng nghĩa thì phải xử lý luôn cả khâu ảnh, đó là
+ * việc riêng chứ không phải vài dòng CSS ở đây.
+ */
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: #ffffff;
+  color: #171717;
+  font-family: var(--font-sans);
 }
