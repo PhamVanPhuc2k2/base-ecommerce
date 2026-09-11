@@ -14,18 +14,25 @@ set -euo pipefail
 cd "$(dirname "$0")/../apps/api"
 fail=0
 
-# Danh sách package hạ tầng mà domain và app không được chạm tới.
-FORBIDDEN='^(github\.com/go-chi/|github\.com/jackc/pgx|github\.com/redis/|github\.com/rabbitmq/|net/http)$'
-
 all_pkgs="$(go list ./internal/... 2>/dev/null || true)"
 
-# 1. domain không được chạm hạ tầng.
-#    Danh sách trắng: stdlib, platform/errs, google/uuid, shopspring/decimal.
+# 1. domain chỉ được import stdlib và ba package trong danh sách trắng.
+#
+# Đây là ALLOWLIST, không phải denylist. Denylist chỉ chặn được những thứ ta
+# nghĩ ra trước; allowlist chặn mọi thứ chưa được cho phép — đúng như README
+# mục 3.1 hứa ("muốn thêm gì nữa phải sửa tài liệu này trước").
+ALLOWED_DOMAIN_DEPS='^(base-ecommerce/api/internal/platform/errs|github\.com/google/uuid|github\.com/shopspring/decimal)$'
+
 for pkg in $(printf '%s\n' "$all_pkgs" | grep -E '/domain(/|$)' || true); do
-  hits="$(go list -deps "$pkg" 2>/dev/null | grep -E "$FORBIDDEN" || true)"
-  if [ -n "$hits" ]; then
-    echo "LỖI KIẾN TRÚC: $pkg import package hạ tầng"
-    printf '%s\n' "$hits" | sed 's/^/    /'
+  # Lọc lấy package trong dự án và package bên thứ ba; stdlib có thành phần
+  # đầu không chứa dấu chấm nên bị loại. Bỏ chính nó ra khỏi danh sách.
+  offenders="$(go list -deps "$pkg" 2>/dev/null \
+    | grep -E '^(base-ecommerce/|[^/]+\.[^/]+/)' \
+    | grep -v "^$pkg\$" \
+    | grep -Ev "$ALLOWED_DOMAIN_DEPS" || true)"
+  if [ -n "$offenders" ]; then
+    echo "LỖI KIẾN TRÚC: $pkg import package ngoài danh sách trắng"
+    printf '%s\n' "$offenders" | sed 's/^/    /'
     fail=1
   fi
 done
