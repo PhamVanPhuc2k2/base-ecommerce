@@ -25,7 +25,11 @@ func (p *Publisher) Publish(ctx context.Context, events ...domain.Event) error {
 			"event_id", e.EventID().String(),
 			"event_type", e.EventType(),
 			"aggregate_id", e.AggregateID().String(),
+			"aggregate_type", e.AggregateType(),
 			"occurred_at", e.OccurredAt(),
+			// Ghi payload ra log để kiểm chứng được nội dung event trước khi
+			// adapter outbox thật thay chỗ này ở Task 4.
+			"payload", e.Payload(),
 		)
 	}
 	return nil
