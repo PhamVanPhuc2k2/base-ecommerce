@@ -8,18 +8,49 @@
 #
 # Mã lỗi là hợp đồng frontend dùng để map sang thông điệp tiếng Việt. Thiếu một
 # mã ở đây nghĩa là frontend gặp mã lạ lúc chạy và không biết hiển thị gì.
+#
+# Cả hai phía đều phân tích cú pháp thật, KHÔNG grep:
+#   - phía Go  : apps/api/cmd/checkcodes dùng go/ast — đọc được cả khi gofmt
+#                xuống dòng, tra được hằng, và BÁO LỖI khi không phân tích được
+#   - phía YAML: PyYAML đọc đúng components.schemas.Problem.properties.code.enum
+#
+# Bản đầu tiên của script này dùng grep cho cả hai phía và sai ở cả hai phía.
+# Xem phần chú thích đầu cmd/checkcodes/main.go để biết ba lỗ hổng cụ thể.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 fail=0
 
-# Mã trong code Go: errs.New(Kind, "CODE", ...) hoặc errs.Wrap(err, Kind, "CODE", ...)
-go_codes="$(grep -rhoE 'errs\.(New|Wrap)\([^,]+, *(errs\.Kind[A-Za-z]+, *)?"[A-Z_]+"' apps/api \
-  | grep -oE '"[A-Z_]+"' | tr -d '"' | sort -u)"
+# Không dùng `command -v python3`: trên Windows nó tìm thấy shim rỗng của
+# Microsoft Store, chạy vào là hỏng. Phép thử đáng tin duy nhất là import thật.
+PY_BIN=""
+for c in python3 python py; do
+  if "$c" -c "import yaml" >/dev/null 2>&1; then PY_BIN="$c"; break; fi
+done
+if [ -z "$PY_BIN" ]; then
+  echo "LỖI: cần Python có PyYAML để đọc api/openapi.yaml (pip install pyyaml)"
+  exit 2
+fi
 
-# Mã trong OpenAPI: các dòng "- CODE" nằm trong khối enum của trường code
-yaml_codes="$(awk '/^ *code:/{inblock=1} inblock && /^ *- [A-Z_]+$/{print $2} inblock && /^ *request_id:/{inblock=0}' \
-  api/openapi.yaml | sort -u)"
+# tr -d: Python trên Windows in CRLF, comm sẽ coi "MÃ\r" khác "MÃ".
+go_codes="$( (cd apps/api && go run ./cmd/checkcodes .) | tr -d '\r' | sort -u )"
+
+yaml_codes="$("$PY_BIN" - <<'PY' | tr -d '\r' | sort -u
+import io, sys, yaml
+d = yaml.safe_load(io.open('api/openapi.yaml', encoding='utf-8'))
+try:
+    enum = d['components']['schemas']['Problem']['properties']['code']['enum']
+except (KeyError, TypeError):
+    sys.stderr.write('khong tim thay components.schemas.Problem.properties.code.enum\n')
+    sys.exit(2)
+print('\n'.join(enum))
+PY
+)"
+
+if [ -z "$yaml_codes" ]; then
+  echo "LỖI: không đọc được enum mã lỗi từ api/openapi.yaml"
+  exit 2
+fi
 
 missing="$(comm -23 <(printf '%s\n' "$go_codes") <(printf '%s\n' "$yaml_codes"))"
 extra="$(comm -13 <(printf '%s\n' "$go_codes") <(printf '%s\n' "$yaml_codes"))"
