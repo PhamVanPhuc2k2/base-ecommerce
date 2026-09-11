@@ -49,6 +49,21 @@ jobs:
       - run: pip install pyyaml
       - run: bash scripts/check-openapi-codes.sh
 
+  tree:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/check-tree.sh
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Build image thật. Không có bước này thì Dockerfile chỉ được kiểm khi ai
+      # đó nhớ chạy tay, và nó sẽ hỏng vào đúng lúc cần deploy.
+      - run: docker build --build-arg BINARY=api --build-arg VERSION=${{ github.sha }} -t bec-api:ci apps/api
+      - run: docker build --build-arg BINARY=healthcheck -t bec-healthcheck:ci apps/api
+
   arch:
     runs-on: ubuntu-latest
     steps:

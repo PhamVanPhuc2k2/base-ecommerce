@@ -1,0 +1,135 @@
+# Bố trí production trên một VPS. Xem docs/design/05-deployment.md mục 3.
+#
+#   docker compose -f deploy/compose.prod.yml --env-file .env.prod up -d
+#
+# Khác compose.dev.yml ở những chỗ quan trọng:
+#   - KHÔNG build tại chỗ. Chỉ chạy image đã build và đã test ở CI, ghim theo
+#     git SHA. Build trên máy production nghĩa là thứ đang chạy không còn là thứ
+#     đã được kiểm.
+#   - KHÔNG mở cổng database/Redis ra ngoài. Chỉ reverse proxy chạm tới API.
+#   - Mọi bí mật đến từ file .env.prod, không viết thẳng vào đây.
+#   - Có giới hạn tài nguyên và chính sách restart.
+
+name: base-ecommerce
+
+x-api-common: &api-common
+  # KHÔNG BAO GIỜ dùng tag `latest`. Không truy được đang chạy code nào, và
+  # `docker compose pull` có thể lấy về image khác với cái vừa test.
+  image: ${REGISTRY}/base-ecommerce-api:${GIT_SHA}
+  restart: unless-stopped
+  environment:
+    APP_ENV: production
+    APP_VERSION: ${GIT_SHA}
+    LOG_LEVEL: ${LOG_LEVEL:-info}
+    DATABASE_URL: ${DATABASE_URL}
+    REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
+    ADMIN_API_KEY: ${ADMIN_API_KEY}
+    HTTP_HANDLER_TIMEOUT: ${HTTP_HANDLER_TIMEOUT:-30s}
+    # PHẢI lớn hơn HTTP_HANDLER_TIMEOUT — config từ chối khởi động nếu sai.
+    HTTP_WRITE_TIMEOUT: ${HTTP_WRITE_TIMEOUT:-35s}
+    HTTP_SHUTDOWN_TIMEOUT: ${HTTP_SHUTDOWN_TIMEOUT:-30s}
+  depends_on:
+    postgres: { condition: service_healthy }
+    redis: { condition: service_healthy }
+  # Dài hơn HTTP_SHUTDOWN_TIMEOUT. Để mặc định 10s thì Docker SIGKILL giữa lúc
+  # đang rút êm, và mọi request đang xử lý bị cắt ngang.
+  stop_grace_period: 45s
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "5" }
+
+services:
+  api:
+    <<: *api-common
+    # Chỉ mở ra loopback. Reverse proxy (Caddy/nginx) trên cùng máy mới chạm tới;
+    # không có gì từ mạng ngoài nói chuyện trực tiếp với API.
+    ports: ["127.0.0.1:8080:8080"]
+    healthcheck:
+      # /healthcheck là binary tĩnh trong image — distroless không có shell/curl.
+      test: ["CMD", "/healthcheck", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 512M }
+
+  # P0.3 mở hai service dưới đây. Cùng image, khác BINARY lúc build.
+  #
+  # worker:
+  #   <<: *api-common
+  #   image: ${REGISTRY}/base-ecommerce-worker:${GIT_SHA}
+  #   healthcheck: ... (worker không mở cổng HTTP — dùng liveness file hoặc bỏ)
+  #
+  # outboxrelay:
+  #   <<: *api-common
+  #   image: ${REGISTRY}/base-ecommerce-outboxrelay:${GIT_SHA}
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    # KHÔNG có `ports`. Database chỉ nói chuyện qua mạng nội bộ của compose.
+    # Muốn vào bằng psql từ ngoài thì dùng SSH tunnel, đừng mở cổng.
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      # -h là bắt buộc: không có nó pg_isready đi qua Unix socket, mà socket đã
+      # lắng nghe ngay trong giai đoạn initdb → báo healthy trong khi cổng TCP
+      # vẫn từ chối kết nối.
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB} -h 127.0.0.1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits: { memory: 2G }
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # P0.2 chỉ dùng Redis làm cache. noeviction + AOF ở đây là AN TOÀN NHƯNG SAI
+    # HƯỚNG cho vai trò cache: hết bộ nhớ sẽ TỪ CHỐI GHI thay vì xóa key cũ.
+    # P4 tách thành redis-cache (allkeys-lru, không persistence) và redis-data
+    # (noeviction, AOF) — xem docs/design/03-redis-cache.md.
+    command:
+      ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    volumes: ["redisdata:/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits: { memory: 768M }
+
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    restart: unless-stopped
+    # ĐỪNG XÓA. RabbitMQ lấy tên node Erlang từ hostname và lưu Mnesia ở
+    # /var/lib/rabbitmq/mnesia/rabbit@<hostname>. Không cố định hostname thì mỗi
+    # lần tạo lại container sinh node mới rỗng và bỏ rơi dữ liệu cũ — toàn bộ
+    # queue, exchange và message durable mất trong im lặng.
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+    # Management UI (15672) KHÔNG mở ra ngoài. Vào qua SSH tunnel.
+    volumes: ["rabbitdata:/var/lib/rabbitmq"]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    deploy:
+      resources:
+        limits: { memory: 1G }
+
+volumes:
+  pgdata:
+  redisdata:
+  rabbitdata:

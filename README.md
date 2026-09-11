@@ -200,6 +200,9 @@ không phải sửa code.
 
 ## 4. Cấu trúc thư mục
 
+Cây dưới đây **khớp với đĩa** — `task tree` kiểm tự động. Dòng có `⬜ Pxx` là
+phần chưa làm, thuộc giai đoạn ghi kèm; mọi dòng còn lại phải tồn tại thật.
+
 ```
 base-ecommerce/
 ├── api/
@@ -207,77 +210,84 @@ base-ecommerce/
 ├── apps/
 │   ├── api/                                  # ===== Go backend =====
 │   │   ├── cmd/
-│   │   │   ├── api/main.go                   # HTTP server
-│   │   │   ├── worker/main.go                # RabbitMQ consumer
-│   │   │   └── outboxrelay/main.go           # đẩy outbox → RabbitMQ
+│   │   │   ├── api/                          # HTTP server
+│   │   │   ├── healthcheck/                  # binary tĩnh cho HEALTHCHECK (distroless không có curl)
+│   │   │   ├── checkcodes/                   # go/ast: liệt kê mã lỗi cho check-openapi-codes.sh
+│   │   │   ├── worker/                       # ⬜ P0.3 — RabbitMQ consumer
+│   │   │   └── outboxrelay/                  # ⬜ P0.3 — đẩy outbox → RabbitMQ
 │   │   ├── internal/
 │   │   │   ├── platform/                     # hạ tầng dùng chung, KHÔNG chứa nghiệp vụ
 │   │   │   │   ├── config/                   # đọc env, validate lúc khởi động
-│   │   │   │   ├── httpx/                    # Wrap(), decode, respond, writeError, paging
+│   │   │   │   ├── errs/                     # Kind, Code, Message — mô hình lỗi
+│   │   │   │   ├── httpx/                    # Wrap(), Decode, JSON, WriteError, problem+json
+│   │   │   │   ├── health/                   # /healthz, /readyz, phụ thuộc Optional
+│   │   │   │   ├── observability/            # slog JSON, request ID
 │   │   │   │   ├── postgres/                 # pgxpool, DBTX, txmanager
-│   │   │   │   ├── redis/
-│   │   │   │   ├── rabbitmq/                 # publisher, consumer, retry, DLQ
-│   │   │   │   ├── observability/            # slog JSON, OTel, /healthz /readyz
-│   │   │   │   └── validate/
+│   │   │   │   ├── redis/                    # client + cache-aside, singleflight, jitter
+│   │   │   │   └── rabbitmq/                 # ⬜ P0.3 — publisher, consumer, retry, DLQ
 │   │   │   │
 │   │   │   ├── catalog/                      # MODULE = một hexagon hoàn chỉnh
 │   │   │   │   ├── domain/
-│   │   │   │   │   ├── product.go            # entity + quy tắc nghiệp vụ
+│   │   │   │   │   ├── product.go            # entity + quy tắc nghiệp vụ + Validate()
+│   │   │   │   │   ├── category.go           # cây danh mục, DescendantIDs
+│   │   │   │   │   ├── brand.go
 │   │   │   │   │   ├── money.go              # value object (bọc NUMERIC)
-│   │   │   │   │   ├── slug.go
-│   │   │   │   │   ├── events.go             # ProductPublished, ProductUpdated...
-│   │   │   │   │   └── errors.go             # ErrProductNotFound, ErrDuplicateSKU...
+│   │   │   │   │   ├── slug.go               # chuẩn hóa tiếng Việt, xử lý cả NFD
+│   │   │   │   │   ├── events.go             # ProductCreated/Updated/Published
+│   │   │   │   │   └── errors.go             # sentinel errors, mỗi cái một mã lỗi
 │   │   │   │   ├── app/
-│   │   │   │   │   ├── ports.go              # Repository, Cache, EventPublisher
+│   │   │   │   │   ├── ports.go              # Repository, Cache, EventPublisher, TxManager
 │   │   │   │   │   ├── create_product.go     # use case
+│   │   │   │   │   ├── update_product.go
+│   │   │   │   │   ├── publish_product.go
 │   │   │   │   │   ├── get_product.go
+│   │   │   │   │   ├── get_category_tree.go
 │   │   │   │   │   └── list_products.go
 │   │   │   │   ├── adapter/
-│   │   │   │   │   ├── httpapi/              # driving: Chi handler + DTO
-│   │   │   │   │   ├── pgstore/              # driven: sqlc + mapping → domain
-│   │   │   │   │   │   ├── queries/*.sql
+│   │   │   │   │   ├── httpapi/              # driving: Chi handler, DTO, RequireAdminKey
+│   │   │   │   │   ├── pgstore/              # driven: sqlc + squirrel + mapping → domain
+│   │   │   │   │   │   ├── queries/          # *.sql cho sqlc
 │   │   │   │   │   │   ├── gen/              # sqlc sinh ra — KHÔNG sửa tay
-│   │   │   │   │   │   └── repository.go     # cài đặt app.ProductRepository
-│   │   │   │   │   └── rediscache/
-│   │   │   │   └── module.go                 # lắp ráp module, expose Routes()
+│   │   │   │   │   │   ├── mapping.go        # row → domain, và mapErr cho lỗi Postgres
+│   │   │   │   │   │   ├── product_repo.go
+│   │   │   │   │   │   └── category_repo.go
+│   │   │   │   │   ├── rediscache/           # driven: cache-aside cho sản phẩm và cây danh mục
+│   │   │   │   │   └── logpublisher/         # driven: ghi event ra log — P0.3 thay bằng outbox
+│   │   │   │   └── module.go                 # lắp ráp module, expose Mount()
 │   │   │   │
-│   │   │   ├── outbox/                       # module hạ tầng dùng chung
-│   │   │   └── server/router.go              # nơi DUY NHẤT ráp module vào Chi
+│   │   │   ├── outbox/                       # ⬜ P0.3 — module hạ tầng dùng chung
+│   │   │   └── server/                       # router.go: nơi DUY NHẤT ráp module vào Chi
 │   │   ├── db/migrations/                    # goose
 │   │   ├── sqlc.yaml
-│   │   └── Dockerfile
+│   │   ├── Dockerfile                        # dùng chung cho cả ba binary, khác --build-arg
+│   │   └── .dockerignore
 │   │
 │   └── web/                                  # ===== Next.js frontend =====
-│       ├── app/
-│       │   ├── (shop)/                       # route group: storefront
-│       │   │   ├── page.tsx                  # trang chủ
-│       │   │   ├── [category]/page.tsx       # danh mục + bộ lọc
-│       │   │   ├── san-pham/[slug]/page.tsx  # chi tiết sản phẩm
-│       │   │   ├── gio-hang/page.tsx
-│       │   │   └── thanh-toan/page.tsx
-│       │   ├── (account)/                    # tài khoản, đơn hàng
-│       │   ├── admin/                        # khu vực quản trị
-│       │   ├── sitemap.ts  robots.ts
-│       │   └── layout.tsx
-│       ├── components/
-│       │   ├── ui/                           # shadcn/ui primitives
-│       │   └── product/  cart/  layout/      # component theo nghiệp vụ
-│       ├── lib/
-│       │   ├── api/
-│       │   │   ├── generated/                # sinh từ openapi.yaml — KHÔNG sửa tay
-│       │   │   └── client.ts                 # wrapper: base URL, auth, xử lý lỗi
-│       │   ├── format.ts                     # tiền tệ VND, ngày giờ
-│       │   └── seo.ts                        # JSON-LD helper
-│       └── Dockerfile
+│       ├── lib/api/generated/                # sinh từ openapi.yaml — KHÔNG sửa tay
+│       ├── package.json                      # ⬜ P0.4 — dự án Next.js chưa khởi tạo
+│       ├── app/                              # ⬜ P0.4 — (shop), (account), admin
+│       └── components/                       # ⬜ P0.4
 ├── deploy/
-│   ├── compose.dev.yml
-│   ├── compose.prod.yml
-│   └── nginx/ hoặc caddy/
+│   ├── compose.dev.yml                       # hạ tầng; service `api` nằm sau profile "app"
+│   ├── compose.prod.yml                      # image ghim theo git SHA, không mở cổng DB
+│   └── caddy/                                # ⬜ khi lên production
+├── scripts/
+│   ├── check-arch.sh                         # chiều phụ thuộc hexagonal
+│   ├── check-openapi-codes.sh                # mã lỗi Go ↔ enum trong openapi.yaml
+│   └── check-tree.sh                         # cây thư mục ở mục này ↔ đĩa
 ├── docs/
+│   ├── design/                               # 01..06, xem mục 16
+│   └── superpowers/                          # spec và kế hoạch từng giai đoạn
 ├── .github/workflows/
 ├── .env.example
 └── Taskfile.yml                      # go-task, thay Makefile (chạy được trên Windows)
 ```
+
+**Vì sao không có `platform/validate/`.** Tài liệu trước có nó, nhưng validate
+nằm trong `domain` mới đúng hexagonal: quy tắc "tên không được rỗng", "giá không
+được âm" là quy tắc nghiệp vụ, không phải hạ tầng. Một package validate dùng
+chung sẽ kéo quy tắc nghiệp vụ ra khỏi domain — đúng cái bẫy anemic domain ở
+mục 3.5.
 
 ---
 
@@ -550,6 +560,47 @@ Làm đúng thứ tự này cho mọi module từ P1 trở đi:
 
 ## 10. Hạ tầng & vận hành
 
+### 10.0. Hai cách chạy backend — chọn theo việc đang làm
+
+| | `task run` (trên máy) | `task up-docker` (trong container) |
+|---|---|---|
+| Vòng lặp sửa–chạy | ~1 giây | ~25 giây (build lại image) |
+| Dùng khi | viết code hằng ngày | trước khi merge, trước khi deploy |
+| Kiểm được | logic nghiệp vụ | **graceful shutdown, image, máy sạch** |
+
+```bash
+task up            # chỉ hạ tầng: postgres, redis, rabbitmq
+task migrate
+task run           # API bằng go run, sửa code là chạy lại ngay
+
+task up-docker     # hạ tầng + API trong container distroless
+task logs -- api
+task down-docker
+```
+
+**Ba thứ `task run` không bao giờ kiểm được**, và đó là lý do `task up-docker`
+tồn tại:
+
+1. **Graceful shutdown.** `docker stop` gửi SIGTERM cho **PID 1**. Chỉ khi binary
+   thật sự là PID 1 thì đoạn rút êm mới chạy. Đo trên image thật: `docker stop`
+   mất 0,40 giây, exit code **0**, log có `"nhận tín hiệu tắt"` → `"đã dừng"`.
+   Cùng binary đó đặt sau một script bọc ngoài quên `exec`: exit **137** và
+   **không một dòng log tắt nào**. Xem [thiết kế 05](docs/design/05-deployment.md) mục 4.1.
+2. **Image có build được không.** `CGO_ENABLED=0` và distroless không có libc —
+   một thư viện cần cgo sẽ chỉ lộ ra ở đây. CI cũng build image mỗi lần push.
+3. **Dự án có chạy trên máy sạch không.** `task run` đang dựa vào Go, goose,
+   sqlc, golangci-lint và Python+PyYAML cài sẵn trên máy bạn.
+
+⚠️ Hai cách cùng dùng cổng 8080, nên **chỉ chạy một cái tại một thời điểm**.
+Cổng đang bị chiếm thì bản mới không bind được, mà log vẫn in `"server đang lắng
+nghe"` trước khi lỗi — đừng tin dòng đó, kiểm bằng `netstat -ano | grep :8080`.
+
+⚠️ `task migrate` luôn chạy từ **máy host** trỏ vào `localhost:5432`, kể cả khi
+API chạy trong container. Image distroless không có `goose` và cố ý là như vậy:
+migration là thao tác có kiểm soát của người vận hành, không phải việc container
+tự làm lúc khởi động — xem [thiết kế 05](docs/design/05-deployment.md) mục 5 về
+expand/contract.
+
 ### 10.1. Dịch vụ trong `compose.dev.yml`
 
 Bảng cổng host đã cấp phát. **Kiểm tra bảng này trước khi thêm dịch vụ mới** —
@@ -623,9 +674,10 @@ nghiệp vụ thật đi xuyên mọi tầng, thay vì khung xương trên lý t
 ### Chuẩn bị
 - [x] `git init`, `.gitignore`, `.editorconfig`
 - [x] Cài công cụ: `goose`, `sqlc`, `golangci-lint`, `openapi-typescript`
-- [x] `Taskfile.yml`: `up`, `down`, `migrate`, `migrate-create`, `sqlc`, `openapi`, `build`, `vet`, `lint`, `arch`, `api-codes`, `check`
+- [x] `Taskfile.yml`: `up`, `down`, `up-docker`, `down-docker`, `logs`, `migrate`, `migrate-create`, `sqlc`, `openapi`, `docker-build`, `build`, `vet`, `lint`, `arch`, `api-codes`, `tree`, `check`
 - [x] `deploy/compose.dev.yml`: PostgreSQL, Redis, RabbitMQ
 - [x] `.env.example` + `platform/config` đọc env và validate lúc khởi động
+- [x] `apps/api/Dockerfile` (distroless, binary là PID 1) + `deploy/compose.prod.yml`
 
 ### Nền tảng Go
 - [x] `platform/httpx`: `Wrap()`, `decodeJSON`, `respondJSON`, `writeError`, phân trang
@@ -669,7 +721,7 @@ nghiệp vụ thật đi xuyên mọi tầng, thay vì khung xương trên lý t
 - [ ] Chạy hết danh sách kiểm chứng thủ công của từng task trong kế hoạch
 - [ ] E2E: tạo sản phẩm → đọc lại → có bản ghi trong outbox
 - [ ] Mở trình duyệt: trang danh sách → vào chi tiết, xem tab Network không có lỗi
-- [x] GitHub Actions: build + vet + lint + arch + openapi-drift + `api-codes`
+- [x] GitHub Actions: build + vet + lint + arch + openapi-drift + `api-codes` + `tree` + build image Docker
 
 > `openapi-drift` chỉ soi `openapi.yaml` với output do chính nó sinh ra — nó
 > **không bao giờ nhìn vào code Go**, nên một spec sai hoàn toàn về tập mã lỗi vẫn
@@ -814,8 +866,10 @@ Những thứ đã làm hỏng phép kiểm chứng, không phải làm hỏng s
   ghi body ra file bằng Python (`encoding='utf-8'`) rồi `curl --data-binary @file`.
 - **`command -v python3` tìm thấy shim rỗng của Microsoft Store.** Phải thử
   `python3 -c "import yaml"` thật mới biết có dùng được không.
-- **Python trên Windows in `CRLF`**, nên `comm`/`diff` coi `MÃ` khác `MÃ`.
-  Luôn `tr -d ''` trước khi so sánh.
+- **Python trên Windows in `CRLF`**, nên `comm`/`diff` coi `MÃ
+` khác `MÃ`.
+  Luôn `tr -d '
+'` trước khi so sánh.
 - **`docker compose exec` bên trong `while read` nuốt stdin** và vòng lặp im lặng
   chạy sai. Gom danh sách vào biến trước rồi mới lặp.
 - **Nhiều `psql -c` trong một lệnh là MỘT transaction ngầm** — câu cuối lỗi thì

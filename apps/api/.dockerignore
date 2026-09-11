@@ -1,0 +1,23 @@
+# Mọi thứ ở đây bị loại khỏi build context. Context nhỏ thì `docker build` gửi
+# ít dữ liệu hơn sang daemon, và quan trọng hơn: không vô tình nhét file bí mật
+# vào image.
+
+# Bí mật — KHÔNG bao giờ được vào image
+.env
+.env.*
+!.env.example
+
+# Sản phẩm build trên máy host: khác kiến trúc, vô dụng trong image Linux
+*.exe
+/bin/
+/out/
+
+# Thư mục nháp dùng khi kiểm chứng thủ công, không phải mã sản phẩm
+cmd/scratch/
+
+# Không cần để biên dịch
+.git/
+.gitignore
+Dockerfile
+.dockerignore
+README.md

@@ -20,7 +20,7 @@ tử tế, và để người đọc sau này biết chính xác điều gì kh�
 Đây là thứ duy nhất chạy tự động, cả ở máy dev lẫn CI.
 
 ```bash
-task check     # = build + vet + lint + arch + api-codes
+task check     # = build + vet + lint + arch + api-codes + tree
 ```
 
 | Bước | Bắt được gì |
@@ -30,6 +30,7 @@ task check     # = build + vet + lint + arch + api-codes
 | `golangci-lint run` | Bỏ qua lỗi trả về, quên đóng body, quên `rows.Err()`, so sánh lỗi bằng `==` thay vì `errors.Is`, `return nil` khi `err != nil`, thiếu context |
 | `scripts/check-arch.sh` | `domain` chạm hạ tầng, `app` import `net/http`, adapter giữ `*pgxpool.Pool` |
 | `scripts/check-openapi-codes.sh` | Mã lỗi code Go trả ra nhưng `api/openapi.yaml` không khai báo (và ngược lại) |
+| `scripts/check-tree.sh` | Cây thư mục ở README mục 4 mô tả thứ không tồn tại, hoặc đánh dấu ⬜ cho thứ đã có |
 
 **Không có bước nào bắt được lỗi logic.** Một hàm biên dịch được, không vi phạm
 linter, không phá kiến trúc — nhưng tính sai tiền — sẽ đi thẳng vào production.

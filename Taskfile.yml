@@ -63,6 +63,10 @@ tasks:
     desc: Đối chiếu mã lỗi trong openapi.yaml với mã lỗi thật trong code Go
     cmd: bash scripts/check-openapi-codes.sh
 
+  tree:
+    desc: Đối chiếu cây thư mục ở README mục 4 với đĩa thật
+    cmd: bash scripts/check-tree.sh
+
   check:
     desc: Chạy tất cả kiểm tra tĩnh — chạy trước mỗi lần commit
     # Dự án không dùng unit test. Đây là lưới an toàn duy nhất chạy tự động,
@@ -74,8 +78,30 @@ tasks:
       - task: lint
       - task: arch
       - task: api-codes
+      - task: tree
 
   run:
-    desc: Chạy API server
+    desc: Chạy API server trên máy (vòng lặp sửa–chạy nhanh nhất)
     dir: apps/api
     cmd: go run ./cmd/api
+
+  docker-build:
+    desc: 'Build image API. Ví dụ: task docker-build -- worker'
+    cmd: >-
+      docker build
+      --build-arg BINARY={{.CLI_ARGS | default "api"}}
+      --build-arg VERSION=$(git rev-parse --short HEAD)
+      -t base-ecommerce-{{.CLI_ARGS | default "api"}}:dev
+      apps/api
+
+  up-docker:
+    desc: Dựng hạ tầng VÀ chạy API trong container (kiểm shutdown, image, máy sạch)
+    cmd: docker compose -f deploy/compose.dev.yml --profile app up -d --build --wait
+
+  down-docker:
+    desc: Dừng cả hạ tầng lẫn API trong container
+    cmd: docker compose -f deploy/compose.dev.yml --profile app down
+
+  logs:
+    desc: 'Xem log. Ví dụ: task logs -- api'
+    cmd: docker compose -f deploy/compose.dev.yml logs -f {{.CLI_ARGS}}

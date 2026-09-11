@@ -35,12 +35,34 @@ USER nonroot:nonroot
 ENTRYPOINT ["/api"]
 ```
 
-- `CGO_ENABLED=0` → binary tĩnh, chạy được trên distroless (~15 MB toàn bộ image)
+- `CGO_ENABLED=0` → binary tĩnh, chạy được trên distroless. Đo thật: **7,9 MB**
+  toàn bộ image, gồm cả binary `healthcheck` thứ hai
 - `-trimpath` → không nhúng đường dẫn máy build vào binary
 - `version` nhúng lúc build, hiện ở `/healthz` và gắn vào Sentry release
 - Chạy bằng user `nonroot`, không phải root
 
 Ba binary (`api`, `worker`, `outboxrelay`) dùng chung Dockerfile, khác `--build-arg`.
+
+⚠️ **distroless không có shell, không có `curl`, không có `wget`.** Nghĩa là
+`HEALTHCHECK CMD curl ...` sẽ luôn đỏ trong khi ứng dụng vẫn chạy tốt, và
+`docker exec <container> sh` không dùng được để chẩn đoán.
+
+Cách giải quyết trong dự án này: build thêm một binary tĩnh nhỏ
+`cmd/healthcheck` và chép vào image cùng với ứng dụng.
+
+```dockerfile
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w"     -o /out/healthcheck ./cmd/healthcheck
+COPY --from=build /out/healthcheck /healthcheck
+```
+
+```yaml
+healthcheck:
+  test: ["CMD", "/healthcheck", "http://127.0.0.1:8080/healthz"]
+```
+
+Đổi sang image có shell chỉ để chạy được healthcheck là đánh đổi sai: kéo theo
+cả một userland và bề mặt tấn công đi kèm, để đổi lấy một việc mà vài MB binary
+tĩnh làm được.
 
 ### 2.2. Next.js
 
@@ -178,16 +200,46 @@ thì container thoát sau 0,3 giây với **mã 2** và **không có dòng log t
 Đổi thành `exec /tmp/api` (binary làm PID 1) thì đúng ngay: `"nhận tín hiệu tắt"`
 → `"đã dừng"` → thoát mã 0.
 
-Dockerfile ở mục 2.1 đã đúng vì dùng `ENTRYPOINT ["/api"]` dạng exec. Hai điều
-tuyệt đối tránh:
+Dockerfile ở mục 2.1 đúng vì dùng `ENTRYPOINT ["/app"]` dạng exec.
+
+#### Đã đo lại trên image thật (11/09/2026) — và kết quả sửa lại chính mục này
+
+Câu "dạng shell thì PID 1 là `/bin/sh`" **không đúng trong mọi trường hợp**. Ba
+biến thể, cùng một binary, cùng một `docker stop`:
+
+| Biến thể | PID 1 | `docker stop` | Exit | Dòng log shutdown |
+|---|---|---|---|---|
+| `ENTRYPOINT ["/app"]` trên distroless | `app` | 0,40 s | **0** | **2** ✅ |
+| `ENTRYPOINT /app` trên distroless | — | container không khởi động nổi | **127** | 0 |
+| `ENTRYPOINT /app` trên alpine | `app` | 0,33 s | 0 | 2 ✅ |
+| Script bọc ngoài gọi `/app` **không có `exec`** | `entrypoint.sh` | 1,40 s | **137** | **0** ❌ |
+
+Ba điều rút ra:
+
+1. **`sh -c <một lệnh duy nhất>` tự `exec` lệnh đó.** busybox `ash`, `dash` và
+   `bash` đều tối ưu như vậy, nên binary vẫn thành PID 1 và shutdown vẫn chạy.
+   Dạng shell ở đây *không* phải thứ làm hỏng tín hiệu.
+2. **Trên distroless, viết dạng shell hỏng ỒN ÀO** — không có `/bin/sh` nên
+   container thoát ngay với mã 127. Sai kiểu này không lọt được lên production.
+3. **Cái bẫy thật là script bọc ngoài quên `exec`.** PID 1 là shell, binary là
+   PID 7, SIGTERM dừng ở shell, Docker chờ hết `stop_grace_period` rồi SIGKILL —
+   exit 137 và **không một dòng log tắt nào**. Đây mới là thứ phải tránh:
 
 ```dockerfile
-ENTRYPOINT /api                      # SAI: dạng shell, PID 1 là /bin/sh
-CMD ["sh", "-c", "go run ./cmd/api"] # SAI: PID 1 là sh, và go run không chuyển tín hiệu
+# SAI — shell giữ PID 1, tín hiệu không tới binary
+ENTRYPOINT ["/entrypoint.sh"]        # trong đó chỉ có dòng:  /app
+
+# ĐÚNG nếu bắt buộc phải có script bọc ngoài
+ENTRYPOINT ["/entrypoint.sh"]        # dòng cuối phải là:     exec /app
 ```
 
+Và bằng chứng gốc của P0.1 vẫn đúng: `go run` làm entrypoint thì container thoát
+sau 0,3 giây với **mã 2**, không có dòng log tắt nào. `go run` là một tiến trình
+cha thật sự, nó **không** tự exec như shell.
+
 Kiểm nhanh: `docker exec <container> ps -o pid,comm | head -2` — PID 1 phải là tên
-binary của bạn.
+binary của bạn. Trên distroless không `exec` vào được, nên kiểm gián tiếp: `docker
+stop` xong thì exit code phải là **0** và log phải có dòng `"đã dừng"`.
 
 ### 4.2. `worker`
 

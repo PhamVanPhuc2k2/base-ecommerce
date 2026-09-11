@@ -51,6 +51,56 @@ services:
       timeout: 5s
       retries: 10
 
+  # Service api nằm sau profile "app": `task up` thường ngày CHỈ dựng hạ tầng và
+  # vẫn nhanh như trước, còn API thì chạy bằng `task run` trên máy để giữ vòng
+  # lặp sửa–chạy ~1 giây.
+  #
+  # Dùng `task up-docker` khi cần kiểm những thứ mà `go run` trên host KHÔNG
+  # kiểm được:
+  #   - graceful shutdown có thật sự chạy không (docker stop gửi SIGTERM cho PID 1)
+  #   - image có build và chạy được trên distroless không
+  #   - dự án có chạy trên máy sạch không, hay đang dựa vào công cụ cài sẵn
+  api:
+    profiles: ["app"]
+    build:
+      context: ../apps/api
+      args:
+        BINARY: api
+        VERSION: dev-docker
+    environment:
+      APP_ENV: development
+      LOG_LEVEL: debug
+      HTTP_ADDR: ":8080"
+      HTTP_HANDLER_TIMEOUT: 30s
+      # PHẢI lớn hơn HTTP_HANDLER_TIMEOUT, nếu không response lỗi lúc hết giờ
+      # không kịp ghi ra cho client. Config từ chối khởi động nếu đặt sai.
+      HTTP_WRITE_TIMEOUT: 35s
+      # Tên service, không phải localhost: bên trong mạng của compose thì
+      # "postgres" và "redis" mới phân giải được.
+      #
+      # Và là cổng TRONG container: Redis là 6379 chứ không phải 6380. 6380 chỉ
+      # là cổng ánh xạ ra host để né Redis của dự án khác.
+      DATABASE_URL: postgres://app:app@postgres:5432/base_ecommerce?sslmode=disable
+      REDIS_ADDR: redis:6379
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-dev-khoa-chi-dung-cho-may-local}
+    ports: ["127.0.0.1:8080:8080"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      # KHÔNG dùng CMD-SHELL hay curl: image distroless không có shell và không
+      # có curl, healthcheck sẽ luôn đỏ trong khi ứng dụng vẫn chạy tốt. /healthcheck
+      # là một binary tĩnh được chép vào image đúng cho việc này.
+      test: ["CMD", "/healthcheck", "http://127.0.0.1:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
+    # Mặc định docker stop chờ 10 giây rồi SIGKILL. HTTP_SHUTDOWN_TIMEOUT là 30s,
+    # nên để mặc định thì shutdown bị cắt ngang giữa chừng và ta không bao giờ
+    # biết nó có chạy xong hay không.
+    stop_grace_period: 40s
+
 volumes:
   pgdata:
   redisdata:
