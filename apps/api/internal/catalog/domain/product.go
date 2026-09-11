@@ -19,6 +19,15 @@ const (
 const maxSKULen = 64
 const maxNameLen = 200
 
+// Valid cho biết giá trị có nằm trong tập trạng thái đã định nghĩa không.
+func (s Status) Valid() bool {
+	switch s {
+	case StatusDraft, StatusLive, StatusArchived:
+		return true
+	}
+	return false
+}
+
 // Product là aggregate root của catalog.
 type Product struct {
 	ID               uuid.UUID
@@ -93,45 +102,63 @@ func NewProduct(sku, name, shortDesc string, categoryID, brandID uuid.UUID,
 
 // Update sửa các trường cho phép. Không đổi được SKU: SKU là định danh dùng
 // trong kho và hóa đơn, đổi nó là tạo sản phẩm khác.
-func (p *Product) Update(name, shortDesc string, price Money,
+//
+// Quy ước: nil nghĩa là GIỮ NGUYÊN, cho mọi tham số.
+//
+// Bản trước nhận giá trị thay vì con trỏ, và điều đó gây mất dữ liệu im lặng:
+// gọi PATCH chỉ để đổi giá thì `short_description` nhận chuỗi rỗng — zero value
+// của string — và mô tả sản phẩm biến mất khỏi trang bán hàng, không một lỗi
+// nào. Tệ hơn là nó KHÔNG nhất quán: `attributes` và `images` đã có guard nil
+// nên được giữ, chỉ mình `short_description` bị xóa. Không ai đoán được điều đó
+// từ hợp đồng API.
+func (p *Product) Update(name, shortDesc *string, price *Money,
 	attributes map[string]string, images []string) error {
 
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return ErrNameRequired
-	}
-	if utf8.RuneCountInString(name) > maxNameLen {
-		return ErrNameTooLong
-	}
-	slug, err := NewSlug(name)
-	if err != nil {
-		return err
-	}
-
-	// Sản phẩm đang bán phải luôn thỏa điều kiện của Publish. Không kiểm ở đây
-	// thì một lệnh PATCH có thể tước ảnh và giá của sản phẩm đang live mà không
-	// báo lỗi gì — Publish canh lúc đăng bán, nhưng không ai canh lúc sửa.
-	if p.Status == StatusLive {
-		if images != nil && len(images) == 0 {
-			return ErrNoImage
+	if name != nil {
+		trimmed := strings.TrimSpace(*name)
+		if trimmed == "" {
+			return ErrNameRequired
 		}
-		if price.IsZero() {
-			return ErrPriceRequired
+		if utf8.RuneCountInString(trimmed) > maxNameLen {
+			return ErrNameTooLong
 		}
+		slug, err := NewSlug(trimmed)
+		if err != nil {
+			return err
+		}
+		p.Name = trimmed
+		p.Slug = slug
 	}
-
-	p.Name = name
-	p.Slug = slug
-	p.ShortDescription = shortDesc
-	p.Price = price
+	if shortDesc != nil {
+		p.ShortDescription = *shortDesc
+	}
+	if price != nil {
+		p.Price = *price
+	}
 	if attributes != nil {
 		p.Attributes = attributes
 	}
 	if images != nil {
 		p.Images = images
 	}
-	p.UpdatedAt = time.Now().UTC()
 
+	// Sản phẩm đang bán phải luôn thỏa điều kiện của Publish. Không kiểm ở đây
+	// thì một lệnh PATCH có thể tước ảnh và giá của sản phẩm đang live mà không
+	// báo lỗi gì — Publish canh lúc đăng bán, nhưng không ai canh lúc sửa.
+	//
+	// Kiểm trên trạng thái CUỐI CÙNG chứ không trên tham số truyền vào: sau khi
+	// chuyển sang ngữ nghĩa nil-giữ-nguyên, tham số không còn mô tả đủ sản phẩm
+	// sẽ ra sao sau lệnh sửa.
+	if p.Status == StatusLive {
+		if len(p.Images) == 0 {
+			return ErrNoImage
+		}
+		if p.Price.IsZero() {
+			return ErrPriceRequired
+		}
+	}
+
+	p.UpdatedAt = time.Now().UTC()
 	p.raise(ProductUpdated{newBase(p.ID)})
 	return nil
 }
@@ -161,4 +188,36 @@ func (p *Product) PullEvents() []Event {
 	out := p.events
 	p.events = nil
 	return out
+}
+
+// Validate kiểm những bất biến mà một Product hợp lệ luôn phải thỏa.
+//
+// Dùng khi dựng lại Product từ một nguồn KHÔNG đi qua hàm dựng — hiện là
+// Redis cache. json.Unmarshal nhận `{}` mà không báo lỗi gì và cho ra struct
+// toàn giá trị zero: ID toàn số 0, tên rỗng, giá 0, status rỗng. Không có phép
+// kiểm này thì API trả 200 kèm một sản phẩm bịa, giá 0, suốt cả TTL.
+//
+// Đây KHÔNG phải nơi kiểm quy tắc nghiệp vụ lúc ghi — chỗ đó là NewProduct,
+// Update và Publish. Ở đây chỉ hỏi một câu: giá trị này có thể do code của
+// chúng ta tạo ra không?
+func (p *Product) Validate() error {
+	if p.ID == uuid.Nil {
+		return ErrProductNotFound
+	}
+	if strings.TrimSpace(p.SKU) == "" {
+		return ErrInvalidSKU
+	}
+	if strings.TrimSpace(p.Slug) == "" {
+		return ErrInvalidSlug
+	}
+	if strings.TrimSpace(p.Name) == "" {
+		return ErrNameRequired
+	}
+	if !p.Status.Valid() {
+		return ErrInvalidStatus
+	}
+	if p.Price.Currency() != SupportedCurrency {
+		return ErrUnsupportedCurrency
+	}
+	return nil
 }

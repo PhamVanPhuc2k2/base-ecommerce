@@ -72,12 +72,8 @@ func run() error {
 	defer pool.Close()
 	log.Info("đã kết nối database")
 
-	rdb, err := platformredis.NewClient(startCtx, cfg.Redis)
-	if err != nil {
-		return fmt.Errorf("kết nối redis: %w", err)
-	}
+	rdb := platformredis.NewClient(startCtx, cfg.Redis, log)
 	defer func() { _ = rdb.Close() }()
-	log.Info("đã kết nối redis")
 
 	txManager := postgres.NewManager(pool)
 	cache := platformredis.NewCache(rdb, log)
@@ -90,7 +86,7 @@ func run() error {
 
 	srv := &http.Server{
 		Addr:              cfg.HTTP.Addr,
-		Handler:           server.New(log, h, catalogModule),
+		Handler:           server.New(log, h, cfg.HTTP.HandlerTimeout, catalogModule),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       cfg.HTTP.ReadTimeout,
 		WriteTimeout:      cfg.HTTP.WriteTimeout,

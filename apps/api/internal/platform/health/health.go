@@ -21,6 +21,23 @@ type Checker interface {
 	Check(ctx context.Context) error
 }
 
+// Optional đánh dấu một phụ thuộc mà thiếu nó API vẫn phục vụ đúng, chỉ chậm
+// hơn. Phụ thuộc kiểu này hỏng thì /readyz vẫn trả 200.
+//
+// Vì sao phải phân biệt: /readyz trả lời đúng MỘT câu — "instance này có phục
+// vụ được request không?". Redis chết thì câu trả lời vẫn là CÓ, vì mọi đường
+// đọc đều rơi xuống Postgres. Cho Redis làm 503 nghĩa là biến một sự cố cache
+// thành sự cố toàn hệ thống: load balancer rút hết instance ra khỏi vòng quay
+// trong khi từng instance vẫn đang trả 200 cho mọi endpoint thật.
+type Optional interface {
+	Optional() bool
+}
+
+func isOptional(c Checker) bool {
+	o, ok := c.(Optional)
+	return ok && o.Optional()
+}
+
 type Handler struct {
 	version  string
 	checkers []Checker
@@ -61,6 +78,14 @@ func (h *Handler) Ready(w http.ResponseWriter, r *http.Request) {
 	for _, c := range h.checkers {
 		if err := c.Check(ctx); err != nil {
 			checks[c.Name()] = "fail"
+			if isOptional(c) {
+				// Vẫn báo "degraded" để cảnh báo nổ, nhưng giữ 200 để instance
+				// không bị rút khỏi load balancer.
+				if status == "ok" {
+					status = "degraded"
+				}
+				continue
+			}
 			status, code = "degraded", http.StatusServiceUnavailable
 			continue
 		}
