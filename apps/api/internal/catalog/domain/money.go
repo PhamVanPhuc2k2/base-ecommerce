@@ -89,10 +89,23 @@ func (m *Money) UnmarshalJSON(b []byte) error {
 	if err := json.Unmarshal(b, &raw); err != nil {
 		return err
 	}
+
+	// Kiểm lại đúng những gì NewMoney kiểm, dù giá trị này đã hợp lệ lúc ghi
+	// vào cache. Lý do: cache là trạng thái NGOÀI tiến trình — ai đó sửa tay
+	// một key trong Redis, hoặc một bản build cũ ghi định dạng khác, sẽ bơm
+	// vào đây một Money sai mà không có lỗi nào. Giá sai nhưng trông hợp lý
+	// còn khó phát hiện hơn giá bằng 0.
 	d, err := decimal.NewFromString(raw.Amount)
 	if err != nil {
 		return ErrInvalidPrice
 	}
+	if d.IsNegative() || d.Exponent() < -moneyScale || d.GreaterThan(maxMoney) {
+		return ErrInvalidPrice
+	}
+	if raw.Currency != SupportedCurrency {
+		return ErrUnsupportedCurrency
+	}
+
 	m.amount = d
 	m.currency = raw.Currency
 	return nil
