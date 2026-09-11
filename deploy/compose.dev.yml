@@ -82,6 +82,11 @@ services:
       # là cổng ánh xạ ra host để né Redis của dự án khác.
       DATABASE_URL: postgres://app:app@postgres:5432/base_ecommerce?sslmode=disable
       REDIS_ADDR: redis:6379
+      # Không có dòng này thì config lấy mặc định amqp://...@localhost:5672/ —
+      # trong container thì localhost là chính container đó, nên mọi lần nối
+      # broker đều hỏng. cmd/api chịu được (event chỉ ghi xuống outbox), nên lỗi
+      # này im lặng cho tới lúc có ai đó thêm một chỗ publish trực tiếp.
+      RABBITMQ_URL: amqp://app:app@rabbitmq:5672/
       ADMIN_API_KEY: ${ADMIN_API_KEY:-dev-khoa-chi-dung-cho-may-local}
     ports: ["127.0.0.1:8080:8080"]
     depends_on:
@@ -100,6 +105,73 @@ services:
     # nên để mặc định thì shutdown bị cắt ngang giữa chừng và ta không bao giờ
     # biết nó có chạy xong hay không.
     stop_grace_period: 40s
+
+  # outboxrelay đọc bảng outbox và đẩy sự kiện sang RabbitMQ. Cùng profile "app"
+  # với api: `task up` thường ngày chỉ dựng hạ tầng, còn `task up-docker` dựng
+  # cả tiến trình nền để kiểm những thứ chạy trên host không kiểm được (dừng êm
+  # khi nhận SIGTERM, image distroless chạy được, PID 1 đúng).
+  #
+  # ⚠️ TUYỆT ĐỐI KHÔNG đặt `deploy.replicas` cho service này.
+  #
+  # Nghe có vẻ an toàn vì FetchUnpublished dùng FOR UPDATE SKIP LOCKED, nên hai
+  # bản relay sẽ không bao giờ giành cùng một dòng — không lỗi, không publish
+  # trùng. Nhưng chính SKIP LOCKED là vấn đề: bản B "nhảy cóc" qua những dòng
+  # bản A đang giữ và publish event có id LỚN HƠN ra broker trước. Consumer nhận
+  # product.updated trước product.created cho cùng một sản phẩm và ghi đè bằng
+  # dữ liệu cũ. Không có lỗi nào, không có message nào mất — chỉ có dữ liệu sai
+  # ở đầu kia, và nó chỉ xuất hiện khi có tải.
+  #
+  # Muốn scale thì phải phân mảnh theo hash(aggregate_id) % N để mọi event của
+  # cùng một aggregate luôn về cùng một bản (P7, xem thiết kế 01 mục 8).
+  outboxrelay:
+    profiles: ["app"]
+    build:
+      context: ../apps/api
+      args:
+        BINARY: outboxrelay
+        VERSION: dev-docker
+    environment:
+      APP_ENV: development
+      LOG_LEVEL: debug
+      # Tên service, không phải localhost — trong mạng của compose thì
+      # "postgres" và "rabbitmq" mới phân giải được, và cổng là cổng TRONG
+      # container.
+      DATABASE_URL: postgres://app:app@postgres:5432/base_ecommerce?sslmode=disable
+      RABBITMQ_URL: amqp://app:app@rabbitmq:5672/
+      # Relay không phục vụ request nào nên không cần khóa admin, nhưng
+      # config.Load đánh dấu ADMIN_API_KEY là bắt buộc cho MỌI binary dùng
+      # chung package config. Để trống thì tiến trình không khởi động được.
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-dev-khoa-chi-dung-cho-may-local}
+      # Relay chỉ cần vài kết nối: một cho vòng đẩy sự kiện, một cho job dọn.
+      # Mặc định 20 mà nhân với số tiến trình thì Postgres hết slot rất nhanh.
+      DB_MAX_CONNS: "3"
+      DB_MIN_CONNS: "1"
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    # KHÔNG có healthcheck, và đây là lựa chọn có ý thức.
+    #
+    # /healthcheck trong image gọi một URL HTTP, mà relay không mở cổng HTTP nào
+    # — nó không phục vụ request, nó chỉ poll database. Gắn healthcheck HTTP vào
+    # đây thì container LUÔN unhealthy trong khi nó đang làm việc hoàn toàn bình
+    # thường, và `docker compose up --wait` sẽ treo rồi thất bại.
+    #
+    # Hai lựa chọn còn lại đều tệ hơn ở P0.3: (a) mở một HTTP server chỉ để phục
+    # vụ /healthz — thêm cổng, thêm bề mặt, cho một tiến trình không có client
+    # nào; (b) thêm subcommand `outboxrelay healthcheck` tự kiểm — nó chỉ kiểm
+    # được từ một tiến trình KHÁC, nên không nói lên được gì về tiến trình đang
+    # chạy. Khi P5 có hạ tầng thật (Kubernetes liveness/readiness) thì làm cách
+    # (a) cho tử tế, kèm rabbitmq.NewHealthChecker(pub, false) — xem health.go.
+    #
+    # Dấu hiệu sống của relay lúc này là log và cột published_at, không phải một
+    # cái đèn xanh giả.
+    #
+    # PHẢI lớn hơn roundTimeout của relay (60s). Vòng thường chỉ mất vài chục
+    # mili-giây, nhưng khi broker chết thì mỗi message tốn tới 5 giây chờ dial
+    # và cả lô chạm trần 60 giây — đúng lúc đó mà docker stop cắt ở mặc định 10
+    # giây thì container bị SIGKILL, exit code 137, và ta không bao giờ biết
+    # đoạn dừng êm có chạy xong hay không.
+    stop_grace_period: 70s
 
 volumes:
   pgdata:

@@ -10,11 +10,17 @@ VALUES ($1, $2, $3, $4, $5, $6);
 -- sẽ "nhảy cóc" qua những dòng bản thứ nhất đang giữ và publish event có id lớn
 -- hơn ra RabbitMQ trước — sai thứ tự event, mà không có lỗi nào báo.
 --
+-- created_at nằm trong danh sách cột vì envelope gửi đi có trường occurred_at,
+-- và mốc đó phải là lúc SỰ KIỆN XẢY RA (lúc transaction nghiệp vụ commit), không
+-- phải lúc relay đọc được dòng. Hai mốc đó bằng nhau khi mọi thứ chạy trơn, và
+-- lệch hàng giờ đúng lúc cần nhất: broker chết một đêm rồi sống lại thì cả đống
+-- event sẽ mang mốc của sáng hôm sau — consumer không có cách nào biết là sai.
+--
 -- Comment này đặt ngay trên FetchUnpublished chứ không ở đầu file, vì sqlc gắn
 -- mọi comment đứng trước câu truy vấn ĐẦU TIÊN thành godoc của hàm đó: để ở đầu
 -- file thì lời cảnh báo về relay sẽ mọc trên AppendOutbox, nơi nó vô nghĩa.
 -- name: FetchUnpublished :many
-SELECT id, aggregate_type, aggregate_id, event_type, payload, trace_id, attempts
+SELECT id, aggregate_type, aggregate_id, event_type, payload, trace_id, attempts, created_at
 FROM outbox
 WHERE published_at IS NULL
 ORDER BY id

@@ -20,7 +20,11 @@
 // phụ thuộc luôn là: module -> outbox, không bao giờ ngược lại.
 package outbox
 
-import "github.com/google/uuid"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 // Record là một sự kiện đã được tuần tự hóa, sẵn sàng ghi vào bảng outbox.
 //
@@ -47,4 +51,13 @@ type Record struct {
 	// Attempts là số lần relay đã thử publish dòng này. Chỉ có ý nghĩa khi đọc
 	// ra (FetchUnpublished); lúc ghi vào thì Postgres tự đặt bằng 0.
 	Attempts int
+	// CreatedAt là lúc dòng được ghi, tức lúc transaction nghiệp vụ commit —
+	// đây chính là "sự kiện xảy ra lúc nào" mà envelope gửi đi phải mang theo.
+	//
+	// Chỉ có ý nghĩa khi đọc ra (FetchUnpublished); lúc ghi vào thì Postgres tự
+	// đặt bằng now() và trường này bị bỏ qua. Cố ý để relay KHÔNG phải lấy
+	// time.Now() lúc publish: hai mốc đó lệch nhau đúng bằng thời gian sự cố
+	// (broker chết một đêm rồi sống lại), và mốc sai thì consumer không có cách
+	// nào phát hiện.
+	CreatedAt time.Time
 }

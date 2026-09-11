@@ -214,7 +214,7 @@ base-ecommerce/
 │   │   │   ├── healthcheck/                  # binary tĩnh cho HEALTHCHECK (distroless không có curl)
 │   │   │   ├── checkcodes/                   # go/ast: liệt kê mã lỗi cho check-openapi-codes.sh
 │   │   │   ├── worker/                       # ⬜ P0.3 — RabbitMQ consumer
-│   │   │   └── outboxrelay/                  # ⬜ P0.3 — đẩy outbox → RabbitMQ
+│   │   │   └── outboxrelay/                  # poll outbox → publish RabbitMQ → đánh dấu đã gửi
 │   │   ├── internal/
 │   │   │   ├── platform/                     # hạ tầng dùng chung, KHÔNG chứa nghiệp vụ
 │   │   │   │   ├── config/                   # đọc env, validate lúc khởi động

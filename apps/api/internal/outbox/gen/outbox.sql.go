@@ -92,7 +92,7 @@ func (q *Queries) DeletePublishedBefore(ctx context.Context, arg DeletePublished
 }
 
 const fetchUnpublished = `-- name: FetchUnpublished :many
-SELECT id, aggregate_type, aggregate_id, event_type, payload, trace_id, attempts
+SELECT id, aggregate_type, aggregate_id, event_type, payload, trace_id, attempts, created_at
 FROM outbox
 WHERE published_at IS NULL
 ORDER BY id
@@ -108,6 +108,7 @@ type FetchUnpublishedRow struct {
 	Payload       []byte
 	TraceID       *string
 	Attempts      int32
+	CreatedAt     time.Time
 }
 
 // FOR UPDATE SKIP LOCKED: relay khóa đúng những dòng nó đang xử lý, dòng đã bị
@@ -117,6 +118,12 @@ type FetchUnpublishedRow struct {
 // Nhưng đó cũng chính là lý do CHỈ ĐƯỢC CHẠY MỘT BẢN RELAY. Có bản thứ hai, nó
 // sẽ "nhảy cóc" qua những dòng bản thứ nhất đang giữ và publish event có id lớn
 // hơn ra RabbitMQ trước — sai thứ tự event, mà không có lỗi nào báo.
+//
+// created_at nằm trong danh sách cột vì envelope gửi đi có trường occurred_at,
+// và mốc đó phải là lúc SỰ KIỆN XẢY RA (lúc transaction nghiệp vụ commit), không
+// phải lúc relay đọc được dòng. Hai mốc đó bằng nhau khi mọi thứ chạy trơn, và
+// lệch hàng giờ đúng lúc cần nhất: broker chết một đêm rồi sống lại thì cả đống
+// event sẽ mang mốc của sáng hôm sau — consumer không có cách nào biết là sai.
 //
 // Comment này đặt ngay trên FetchUnpublished chứ không ở đầu file, vì sqlc gắn
 // mọi comment đứng trước câu truy vấn ĐẦU TIÊN thành godoc của hàm đó: để ở đầu
@@ -138,6 +145,7 @@ func (q *Queries) FetchUnpublished(ctx context.Context, limit int32) ([]FetchUnp
 			&i.Payload,
 			&i.TraceID,
 			&i.Attempts,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

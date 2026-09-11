@@ -92,6 +92,7 @@ func (r *Repository) FetchUnpublished(ctx context.Context, limit int32) ([]Recor
 			EventType:     row.EventType,
 			Payload:       row.Payload,
 			Attempts:      int(row.Attempts),
+			CreatedAt:     row.CreatedAt,
 		}
 		if row.TraceID != nil {
 			rec.TraceID = *row.TraceID
