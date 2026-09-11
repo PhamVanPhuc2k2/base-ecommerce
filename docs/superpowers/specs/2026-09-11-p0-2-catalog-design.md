@@ -182,7 +182,7 @@ Thêm ở tầng platform: `internal/platform/redis` — client dùng chung, tim
 |---|---|
 | `ProductRepository` | `Save`, `ByID`, `BySlug`, `List` |
 | `CategoryRepository` | `All` — đọc toàn bộ để dựng cây. **Không có `BySlug`**: tra slug làm trong bộ nhớ bằng `Tree.BySlug`, cây đã nằm sẵn trong cache nên thêm một truy vấn nữa là thừa |
-| `Cache` | `GetOrLoad`, `Delete` |
+| `Cache` | `ProductBySlug`, `CategoryTree`, `Invalidate` — một method cho mỗi loại dữ liệu, **không** phải `GetOrLoad[T]` chung: Go không cho phép method có tham số kiểu trên interface |
 | `EventPublisher` | `Publish(ctx, ...domain.Event)` |
 | `TxManager` | `Run(ctx, fn)` |
 
@@ -248,6 +248,27 @@ không báo lỗi gì.
 
 Quy tắc chung: mỗi bất biến phải được liệt kê cùng **danh sách mọi phương thức có
 thể phá nó**, không chỉ phương thức thiết lập nó.
+
+---
+
+## 5.3. Quy tắc hiển thị: chỉ sản phẩm `live` ra công khai
+
+Spec ban đầu **không nói gì** về việc này, và hậu quả là `GET /products/{slug}` trả
+cả sản phẩm `draft` lẫn `archived` rồi cache 30 phút — nghĩa là tên, giá và ảnh của
+một sản phẩm chưa đăng bán lộ ra endpoint công khai không cần xác thực, và sửa hay
+đăng bán sau đó cũng không đóng được cửa sổ lộ dữ liệu.
+
+Quy tắc, áp ở **hai lớp**:
+
+| Lớp | Cách làm |
+|---|---|
+| SQL | `ProductBySlug` có `AND status = 'live'`. `ProductByID` thì **không** — use case ghi phải đọc được bản nháp |
+| Use case | `GetProduct.BySlug` lọc `status != live` **ngay trong callback của cache**, không phải sau khi `GetOrLoad` trả về |
+
+Lọc bên trong callback là điểm mấu chốt: lọc bên ngoài thì bản nháp vẫn kịp được
+ghi vào cache trước khi bị loại, và nằm đó tới hết TTL.
+
+Endpoint admin đọc bản nháp là việc của P1; P0.2 chưa có.
 
 ---
 
@@ -357,6 +378,25 @@ tiên và cho admin đổi bằng thao tác riêng.
 | **P2** (identity) | `X-Admin-Key` là tạm. P2 thay bằng JWT + RBAC và xóa middleware này |
 | **P3** (tồn kho) | P0.2 **không** có trường tồn kho. Đừng thêm cột `stock` vào `products` — tồn kho là đa kho, thuộc bảng riêng |
 | **P7** (tìm kiếm) | P0.2 lọc bằng SQL. Tìm kiếm chữ chuyển sang Meilisearch ở P7 |
+
+### ⚠️ Cây danh mục không có đường vô hiệu hóa cache ở P0.2
+
+`KeyCategoryTree()` được khai báo nhưng **không use case nào gọi `Invalidate` lên
+nó**, vì P0.2 không có endpoint ghi danh mục. Danh mục chỉ đổi được bằng SQL viết
+tay — đúng cách dữ liệu mẫu được nạp.
+
+Hậu quả nhìn thấy được: thêm một danh mục bằng SQL rồi gọi
+`GET /api/v1/products?category=slug-moi` sẽ trả **422 `CATEGORY_NOT_FOUND`** trong
+tối đa 6–7 giờ. Danh mục tồn tại rõ ràng, mà API nói là không.
+
+**Quy trình vận hành bắt buộc ở P0.2:** sau mỗi lần đụng vào bảng `categories`,
+xóa khóa cache bằng tay:
+
+```bash
+docker compose -f deploy/compose.dev.yml exec redis redis-cli DEL bec:v1:category:tree
+```
+
+P1 thêm CRUD danh mục thì endpoint đó **bắt buộc** gọi `Invalidate(KeyCategoryTree())`.
 
 ### Sửa tài liệu 03 kèm theo
 

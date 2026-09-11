@@ -1004,13 +1004,20 @@ for pkg in $(printf '%s\n' "$all_pkgs" | grep -E '/domain(/|$)' || true); do
   fi
 done
 
-# 2. app không được import net/http hay adapter.
+# 2. app chỉ được import domain, errs và hai package tính toán thuần.
+#
+# ALLOWLIST giống rule 1. Bản denylist cũ chỉ xét import TRỰC TIẾP, nên pgx,
+# redis và chi đều lọt, và platform/httpx kéo net/http vào cũng lọt.
+ALLOWED_APP_DEPS='^(base-ecommerce/api/internal/catalog/domain|base-ecommerce/api/internal/platform/errs|github\.com/google/uuid|github\.com/shopspring/decimal)$'
+
 for pkg in $(printf '%s\n' "$all_pkgs" | grep -E '/app(/|$)' || true); do
-  hits="$(go list -f '{{join .Imports "\n"}}' "$pkg" 2>/dev/null \
-          | grep -E '^net/http$|/adapter/' || true)"
-  if [ -n "$hits" ]; then
-    echo "LỖI KIẾN TRÚC: $pkg import net/http hoặc adapter"
-    printf '%s\n' "$hits" | sed 's/^/    /'
+  offenders="$(go list -deps "$pkg" 2>/dev/null \
+    | grep -E '^(base-ecommerce/|[^/]+\.[^/]+/)' \
+    | grep -v "^$pkg\$" \
+    | grep -Ev "$ALLOWED_APP_DEPS" || true)"
+  if [ -n "$offenders" ]; then
+    echo "LỖI KIẾN TRÚC: $pkg import package ngoài danh sách trắng"
+    printf '%s\n' "$offenders" | sed 's/^/    /'
     fail=1
   fi
 done
