@@ -3,6 +3,7 @@ package domain
 import (
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 )
@@ -16,6 +17,7 @@ const (
 )
 
 const maxSKULen = 64
+const maxNameLen = 200
 
 // Product là aggregate root của catalog.
 type Product struct {
@@ -45,12 +47,15 @@ func NewProduct(sku, name, shortDesc string, categoryID, brandID uuid.UUID,
 	price Money, attributes map[string]string, images []string) (*Product, error) {
 
 	sku = strings.TrimSpace(sku)
-	if sku == "" || len(sku) > maxSKULen {
+	if sku == "" || utf8.RuneCountInString(sku) > maxSKULen {
 		return nil, ErrInvalidSKU
 	}
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, ErrNameRequired
+	}
+	if utf8.RuneCountInString(name) > maxNameLen {
+		return nil, ErrNameTooLong
 	}
 	slug, err := NewSlug(name)
 	if err != nil {
@@ -95,9 +100,24 @@ func (p *Product) Update(name, shortDesc string, price Money,
 	if name == "" {
 		return ErrNameRequired
 	}
+	if utf8.RuneCountInString(name) > maxNameLen {
+		return ErrNameTooLong
+	}
 	slug, err := NewSlug(name)
 	if err != nil {
 		return err
+	}
+
+	// Sản phẩm đang bán phải luôn thỏa điều kiện của Publish. Không kiểm ở đây
+	// thì một lệnh PATCH có thể tước ảnh và giá của sản phẩm đang live mà không
+	// báo lỗi gì — Publish canh lúc đăng bán, nhưng không ai canh lúc sửa.
+	if p.Status == StatusLive {
+		if images != nil && len(images) == 0 {
+			return ErrNoImage
+		}
+		if price.IsZero() {
+			return ErrPriceRequired
+		}
 	}
 
 	p.Name = name

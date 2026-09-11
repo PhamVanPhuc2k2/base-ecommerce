@@ -11,8 +11,12 @@ var (
 		"SKU không hợp lệ: bắt buộc có và tối đa 64 ký tự")
 	ErrNameRequired = errs.New(errs.KindValidation, "NAME_REQUIRED",
 		"Tên sản phẩm là bắt buộc")
+	ErrNameTooLong = errs.New(errs.KindValidation, "NAME_TOO_LONG",
+		"Tên sản phẩm tối đa 200 ký tự")
 	ErrInvalidPrice = errs.New(errs.KindValidation, "INVALID_PRICE",
 		"Giá không hợp lệ")
+	ErrUnsupportedCurrency = errs.New(errs.KindValidation, "UNSUPPORTED_CURRENCY",
+		"Hệ thống hiện chỉ hỗ trợ tiền VND")
 	ErrInvalidSlug = errs.New(errs.KindValidation, "INVALID_SLUG",
 		"Đường dẫn sản phẩm không hợp lệ")
 	ErrNoImage = errs.New(errs.KindValidation, "NO_IMAGE",

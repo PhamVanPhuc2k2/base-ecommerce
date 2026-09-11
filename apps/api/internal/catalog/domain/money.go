@@ -14,6 +14,11 @@ type Money struct {
 // moneyScale khớp với NUMERIC(15,2) trong migration.
 const moneyScale = 2
 
+// SupportedCurrency là loại tiền duy nhất P0.2 chấp nhận. Migration
+// catalog_guards có CHECK (currency = 'VND') — không chặn ở tầng domain thì
+// lỗi 23514 của Postgres nổi lên thành 500 thay vì 422 sạch sẽ.
+const SupportedCurrency = "VND"
+
 // maxMoney là giá trị lớn nhất NUMERIC(15,2) chứa được: 13 chữ số phần nguyên.
 var maxMoney = decimal.RequireFromString("9999999999999.99")
 
@@ -38,7 +43,10 @@ func NewMoney(amount, currency string) (Money, error) {
 		return Money{}, ErrInvalidPrice
 	}
 	if currency == "" {
-		currency = "VND"
+		currency = SupportedCurrency
+	}
+	if currency != SupportedCurrency {
+		return Money{}, ErrUnsupportedCurrency
 	}
 	return Money{amount: d, currency: currency}, nil
 }

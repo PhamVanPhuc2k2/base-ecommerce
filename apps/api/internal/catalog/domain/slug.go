@@ -9,9 +9,9 @@ import (
 //
 // Viết tay thay vì dùng golang.org/x/text/unicode/norm là có chủ đích:
 //  1. Giữ domain chỉ phụ thuộc stdlib + 3 package trong danh sách trắng.
-//  2. Quan trọng hơn: chuẩn hóa NFD rồi bỏ dấu KHÔNG xử lý được chữ "đ" —
-//     "đ" không phải "d" cộng dấu, nó là một ký tự riêng. Dùng x/text vẫn
-//     phải viết thêm ngoại lệ cho "đ", nên viết tay toàn bộ rõ ràng hơn.
+//  2. Bảng này xử lý cả dạng dựng sẵn (NFC) lẫn dạng tổ hợp (NFD), và xử lý
+//     được "đ" — thứ mà chuẩn hóa NFD rồi bỏ dấu KHÔNG làm được, vì "đ" là
+//     một chữ cái riêng chứ không phải "d" cộng dấu.
 var vietnameseReplacer = strings.NewReplacer(
 	"à", "a", "á", "a", "ạ", "a", "ả", "a", "ã", "a",
 	"â", "a", "ầ", "a", "ấ", "a", "ậ", "a", "ẩ", "a", "ẫ", "a",
@@ -26,6 +26,17 @@ var vietnameseReplacer = strings.NewReplacer(
 	"ư", "u", "ừ", "u", "ứ", "u", "ự", "u", "ử", "u", "ữ", "u",
 	"ỳ", "y", "ý", "y", "ỵ", "y", "ỷ", "y", "ỹ", "y",
 	"đ", "d",
+
+	// Dạng tổ hợp (NFD): ký tự cơ sở + dấu rời, do macOS và một số nguồn dán ra.
+	// Không xử lý thì mỗi dấu thành một gạch ngang — "Bàn" ra "ba-n".
+	"̀", "", // huyền
+	"́", "", // sắc
+	"̃", "", // ngã
+	"̉", "", // hỏi
+	"̣", "", // nặng
+	"̂", "", // dấu mũ â ê ô
+	"̆", "", // dấu trăng ă
+	"̛", "", // dấu móc ơ ư
 )
 
 var (

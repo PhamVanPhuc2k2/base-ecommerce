@@ -28,11 +28,11 @@ func (e baseEvent) AggregateID() uuid.UUID { return e.aggregateID }
 func (e baseEvent) OccurredAt() time.Time  { return e.occurredAt }
 
 func newBase(aggregateID uuid.UUID) baseEvent {
-	// UUIDv7 có thứ tự theo thời gian — quan trọng cho outbox ở P0.3.
-	id, err := uuid.NewV7()
-	if err != nil {
-		id = uuid.New()
-	}
+	// Must chứ không phải fallback sang uuid.New(): v4 không có thứ tự thời
+	// gian, mà outbox ở P0.3 sắp xếp theo chính ID này. Sinh ID sai thứ tự còn
+	// tệ hơn dừng hẳn — và lỗi ở đây nghĩa là nguồn ngẫu nhiên của hệ điều hành
+	// đã hỏng, không có cách xử lý tử tế nào khác.
+	id := uuid.Must(uuid.NewV7())
 	return baseEvent{id: id, aggregateID: aggregateID, occurredAt: time.Now().UTC()}
 }
 
