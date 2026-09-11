@@ -64,9 +64,34 @@ type Publisher struct {
 	// trong lúc chờ confirm — chờ confirm mất cả chục mili giây và giữ khóa
 	// suốt thời gian đó sẽ biến mọi publish thành một hàng đợi nối tiếp.
 	// *amqp.Channel tự nó đã an toàn khi dùng đồng thời.
-	mu   sync.Mutex
-	conn *amqp.Connection
-	ch   *amqp.Channel
+	mu      sync.Mutex
+	conn    *amqp.Connection
+	ch      *amqp.Channel
+	returns chan amqp.Return
+
+	// pubMu tuần tự hóa publish để ghép được message bị trả về với đúng lần
+	// publish đã gửi nó. Xem Publish để biết vì sao không có cách nào khác.
+	//
+	// Không mất gì về hiệu năng ở đây: relay publish tuần tự và chờ confirm
+	// từng cái một. Nếu sau này có chỗ cần publish song song thì phải đổi sang
+	// ghép theo MessageId, đừng bỏ khóa này đi.
+	pubMu sync.Mutex
+}
+
+// Message là một message sắp gửi.
+//
+// Chữ ký cũ chỉ có (routingKey, body) không chở được id sự kiện và trace id.
+// Chúng PHẢI đi ra ngoài thân JSON nữa: nhìn management UI lúc sự cố thì chỉ
+// thấy thuộc tính AMQP, và mở từng thân message ra để tìm một event id là việc
+// không làm nổi khi có hàng nghìn message tồn đọng.
+type Message struct {
+	RoutingKey string
+	Body       []byte
+	// EventID thành MessageId của AMQP. Consumer khử trùng lặp bằng giá trị này.
+	EventID string
+	// TraceID thành header trace_id, để nối log của worker với request HTTP đã
+	// sinh ra sự kiện.
+	TraceID string
 }
 
 // NewPublisher dựng publisher và thử kết nối ngay một lần.
@@ -95,10 +120,24 @@ func NewPublisher(ctx context.Context, cfg config.RabbitMQ, log *slog.Logger) *P
 // sự kiện (outbox.Record.ID) và trace id phải nằm SẴN trong body. Task 6/7 nếu
 // cần chúng ở dạng thuộc tính AMQP (MessageId, headers) thì phải mở rộng chữ ký
 // — đừng lén nhét vào routing key.
-func (p *Publisher) Publish(ctx context.Context, routingKey string, body []byte) error {
-	ch, err := p.channel(ctx)
+func (p *Publisher) Publish(ctx context.Context, msg Message) error {
+	routingKey := msg.RoutingKey
+
+	p.pubMu.Lock()
+	defer p.pubMu.Unlock()
+
+	ch, returns, err := p.channelAndReturns(ctx)
 	if err != nil {
 		return err
+	}
+
+	// Vứt những message trả về còn sót của lần publish trước. Không dọn thì một
+	// NO_ROUTE cũ sẽ bị quy cho message hiện tại.
+	drainReturns(returns)
+
+	headers := amqp.Table{}
+	if msg.TraceID != "" {
+		headers["trace_id"] = msg.TraceID
 	}
 
 	conf, err := ch.PublishWithDeferredConfirmWithContext(ctx, ExchangeEvents, routingKey,
@@ -123,7 +162,9 @@ func (p *Publisher) Publish(ctx context.Context, routingKey string, body []byte)
 			// JSON từ trước đó rồi).
 			ContentType: "application/json",
 			Timestamp:   time.Now().UTC(),
-			Body:        body,
+			MessageId:   msg.EventID,
+			Headers:     headers,
+			Body:        msg.Body,
 		})
 	if err != nil {
 		// Lỗi ở đây gần như luôn là kênh/kết nối đã chết. Vứt nó đi để lần gọi
@@ -151,7 +192,60 @@ func (p *Publisher) Publish(ctx context.Context, routingKey string, body []byte)
 		// gửi xong.
 		return fmt.Errorf("broker nack message với routing key %q — coi như CHƯA gửi", routingKey)
 	}
+
+	// Broker ack rồi, nhưng ack CHỈ có nghĩa "tôi đã nhận" — không có nghĩa
+	// "có queue nào đó giữ nó". Message không khớp binding nào bị trả về qua
+	// basic.return rồi vẫn được ack như thường.
+	//
+	// Không bắt trường hợp này thì relay đánh dấu published_at cho một message
+	// đã bị vứt đi, và sự kiện mất vĩnh viễn trong im lặng. Nó xảy ra rất tự
+	// nhiên: P4 thêm module orders phát `order.created`, mà binding hiện tại
+	// chỉ có `product.*` — mọi sự kiện đơn hàng biến mất, không lỗi nào.
+	//
+	// AMQP gửi basic.return TRƯỚC basic.ack cho message không route được, và
+	// thư viện đẩy cả hai từ cùng một goroutine đọc socket theo đúng thứ tự.
+	// Nên tới thời điểm này, message trả về (nếu có) đã nằm sẵn trong buffer.
+	// Vẫn để một khe chờ rất ngắn cho chắc.
+	if r, returned := waitReturn(returns, returnGrace); returned {
+		p.log.Error("rabbitmq TRẢ VỀ message: không queue nào nhận",
+			"exchange", r.Exchange, "routing_key", r.RoutingKey,
+			"reply_code", r.ReplyCode, "reply_text", r.ReplyText,
+			"message_id", r.MessageId)
+		return fmt.Errorf("không queue nào nhận routing key %q (%d %s) — coi như CHƯA gửi",
+			r.RoutingKey, r.ReplyCode, r.ReplyText)
+	}
 	return nil
+}
+
+// returnGrace là khe chờ message bị trả về sau khi đã nhận ack. Rất ngắn vì
+// theo giao thức thì nó đã tới trước ack rồi; khe này chỉ phòng trường hợp
+// lập lịch goroutine chậm.
+const returnGrace = 50 * time.Millisecond
+
+func drainReturns(returns <-chan amqp.Return) {
+	for {
+		select {
+		case <-returns:
+		default:
+			return
+		}
+	}
+}
+
+func waitReturn(returns <-chan amqp.Return, d time.Duration) (amqp.Return, bool) {
+	select {
+	case r, ok := <-returns:
+		return r, ok
+	default:
+	}
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case r, ok := <-returns:
+		return r, ok
+	case <-t.C:
+		return amqp.Return{}, false
+	}
 }
 
 // Close đóng kết nối. An toàn khi gọi nhiều lần.
@@ -226,10 +320,24 @@ func (p *Publisher) connectLocked(ctx context.Context) error {
 		return err
 	}
 
+	// Đăng ký nhận message bị trả về NGAY khi dựng kênh, trước mọi publish.
+	// Đăng ký muộn thì thư viện vứt những message trả về tới trước đó.
 	p.conn, p.ch = conn, ch
-	go p.watchReturns(ch)
+	p.returns = ch.NotifyReturn(make(chan amqp.Return, 16))
 	go p.watchClose(conn)
 	return nil
+}
+
+// channelAndReturns trả về kênh dùng được cùng kênh nhận message bị trả về của
+// chính nó. Lấy cả hai trong một lần giữ khóa để không bao giờ ghép nhầm kênh
+// mới với returns của kênh cũ.
+func (p *Publisher) channelAndReturns(ctx context.Context) (*amqp.Channel, chan amqp.Return, error) {
+	if _, err := p.channel(ctx); err != nil {
+		return nil, nil, err
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.ch, p.returns, nil
 }
 
 func (p *Publisher) closeLocked() error {
@@ -258,26 +366,6 @@ func (p *Publisher) discard(ch *amqp.Channel) {
 	defer p.mu.Unlock()
 	if p.ch == ch {
 		_ = p.closeLocked()
-	}
-}
-
-// watchReturns ghi log message bị broker trả về vì không route được.
-//
-// Đây là nửa còn lại của cờ mandatory. Thiếu goroutine này, message không khớp
-// binding nào sẽ bị thư viện vứt đi trong im lặng và Publish vẫn trả nil —
-// broker ack message nó nhận được, còn việc không queue nào nhận là chuyện
-// khác. Mức ERROR chứ không phải WARN: đây luôn là lỗi cấu hình (sai routing
-// key hoặc thiếu binding) và luôn đồng nghĩa với mất dữ liệu.
-//
-// Vòng lặp tự kết thúc khi kênh đóng, vì thư viện đóng luôn channel này.
-func (p *Publisher) watchReturns(ch *amqp.Channel) {
-	for r := range ch.NotifyReturn(make(chan amqp.Return, 1)) {
-		p.log.Error("rabbitmq TRẢ VỀ message: không queue nào nhận — message bị mất",
-			"exchange", r.Exchange,
-			"routing_key", r.RoutingKey,
-			"reply_code", r.ReplyCode,
-			"reply_text", r.ReplyText,
-			"body", string(r.Body))
 	}
 }
 
