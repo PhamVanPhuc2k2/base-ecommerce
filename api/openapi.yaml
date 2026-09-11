@@ -1,0 +1,292 @@
+openapi: 3.1.0
+info:
+  title: base-ecommerce API
+  version: 0.2.0
+  description: |
+    Hợp đồng API. Đây là NGUỒN SỰ THẬT — sửa endpoint thì sửa file này trước.
+servers:
+  - url: http://localhost:8080/api/v1
+
+paths:
+  /products:
+    get:
+      summary: Danh sách sản phẩm có lọc và phân trang
+      description: |
+        Ngoài các tham số liệt kê dưới đây, endpoint còn chấp nhận lọc theo
+        thuộc tính tự do qua tiền tố `attr.`: mỗi cặp `attr.<tên>=<giá trị>`
+        lọc sản phẩm có thuộc tính `<tên>` bằng đúng `<giá trị>`, ví dụ
+        `?attr.ram=16GB&attr.socket=AM5`. `<tên>` là tên thuộc tính bất kỳ do
+        người bán tự đặt (lưu trong `Product.attributes`), nên không thể liệt
+        kê hết trong OpenAPI — không có giới hạn nào ngoài quy ước tiền tố này.
+      parameters:
+        - { name: category,  in: query, schema: { type: string }, description: Lọc theo slug danh mục (bao gồm danh mục con). }
+        - { name: brand,     in: query, schema: { type: string }, description: Lọc theo slug thương hiệu. }
+        - { name: price_min, in: query, schema: { type: string }, description: Giá tối thiểu, chuỗi thập phân VND. }
+        - { name: price_max, in: query, schema: { type: string }, description: Giá tối đa, chuỗi thập phân VND. }
+        - name: sort
+          in: query
+          schema: { type: string, enum: [newest, price_asc, price_desc] }
+        - { name: page,  in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 24 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /products/{slug}:
+    get:
+      summary: Chi tiết sản phẩm theo slug
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /categories:
+    get:
+      summary: Cây danh mục
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Category" }
+
+  /admin/products:
+    post:
+      summary: Tạo sản phẩm
+      security: [{ adminKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateProductRequest" }
+      responses:
+        "201":
+          description: Đã tạo
+          headers:
+            Location: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /admin/products/{id}:
+    patch:
+      summary: Sửa sản phẩm
+      security: [{ adminKey: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateProductRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /admin/products/{id}/publish:
+    post:
+      summary: Đăng bán sản phẩm
+      security: [{ adminKey: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+components:
+  securitySchemes:
+    adminKey:
+      type: apiKey
+      in: header
+      name: X-Admin-Key
+      description: Khóa tạm, P2 sẽ thay bằng JWT.
+
+  responses:
+    Problem:
+      description: Lỗi theo RFC 7807
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status, code, request_id]
+      properties:
+        type:       { type: string }
+        title:      { type: string }
+        status:     { type: integer }
+        code:
+          type: string
+          description: Mã ổn định để frontend map sang thông điệp tiếng Việt.
+          enum:
+            # platform/httpx — có thể xảy ra ở bất kỳ endpoint nào
+            - MALFORMED_REQUEST
+            - PAYLOAD_TOO_LARGE
+            - UNAUTHENTICATED
+            - INTERNAL_ERROR
+            # catalog/domain — lỗi validate (422)
+            - INVALID_SKU
+            - NAME_REQUIRED
+            - NAME_TOO_LONG
+            - INVALID_PRICE
+            - UNSUPPORTED_CURRENCY
+            - INVALID_SLUG
+            - NO_IMAGE
+            - PRICE_REQUIRED
+            - INVALID_STATUS
+            - CATEGORY_NOT_FOUND
+            - BRAND_NOT_FOUND
+            # catalog/domain — xung đột (409)
+            - ALREADY_PUBLISHED
+            - DUPLICATE_SKU
+            - DUPLICATE_SLUG
+            # catalog/domain — không tìm thấy (404)
+            - PRODUCT_NOT_FOUND
+            # catalog/domain — tham số không hợp lệ (400)
+            - INVALID_SORT
+            - PAGE_TOO_DEEP
+        request_id:
+          type: string
+          description: |
+            Luôn có mặt trong response (không bao giờ bị lược bỏ), nhưng có
+            thể là chuỗi rỗng nếu middleware RequestID chưa gán được giá trị.
+        errors:
+          type: array
+          items:
+            type: object
+            required: [field, code, message]
+            properties:
+              field:   { type: string }
+              code:    { type: string }
+              message: { type: string }
+
+    Product:
+      type: object
+      required: [id, sku, slug, name, short_description, category_id, brand_id,
+                 price, currency, status, attributes, images, created_at, updated_at]
+      properties:
+        id:                { type: string, format: uuid }
+        sku:               { type: string }
+        slug:              { type: string }
+        name:              { type: string }
+        short_description: { type: string }
+        category_id:       { type: string, format: uuid }
+        brand_id:          { type: string, format: uuid }
+        price:
+          type: string
+          description: |
+            Chuỗi thập phân, ví dụ "25990000.00". KHÔNG BAO GIỜ dùng number:
+            JSON number qua JS mất chính xác với NUMERIC(15,2) lớn (IEEE 754
+            double chỉ biểu diễn chính xác số nguyên tới 2^53), nên giá đọc lại
+            có thể lệch so với giá đã ghi. Server luôn trả amount đã được
+            round-trip qua shopspring/decimal, không định dạng hiển thị (dấu
+            phẩy nghìn, ký hiệu tiền tệ...) — việc đó là của frontend.
+        currency:
+          type: string
+          description: Hiện chỉ có "VND" — hệ thống chưa hỗ trợ đa tiền tệ.
+          examples: ["VND"]
+        status:     { type: string, enum: [draft, live, archived] }
+        attributes: { type: object, additionalProperties: { type: string } }
+        images:     { type: array, items: { type: string } }
+        created_at:
+          type: string
+          format: date-time
+          description: RFC 3339, luôn ở múi giờ UTC (hậu tố "Z").
+        updated_at:
+          type: string
+          format: date-time
+          description: RFC 3339, luôn ở múi giờ UTC (hậu tố "Z").
+
+    ProductList:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Product" }
+        meta:
+          type: object
+          required: [page, limit, total, total_pages, has_next, has_prev]
+          properties:
+            page:        { type: integer }
+            limit:       { type: integer }
+            total:       { type: integer }
+            total_pages: { type: integer }
+            has_next:    { type: boolean }
+            has_prev:    { type: boolean }
+
+    Category:
+      type: object
+      required: [id, slug, name, position, children]
+      properties:
+        id:       { type: string, format: uuid }
+        slug:     { type: string }
+        name:     { type: string }
+        position: { type: integer }
+        children:
+          type: array
+          items: { $ref: "#/components/schemas/Category" }
+
+    CreateProductRequest:
+      type: object
+      required: [sku, name, category_id, brand_id, price]
+      properties:
+        sku:               { type: string, maxLength: 64 }
+        name:              { type: string, maxLength: 200 }
+        short_description: { type: string }
+        category_id:       { type: string, format: uuid }
+        brand_id:          { type: string, format: uuid }
+        price:
+          type: string
+          description: Chuỗi thập phân VND, ví dụ "25990000". Bỏ trống hoặc "0" hợp lệ ở trạng thái draft.
+        currency:          { type: string, default: "VND" }
+        attributes:        { type: object, additionalProperties: { type: string } }
+        images:            { type: array, items: { type: string } }
+
+    UpdateProductRequest:
+      type: object
+      required: [name, price]
+      properties:
+        name:              { type: string, maxLength: 200 }
+        short_description: { type: string }
+        price:
+          type: string
+          description: Chuỗi thập phân VND. Sản phẩm đang "live" bắt buộc giá > 0.
+        currency:          { type: string, default: "VND" }
+        attributes:        { type: object, additionalProperties: { type: string } }
+        images:            { type: array, items: { type: string } }

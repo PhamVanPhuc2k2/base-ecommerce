@@ -35,6 +35,11 @@ tasks:
     dir: apps/api
     cmd: sqlc generate
 
+  openapi:
+    desc: Sinh type TypeScript từ api/openapi.yaml
+    cmds:
+      - npx --yes openapi-typescript@7 api/openapi.yaml -o apps/web/lib/api/generated/schema.ts
+
   build:
     desc: Biên dịch toàn bộ
     dir: apps/api
