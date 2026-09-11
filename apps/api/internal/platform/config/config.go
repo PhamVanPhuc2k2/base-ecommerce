@@ -17,8 +17,10 @@ type Config struct {
 	Env      string
 	Version  string
 	LogLevel string
+	AdminKey string
 	HTTP     HTTP
 	DB       DB
+	Redis    Redis
 }
 
 type HTTP struct {
@@ -35,13 +37,19 @@ type DB struct {
 	MaxConnLifetime time.Duration
 }
 
+type Redis struct {
+	Addr     string
+	PoolSize int
+}
+
 func (c *Config) IsProduction() bool { return c.Env == "production" }
 
 // String che các giá trị nhạy cảm để an toàn khi ghi log toàn bộ config.
 func (c *Config) String() string {
 	return fmt.Sprintf(
-		"Config{Env:%s Version:%s HTTP.Addr:%s DB.DSN:%s DB.MaxConns:%d}",
+		"Config{Env:%s Version:%s HTTP.Addr:%s DB.DSN:%s DB.MaxConns:%d Redis.Addr:%s AdminKey:%s}",
 		c.Env, c.Version, c.HTTP.Addr, redactDSN(c.DB.DSN), c.DB.MaxConns,
+		c.Redis.Addr, redactSecret(c.AdminKey),
 	)
 }
 
@@ -57,6 +65,14 @@ func redactDSN(dsn string) string {
 		return dsn[:scheme+3] + creds[:colon] + ":***" + dsn[at:]
 	}
 	return dsn
+}
+
+// redactSecret chỉ để lại dấu vết đủ để biết đã nạp đúng biến hay chưa.
+func redactSecret(s string) string {
+	if s == "" {
+		return "(rỗng)"
+	}
+	return fmt.Sprintf("(đã đặt, %d ký tự)", len(s))
 }
 
 func Load() (*Config, error) {
@@ -77,6 +93,14 @@ func Load() (*Config, error) {
 			MaxConns:        int32(l.num("DB_MAX_CONNS", 20)),
 			MinConns:        int32(l.num("DB_MIN_CONNS", 2)),
 			MaxConnLifetime: l.dur("DB_MAX_CONN_LIFETIME", time.Hour),
+		},
+		// Khóa tạm bảo vệ API ghi cho tới khi P2 có JWT + RBAC.
+		// BẮT BUỘC: thiếu thì server không khởi động, nên không thể vô tình
+		// deploy một API ghi không ai bảo vệ.
+		AdminKey: l.required("ADMIN_API_KEY"),
+		Redis: Redis{
+			Addr:     l.str("REDIS_ADDR", "localhost:6380"),
+			PoolSize: l.num("REDIS_POOL_SIZE", 20),
 		},
 	}
 
