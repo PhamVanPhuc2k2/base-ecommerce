@@ -336,7 +336,7 @@ Dự án không dùng unit test. Mười mục dưới đây thay thế, không 
 | 4 | Tạo sản phẩm hợp lệ | 201 + `Location`; log có dòng event `product.created` |
 | 5 | Tạo trùng SKU | 409. Gửi lại y nguyên request thì đụng cả hai unique index, Postgres báo `products_slug_uq` trước nên `code` là `DUPLICATE_SLUG`; giữ SKU mà đổi tên thì mới ra `DUPLICATE_SKU`. Cả hai trường hợp đều **không** được lộ tên ràng buộc |
 | 6 | `Publish` sản phẩm chưa có ảnh | 422 `NO_IMAGE` |
-| 7 | **Cache có thật sự được dùng không** | Bật `log_statement=all`, gọi cùng slug hai lần → chỉ **một** truy vấn xuống DB |
+| 7 | **Cache có thật sự được dùng không** | Xóa khóa, gọi cùng slug ba lần, đọc `pg_stat_user_tables` → chỉ **một** truy vấn xuống DB. Đừng dùng `log_statement=all`: đó là tham số **toàn server**, nên nếu có ai đang chạy việc khác trên cùng container Postgres thì truy vấn của họ lọt vào phép đếm |
 | 8 | **Cache bị xóa sau khi sửa** | `PATCH` xong gọi lại ngay → thấy dữ liệu mới, không phải bản cũ |
 | 9 | Lọc theo thuộc tính | `?attr.ram=16GB` trả đúng tập; `EXPLAIN ANALYZE` cho thấy dùng GIN index |
 | 10 | Xóa danh mục còn sản phẩm | Báo lỗi, không xóa kèm sản phẩm |
@@ -346,6 +346,39 @@ cho kết quả đúng, chỉ khi đếm số truy vấn mới biết cache có 
 
 Mục 1 cũng đáng chú ý: `internal/catalog/domain` là package `domain` đầu tiên của
 dự án, nên đây là lần đầu `scripts/check-arch.sh` thật sự có việc để làm.
+
+---
+
+## 8.2. Giới hạn đã biết, chấp nhận ở P0.2 — KHÔNG phải lỗi
+
+Ghi ra đây để lần sau gặp không mất công điều tra lại.
+
+**`Location` sau 201 trỏ tới một URL trả 404.** Sản phẩm tạo ra luôn ở `draft`,
+mà route công khai chỉ phục vụ `live` (§5.3). RFC 9110 nói `Location` trên 201 là
+URI của tài nguyên vừa tạo, nên đây là lệch chuẩn có ý thức: P0.2 chưa có endpoint
+admin đọc một sản phẩm, nên chưa có URL nào đúng để trỏ tới. Client nào tự đi theo
+`Location` sẽ thấy sản phẩm mình vừa tạo "không tồn tại". **P1 phải thêm
+`GET /admin/products/{id}` và trỏ `Location` vào đó.**
+
+**Khóa cache không mang định danh database.** `bec:v1:category:tree` và
+`bec:v1:product:slug:*` chỉ có tiền tố phiên bản. Hai môi trường trỏ vào cùng một
+Redis nhưng khác database sẽ **đọc cache của nhau** — dựng lại được: một server
+trỏ DB `rev8` trả về cây danh mục của `base_ecommerce`. Ở máy dev một người thì
+không chạm tới, nhưng staging và dev dùng chung Redis là chuyện rất hay xảy ra.
+Khi tách hai instance ở P4 (xem [thiết kế 03](../../design/03-redis-cache.md))
+thì thêm tên môi trường vào tiền tố.
+
+**Sản phẩm bị xóa mềm bằng SQL tay vẫn được cache phục vụ tới hết TTL.** P0.2
+không có endpoint xóa nên chỉ chạm tới được bằng `UPDATE ... SET deleted_at`.
+Sửa bảng `products` bằng SQL thì phải tự xóa khóa `bec:v1:product:slug:<slug>`.
+
+**`INVALID_STATUS` là mã chết.** Nơi duy nhất sinh ra nó là `pgstore/mapping.go`
+khi dịch lỗi CHECK constraint, mà `domain.Status` là tập đóng nên không có đường
+nào đẩy giá trị lạ xuống database. Giữ lại vì nó là lưới an toàn cho lúc thêm
+trạng thái mới.
+
+**Sửa `platform/errs` là sửa hợp đồng API.** Thêm một mã lỗi mà quên khai trong
+`api/openapi.yaml` thì `task check` đỏ ở bước `api-codes` — cố ý như vậy.
 
 ---
 

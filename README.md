@@ -789,6 +789,40 @@ chuyển đã cập nhật chưa.
 8. **Dual-write** — publish RabbitMQ ngoài transaction. Luôn qua outbox.
 9. **Số tiền thành `number` trong JS** — mất chính xác. Truyền dạng chuỗi.
 10. **`"use client"` đặt quá cao** trong cây component — mất hết lợi ích SSR/SEO.
+11. **Hai timeout bằng nhau** — `HTTP_WRITE_TIMEOUT` phải LỚN HƠN
+    `HTTP_HANDLER_TIMEOUT`. Bằng nhau thì đúng lúc handler hết giờ, write
+    deadline cũng hết, và client nhận connection reset thay vì mã lỗi — đúng lúc
+    quá tải và cần chẩn đoán nhất. Config từ chối khởi động nếu đặt sai.
+12. **Tin vào `json.Unmarshal`** — nó nhận `null` và `{}` mà không báo lỗi gì.
+    Dữ liệu dựng lại từ nguồn KHÔNG đi qua hàm dựng (cache, hàng đợi, file) phải
+    được kiểm bất biến lại. Xem `domain.Product.Validate`.
+13. **Cache là phụ thuộc "có thì tốt", đừng để nó thành bắt buộc** — Redis chết
+    thì API phải khởi động được, `/readyz` phải vẫn 200, và mỗi lệnh Redis phải
+    có ngân sách thời gian riêng. `DialTimeout` của go-redis chỉ giới hạn MỘT
+    lần dial, không giới hạn tổng thời gian một lệnh.
+14. **`PATCH` nhận kiểu giá trị thay vì con trỏ** — không phân biệt được "client
+    bỏ qua trường này" với "client muốn xóa trường này", và mặc định im lặng rơi
+    vào vế thứ hai. Mất dữ liệu không có lỗi nào báo.
+
+### 15.1. Cạm bẫy của chính môi trường dev này (Windows)
+
+Những thứ đã làm hỏng phép kiểm chứng, không phải làm hỏng sản phẩm:
+
+- **Ký tự tiếng Việt gõ thẳng vào lệnh shell bị biến thành `U+FFFD`** trước cả
+  khi `curl` nhìn thấy, vì console dùng codepage cp1258. Triệu chứng: dữ liệu
+  lưu xuống có `octet_length` lớn hơn mong đợi và hiện ra dấu `?`. **Cách đúng:**
+  ghi body ra file bằng Python (`encoding='utf-8'`) rồi `curl --data-binary @file`.
+- **`command -v python3` tìm thấy shim rỗng của Microsoft Store.** Phải thử
+  `python3 -c "import yaml"` thật mới biết có dùng được không.
+- **Python trên Windows in `CRLF`**, nên `comm`/`diff` coi `MÃ` khác `MÃ`.
+  Luôn `tr -d ''` trước khi so sánh.
+- **`docker compose exec` bên trong `while read` nuốt stdin** và vòng lặp im lặng
+  chạy sai. Gom danh sách vào biến trước rồi mới lặp.
+- **Nhiều `psql -c` trong một lệnh là MỘT transaction ngầm** — câu cuối lỗi thì
+  mọi câu trước rollback theo. Tách từng lệnh khi muốn chứng minh ràng buộc.
+- **Cổng 8080 còn bị tiến trình cũ giữ** thì bản build mới không lên được, và
+  log vẫn in "server đang lắng nghe" trước khi bind thất bại. Kiểm bằng
+  `netstat -ano | grep :8080` chứ đừng tin dòng log đó.
 
 ---
 
