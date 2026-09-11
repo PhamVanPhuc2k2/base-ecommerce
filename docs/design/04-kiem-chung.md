@@ -20,7 +20,7 @@ tử tế, và để người đọc sau này biết chính xác điều gì kh�
 Đây là thứ duy nhất chạy tự động, cả ở máy dev lẫn CI.
 
 ```bash
-task check     # = build + vet + lint + arch
+task check     # = build + vet + lint + arch + api-codes
 ```
 
 | Bước | Bắt được gì |
@@ -29,6 +29,7 @@ task check     # = build + vet + lint + arch
 | `go vet ./...` | Format string sai, lỗi copy mutex, shadow biến nguy hiểm |
 | `golangci-lint run` | Bỏ qua lỗi trả về, quên đóng body, quên `rows.Err()`, so sánh lỗi bằng `==` thay vì `errors.Is`, `return nil` khi `err != nil`, thiếu context |
 | `scripts/check-arch.sh` | `domain` chạm hạ tầng, `app` import `net/http`, adapter giữ `*pgxpool.Pool` |
+| `scripts/check-openapi-codes.sh` | Mã lỗi code Go trả ra nhưng `api/openapi.yaml` không khai báo (và ngược lại) |
 
 **Không có bước nào bắt được lỗi logic.** Một hàm biên dịch được, không vi phạm
 linter, không phá kiến trúc — nhưng tính sai tiền — sẽ đi thẳng vào production.
@@ -136,9 +137,16 @@ chuyển qua lại giữa Go và Postgres. Không có round-trip test thì phả
 đọc lại và so từng trường bằng mắt, ít nhất một lần cho mỗi entity.
 
 **5. Trôi lệch hợp đồng API.** Backend đổi tên trường mà quên sửa `openapi.yaml`
-sẽ không ai báo. Từ P0.2, job `openapi-drift` trong CI (sinh lại client TS rồi
-kiểm `git diff`) bù được **một phần**: nó bắt được spec và code TS lệch nhau,
-nhưng không bắt được spec và handler Go lệch nhau.
+sẽ không ai báo. Từ P0.2 có hai lớp bù, và cần hiểu rõ **lớp nào bắt được gì**:
+
+| Lớp | Bắt được | KHÔNG bắt được |
+|---|---|---|
+| `openapi-drift` (sinh lại client TS rồi kiểm `git diff`) | Spec và file `schema.ts` đã commit lệch nhau | Bất cứ thứ gì liên quan tới code Go — nó không bao giờ đọc code Go. Một spec sai hoàn toàn nhưng nhất quán với chính nó vẫn qua |
+| `api-codes` (`scripts/check-openapi-codes.sh`) | Mã lỗi trong `errs.New`/`errs.Wrap` mà spec thiếu, và mã spec khai báo nhưng code không thể sinh ra | Tên trường, kiểu dữ liệu, mã trạng thái HTTP, tham số truy vấn. Nó cũng chỉ `grep` được chuỗi viết thẳng — mã lỗi tạo từ biến hay hằng thì nó mù |
+
+Nghĩa là **tên trường và hình dạng JSON vẫn hoàn toàn không được bảo vệ**. Đổi
+`short_description` thành `summary` trong `dto.go` mà quên sửa spec thì không có
+gì báo, frontend vỡ lúc chạy.
 
 **6. Lỗi ở nhánh hiếm.** Nhánh xử lý lỗi, timeout, retry gần như không bao giờ
 được chạy khi thao tác tay. `TxManager` retry lỗi 40001 là ví dụ: kiểm chứng thủ
