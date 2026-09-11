@@ -16,7 +16,7 @@ func NewCategoryRepository(db *postgres.Manager) *CategoryRepository {
 
 func (r *CategoryRepository) All(ctx context.Context) ([]*domain.Category, error) {
 	// db.DB(ctx) trả transaction nếu đang ở trong transaction, ngược lại trả
-	// pool. KHÔNG giữ con trỏ pool trực tiếp trong struct — check-arch.sh chặn
+	// pool. KHÔNG giữ *pgxpool.Pool trực tiếp trong struct — check-arch.sh chặn
 	// điều đó (xem scripts/check-arch.sh, mục 3).
 	rows, err := gen.New(r.db.DB(ctx)).AllCategories(ctx)
 	if err != nil {

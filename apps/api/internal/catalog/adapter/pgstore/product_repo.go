@@ -45,6 +45,11 @@ func (r *ProductRepository) Save(ctx context.Context, p *domain.Product) error {
 	}))
 }
 
+// ByID đọc sản phẩm và KHÓA dòng đó (SELECT ... FOR UPDATE).
+//
+// Chỉ dùng trong use case ghi. Gọi ngoài transaction thì khóa được lấy rồi nhả
+// ngay, vô hại — nhưng một endpoint đọc dùng hàm này sẽ xếp hàng sau mọi writer
+// đang chạy. Cần đọc thuần thì thêm một hàm riêng, đừng dùng lại hàm này.
 func (r *ProductRepository) ByID(ctx context.Context, id uuid.UUID) (*domain.Product, error) {
 	row, err := gen.New(r.db.DB(ctx)).ProductByID(ctx, id)
 	if err != nil {
@@ -65,6 +70,15 @@ func (r *ProductRepository) BySlug(ctx context.Context, slug string) (*domain.Pr
 // đúng giới hạn của sqlc. Squirrel tự tham số hóa nên không có nguy cơ injection
 // — TUYỆT ĐỐI không nối chuỗi SQL bằng fmt.Sprintf.
 func (r *ProductRepository) List(ctx context.Context, f app.ListFilter) ([]*domain.Product, int, error) {
+	// ListFilter không hứa Page >= 1. Không kẹp ở đây thì Page = 0 làm
+	// (Page-1)*Limit tràn uint64 và Postgres trả bigint out of range.
+	if f.Page < 1 {
+		f.Page = 1
+	}
+	if f.Limit < 1 {
+		f.Limit = 1
+	}
+
 	// .Select() rỗng trước rồi thêm cột sau: StatementBuilderType không có
 	// phương thức From, chỉ SelectBuilder mới có.
 	base := sq.StatementBuilder.PlaceholderFormat(sq.Dollar).
@@ -74,7 +88,10 @@ func (r *ProductRepository) List(ctx context.Context, f app.ListFilter) ([]*doma
 		Where(sq.Eq{"status": string(domain.StatusLive)})
 
 	if len(f.CategoryIDs) > 0 {
-		base = base.Where(sq.Eq{"category_id": f.CategoryIDs})
+		// = ANY(?) chứ không phải sq.Eq: sq.Eq với slice sinh ra IN ($2,...,$N),
+		// nên câu SQL đổi theo số danh mục con và mỗi kích thước cây con thành
+		// một plan riêng trong cache. ANY dùng một placeholder duy nhất.
+		base = base.Where("category_id = ANY(?)", f.CategoryIDs)
 	}
 	if f.BrandSlug != "" {
 		base = base.Where("brand_id IN (SELECT id FROM brands WHERE slug = ?)", f.BrandSlug)
@@ -100,19 +117,6 @@ func (r *ProductRepository) List(ctx context.Context, f app.ListFilter) ([]*doma
 			return nil, 0, err
 		}
 		base = base.Where("attributes @> ?::jsonb", string(b))
-	}
-
-	// Đếm tổng trước, dùng đúng bộ WHERE.
-	countSQL, countArgs, err := base.Column("count(*)").ToSql()
-	if err != nil {
-		return nil, 0, err
-	}
-	var total int
-	if err := r.db.DB(ctx).QueryRow(ctx, countSQL, countArgs...).Scan(&total); err != nil {
-		return nil, 0, mapErr(err)
-	}
-	if total == 0 {
-		return []*domain.Product{}, 0, nil
 	}
 
 	q := base.Columns(
@@ -163,5 +167,24 @@ func (r *ProductRepository) List(ctx context.Context, f app.ListFilter) ([]*doma
 	if err := rows.Err(); err != nil {
 		return nil, 0, fmt.Errorf("duyệt kết quả: %w", mapErr(err))
 	}
+
+	// Đếm sau, và bỏ hẳn bước đếm khi trang đầu đã chứa hết kết quả: count(*)
+	// không lọc là 16,8 ms / 5057 buffer ở 200k dòng, trong khi câu lấy trang
+	// chỉ 0,049 ms / 4 buffer — tức là 99,7% chi phí nằm ở phép đếm.
+	//
+	// KHÔNG dùng count(*) OVER (): window aggregate phải dựng toàn bộ kết quả
+	// trước LIMIT, phá mất Index Only Scan.
+	total := len(out)
+	if f.Page > 1 || len(out) == f.Limit {
+		// còn trang nữa, hoặc đang ở trang sau — phải đếm thật
+		countSQL, countArgs, err := base.Column("count(*)").ToSql()
+		if err != nil {
+			return nil, 0, err
+		}
+		if err := r.db.DB(ctx).QueryRow(ctx, countSQL, countArgs...).Scan(&total); err != nil {
+			return nil, 0, mapErr(err)
+		}
+	}
+
 	return out, total, nil
 }

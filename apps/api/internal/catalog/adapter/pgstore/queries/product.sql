@@ -5,6 +5,13 @@ INSERT INTO products (
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
 )
+-- sku KHÔNG nằm trong DO UPDATE SET: đó là chủ đích, chốt thêm một lần nữa ở
+-- tầng lưu trữ cho quy tắc "SKU không đổi được" của domain.
+--
+-- category_id và brand_id cũng không nằm trong danh sách, và đây KHÔNG phải
+-- quy tắc nghiệp vụ — chưa có use case nào đổi chúng. Nghĩa là sửa entity rồi
+-- Save sẽ trả về nil mà thay đổi biến mất. Thêm use case đổi danh mục thì phải
+-- thêm cột vào đây trước.
 ON CONFLICT (id) DO UPDATE SET
     slug              = EXCLUDED.slug,
     name              = EXCLUDED.name,

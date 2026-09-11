@@ -23,6 +23,8 @@ var (
 		"Sản phẩm phải có ít nhất một ảnh trước khi đăng bán")
 	ErrPriceRequired = errs.New(errs.KindValidation, "PRICE_REQUIRED",
 		"Sản phẩm phải có giá lớn hơn 0 trước khi đăng bán")
+	ErrInvalidStatus = errs.New(errs.KindValidation, "INVALID_STATUS",
+		"Trạng thái sản phẩm không hợp lệ")
 
 	ErrAlreadyPublished = errs.New(errs.KindConflict, "ALREADY_PUBLISHED",
 		"Sản phẩm đã được đăng bán")
