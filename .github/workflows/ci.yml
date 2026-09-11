@@ -55,6 +55,19 @@ jobs:
       - uses: actions/checkout@v4
       - run: bash scripts/check-tree.sh
 
+  sqlc-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: sqlc-dev/setup-sqlc@v4
+        with:
+          sqlc-version: "1.31.1"
+      - run: sqlc generate
+        working-directory: apps/api
+      # Sinh lại mà có gì đổi nghĩa là ai đó sửa .sql nhưng quên chạy task sqlc:
+      # code đang chạy khác với SQL đang nằm trong repo.
+      - run: git diff --exit-code
+
   docker:
     runs-on: ubuntu-latest
     steps:

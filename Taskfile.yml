@@ -67,6 +67,15 @@ tasks:
     desc: Đối chiếu cây thư mục ở README mục 4 với đĩa thật
     cmd: bash scripts/check-tree.sh
 
+  sqlc-drift:
+    desc: Kiểm code sqlc đã sinh có khớp với file .sql không
+    # Sinh lại rồi hỏi git xem có gì đổi. Không có bước này thì sửa .sql mà quên
+    # chạy `task sqlc` sẽ không ai báo: code cũ vẫn build, vẫn chạy, chỉ là chạy
+    # câu SQL khác với câu đang nằm trong repo. Đã xảy ra thật ở P0.2.
+    cmds:
+      - task: sqlc
+      - git diff --exit-code -- apps/api/internal/catalog/adapter/pgstore/gen apps/api/internal/outbox/gen
+
   check:
     desc: Chạy tất cả kiểm tra tĩnh — chạy trước mỗi lần commit
     # Dự án không dùng unit test. Đây là lưới an toàn duy nhất chạy tự động,
@@ -79,6 +88,7 @@ tasks:
       - task: arch
       - task: api-codes
       - task: tree
+      - task: sqlc-drift
 
   run:
     desc: Chạy API server trên máy (vòng lặp sửa–chạy nhanh nhất)

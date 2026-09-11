@@ -22,3 +22,23 @@ sql:
             go_type: github.com/shopspring/decimal.Decimal
           - db_type: timestamptz
             go_type: time.Time
+  - engine: postgresql
+    schema: db/migrations
+    queries: internal/outbox/queries
+    gen:
+      go:
+        package: gen
+        out: internal/outbox/gen
+        sql_package: pgx/v5
+        emit_pointers_for_null_types: true
+        overrides:
+          - db_type: uuid
+            go_type: github.com/google/uuid.UUID
+          - db_type: timestamptz
+            go_type: time.Time
+          - db_type: timestamptz
+            nullable: true
+            go_type:
+              import: time
+              type: Time
+              pointer: true

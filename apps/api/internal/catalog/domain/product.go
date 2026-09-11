@@ -96,7 +96,7 @@ func NewProduct(sku, name, shortDesc string, categoryID, brandID uuid.UUID,
 		Status: StatusDraft, Attributes: attributes, Images: images,
 		CreatedAt: now, UpdatedAt: now,
 	}
-	p.raise(ProductCreated{newBase(id)})
+	p.raise(ProductCreated{baseEvent: newBase(p.ID), sku: p.SKU, slug: p.Slug})
 	return p, nil
 }
 
@@ -159,7 +159,10 @@ func (p *Product) Update(name, shortDesc *string, price *Money,
 	}
 
 	p.UpdatedAt = time.Now().UTC()
-	p.raise(ProductUpdated{newBase(p.ID)})
+	// Phát SAU khi p.Slug đã nhận giá trị mới ở trên. Đổi tên là đổi slug, mà
+	// slug là thứ consumer dùng để dựng URL; phát sớm hơn thì payload mang slug
+	// cũ và không có gì báo — chỉ lộ ra ở đường dẫn hỏng phía người dùng.
+	p.raise(ProductUpdated{baseEvent: newBase(p.ID), sku: p.SKU, slug: p.Slug})
 	return nil
 }
 
@@ -177,7 +180,7 @@ func (p *Product) Publish() error {
 
 	p.Status = StatusLive
 	p.UpdatedAt = time.Now().UTC()
-	p.raise(ProductPublished{newBase(p.ID)})
+	p.raise(ProductPublished{baseEvent: newBase(p.ID), sku: p.SKU, slug: p.Slug})
 	return nil
 }
 

@@ -213,8 +213,8 @@ base-ecommerce/
 │   │   │   ├── api/                          # HTTP server
 │   │   │   ├── healthcheck/                  # binary tĩnh cho HEALTHCHECK (distroless không có curl)
 │   │   │   ├── checkcodes/                   # go/ast: liệt kê mã lỗi cho check-openapi-codes.sh
-│   │   │   ├── worker/                       # ⬜ P0.3 — RabbitMQ consumer
-│   │   │   └── outboxrelay/                  # ⬜ P0.3 — đẩy outbox → RabbitMQ
+│   │   │   ├── worker/                       # consumer catalog.indexer: khử trùng lặp, retry, DLQ
+│   │   │   └── outboxrelay/                  # poll outbox → publish RabbitMQ → đánh dấu đã gửi
 │   │   ├── internal/
 │   │   │   ├── platform/                     # hạ tầng dùng chung, KHÔNG chứa nghiệp vụ
 │   │   │   │   ├── config/                   # đọc env, validate lúc khởi động
@@ -224,7 +224,7 @@ base-ecommerce/
 │   │   │   │   ├── observability/            # slog JSON, request ID
 │   │   │   │   ├── postgres/                 # pgxpool, DBTX, txmanager
 │   │   │   │   ├── redis/                    # client + cache-aside, singleflight, jitter
-│   │   │   │   └── rabbitmq/                 # ⬜ P0.3 — publisher, consumer, retry, DLQ
+│   │   │   │   └── rabbitmq/                 # topology + publisher có confirm + consumer manual ack
 │   │   │   │
 │   │   │   ├── catalog/                      # MODULE = một hexagon hoàn chỉnh
 │   │   │   │   ├── domain/
@@ -252,10 +252,12 @@ base-ecommerce/
 │   │   │   │   │   │   ├── product_repo.go
 │   │   │   │   │   │   └── category_repo.go
 │   │   │   │   │   ├── rediscache/           # driven: cache-aside cho sản phẩm và cây danh mục
-│   │   │   │   │   └── logpublisher/         # driven: ghi event ra log — P0.3 thay bằng outbox
+│   │   │   │   │   └── outboxpub/            # driven: domain.Event → outbox.Record, cùng transaction
 │   │   │   │   └── module.go                 # lắp ráp module, expose Mount()
 │   │   │   │
-│   │   │   ├── outbox/                       # ⬜ P0.3 — module hạ tầng dùng chung
+│   │   │   ├── outbox/                       # hạ tầng dùng chung: outbox + khử trùng lặp
+│   │   │   │   ├── queries/                  # *.sql cho sqlc (entry thứ hai trong sqlc.yaml)
+│   │   │   │   └── gen/                      # sqlc sinh ra — KHÔNG sửa tay
 │   │   │   └── server/                       # router.go: nơi DUY NHẤT ráp module vào Chi
 │   │   ├── db/migrations/                    # goose
 │   │   ├── sqlc.yaml
@@ -669,7 +671,7 @@ nghiệp vụ thật đi xuyên mọi tầng, thay vì khung xương trên lý t
 > chi tiết hơn ở cuối — đọc kèm khi bắt tay vào hạng mục tương ứng.
 
 > Trạng thái: **P0.1 xong** (nền móng backend), **P0.2 xong** (module catalog).
-> Còn lại P0.3 (outbox + worker) và P0.4 (Next.js).
+> Trạng thái: **P0.1, P0.2, P0.3 xong**. Còn lại P0.4 (Next.js).
 
 ### Chuẩn bị
 - [x] `git init`, `.gitignore`, `.editorconfig`
@@ -683,9 +685,9 @@ nghiệp vụ thật đi xuyên mọi tầng, thay vì khung xương trên lý t
 - [x] `platform/httpx`: `Wrap()`, `decodeJSON`, `respondJSON`, `writeError`, phân trang
 - [x] `platform/postgres`: pgxpool + config, `DBTX`, `txmanager` (Unit of Work)
 - [x] `platform/redis`: client + helper cache có TTL
-- [ ] `platform/rabbitmq`: publisher, consumer có retry + DLQ — **P0.3**
+- [x] `platform/rabbitmq`: publisher có confirm, consumer manual ack + prefetch + retry + DLQ
 - [x] `platform/observability`: slog JSON, request ID, `/healthz`, `/readyz` ⬜ Sentry
-- [ ] Graceful shutdown cho cả 3 binary — `api` đã xong; `worker` và `outboxrelay` chưa tồn tại, làm ở **P0.3**
+- [x] Graceful shutdown cho cả 3 binary (`api`, `worker`, `outboxrelay`) — đã đo bằng `docker stop`: exit code 0
 - [x] `server/router.go` + middleware theo thứ tự ở mục 5.5
 
 ### Module `catalog` (lát cắt dọc)
@@ -695,13 +697,13 @@ nghiệp vụ thật đi xuyên mọi tầng, thay vì khung xương trên lý t
 - [x] `pgstore`: sqlc cho query tĩnh, squirrel cho `ListProducts` có filter
 - [x] `rediscache`: cache chi tiết sản phẩm + invalidate khi cập nhật
 - [x] `httpapi`: handler + DTO khớp OpenAPI
-- [x] `EventPublisher` port + adapter `logpublisher` — P0.3 thay bằng outbox mà không sửa `domain`/`app`
+- [x] `EventPublisher` port + adapter `outboxpub` — P0.3 đã thay `logpublisher` bằng outbox mà không sửa `domain`/`app`
 
 ### Outbox & worker
-- [ ] Bảng `outbox` + `outbox.Append` chạy trong transaction
-- [ ] `outboxrelay`: poll outbox → publish RabbitMQ → đánh dấu đã gửi
-- [ ] `worker`: consume `product.published`, ghi log (sau này thành indexer Meilisearch)
-- [ ] Consumer idempotent (bảng `processed_events` hoặc khóa theo event ID)
+- [x] Bảng `outbox` + `outbox.Append` chạy trong transaction
+- [x] `outboxrelay`: poll 500 ms → publish có confirm → đánh dấu đã gửi. Chỉ đánh dấu những ID thành công
+- [x] `worker`: consume `product.*`, ghi log (P7 thay bằng indexer Meilisearch)
+- [x] Consumer idempotent — `MarkProcessed` nằm trong CÙNG transaction với việc xử lý
 
 ### Hợp đồng API
 - [x] Chốt mô hình lỗi, phân trang, quy ước đặt tên JSON (mục 8.2)
