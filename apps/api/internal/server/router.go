@@ -14,13 +14,18 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
+// Module là thứ router gắn vào. Mỗi module nghiệp vụ tự khai báo route của mình.
+type Module interface {
+	Mount(r chi.Router)
+}
+
 // New dựng router với chuỗi middleware chuẩn.
 //
 // Thứ tự middleware quan trọng:
 //   - RequestID trước RequestLogger, nếu không log sẽ không có request_id.
 //   - Recoverer sau RequestLogger, để panic vẫn được ghi thành một dòng log request.
 //   - Timeout cuối cùng, chỉ bao quanh handler nghiệp vụ.
-func New(log *slog.Logger, h *health.Handler) http.Handler {
+func New(log *slog.Logger, h *health.Handler, modules ...Module) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -47,7 +52,9 @@ func New(log *slog.Logger, h *health.Handler) http.Handler {
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(middleware.Timeout(30 * time.Second))
-		// Các module nghiệp vụ gắn vào đây từ kế hoạch P0.2 trở đi.
+		for _, m := range modules {
+			m.Mount(r)
+		}
 	})
 
 	return r
