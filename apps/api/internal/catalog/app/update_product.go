@@ -8,11 +8,13 @@ import (
 	"github.com/google/uuid"
 )
 
+// UpdateProductInput mô tả một lệnh sửa từng phần: mọi trường nil nghĩa là
+// giữ nguyên giá trị đang có.
 type UpdateProductInput struct {
 	ID               uuid.UUID
-	Name             string
-	ShortDescription string
-	Price            domain.Money
+	Name             *string
+	ShortDescription *string
+	Price            *domain.Money
 	Attributes       map[string]string
 	Images           []string
 }

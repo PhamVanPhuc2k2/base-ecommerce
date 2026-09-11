@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"time"
 
+	"base-ecommerce/api/internal/platform/errs"
 	"base-ecommerce/api/internal/platform/health"
+	"base-ecommerce/api/internal/platform/httpx"
 	"base-ecommerce/api/internal/platform/observability"
 
 	"github.com/go-chi/chi/v5"
@@ -25,7 +27,7 @@ type Module interface {
 //   - RequestID trước RequestLogger, nếu không log sẽ không có request_id.
 //   - Recoverer sau RequestLogger, để panic vẫn được ghi thành một dòng log request.
 //   - Timeout cuối cùng, chỉ bao quanh handler nghiệp vụ.
-func New(log *slog.Logger, h *health.Handler, modules ...Module) http.Handler {
+func New(log *slog.Logger, h *health.Handler, handlerTimeout time.Duration, modules ...Module) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -50,8 +52,18 @@ func New(log *slog.Logger, h *health.Handler, modules ...Module) http.Handler {
 	r.Get("/healthz", h.Live)
 	r.Get("/readyz", h.Ready)
 
+	// Không khai báo thì Chi trả text/plain "404 page not found" và 405 với
+	// body rỗng — cả hai đều không có `code` lẫn `request_id`. Client sinh từ
+	// openapi.yaml parse body thành Problem sẽ nổ khi ai đó gõ sai URL.
+	r.NotFound(httpx.Wrap(func(http.ResponseWriter, *http.Request) error {
+		return errs.ErrRouteNotFound
+	}))
+	r.MethodNotAllowed(httpx.Wrap(func(http.ResponseWriter, *http.Request) error {
+		return errs.ErrMethodNotAllowed
+	}))
+
 	r.Route("/api/v1", func(r chi.Router) {
-		r.Use(middleware.Timeout(30 * time.Second))
+		r.Use(middleware.Timeout(handlerTimeout))
 		for _, m := range modules {
 			m.Mount(r)
 		}

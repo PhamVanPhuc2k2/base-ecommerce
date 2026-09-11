@@ -42,6 +42,8 @@ func statusOf(k errs.Kind) int {
 		return http.StatusServiceUnavailable
 	case errs.KindTooLarge:
 		return http.StatusRequestEntityTooLarge
+	case errs.KindMethodNotAllowed:
+		return http.StatusMethodNotAllowed
 	default:
 		return http.StatusInternalServerError
 	}
@@ -54,7 +56,15 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 	reqID := middleware.GetReqID(r.Context())
 
 	// Lỗi từ 500 trở lên là lỗi của mình — phải ghi log kèm nguyên nhân gốc.
-	if status >= http.StatusInternalServerError {
+	//
+	// Trừ KindUnavailable: hết giờ và client tự hủy không phải lỗi của server.
+	// Ghi chúng ở mức ERROR làm nhiễu cảnh báo đúng lúc hệ thống đang tải cao,
+	// tức là lúc cần đọc log nhất.
+	switch {
+	case e.Kind == errs.KindUnavailable:
+		slog.WarnContext(r.Context(), "request không hoàn tất",
+			"err", err, "request_id", reqID, "path", r.URL.Path)
+	case status >= http.StatusInternalServerError:
 		slog.ErrorContext(r.Context(), "request thất bại",
 			"err", err, "request_id", reqID, "path", r.URL.Path)
 	}

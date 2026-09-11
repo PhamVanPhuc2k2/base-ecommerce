@@ -60,5 +60,13 @@ func Decode[T any](w http.ResponseWriter, r *http.Request) (T, error) {
 		return v, errs.Wrap(err, errs.KindInvalid, "MALFORMED_REQUEST",
 			"Dữ liệu gửi lên không hợp lệ")
 	}
+	// Decode dừng ngay sau document JSON đầu tiên. Không kiểm More() thì
+	// `{...}{"evil":1}` được nhận và phần thừa bị bỏ qua âm thầm — mâu thuẫn
+	// với chính DisallowUnknownFields ngay trên: một trường lạ thì 400, còn cả
+	// một document lạ thì cho qua.
+	if dec.More() {
+		return v, errs.New(errs.KindInvalid, "MALFORMED_REQUEST",
+			"Dữ liệu gửi lên không hợp lệ")
+	}
 	return v, nil
 }

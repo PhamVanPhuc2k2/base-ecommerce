@@ -5,6 +5,7 @@
 package errs
 
 import (
+	"context"
 	"errors"
 	"fmt"
 )
@@ -24,9 +25,10 @@ const (
 	KindValidation
 	KindRateLimited
 	KindUnavailable
-	// KindTooLarge phải nằm CUỐI khối iota. Chèn vào giữa sẽ đổi giá trị số
-	// của mọi Kind đứng sau nó.
 	KindTooLarge
+	// Kind mới phải THÊM VÀO CUỐI khối iota. Chèn vào giữa sẽ đổi giá trị số
+	// của mọi Kind đứng sau nó.
+	KindMethodNotAllowed
 )
 
 // FieldError mô tả một lỗi ở cấp trường dữ liệu.
@@ -96,5 +98,25 @@ func From(err error) *Error {
 	if errors.As(err, &e) {
 		return e
 	}
+	// Hết giờ không phải lỗi của server. Để nó rơi vào INTERNAL_ERROR thì một
+	// request chậm vì tranh chấp khóa database bị tính là 5xx — làm nhiễu cảnh
+	// báo, và client không phân biệt được "thử lại được" với "hỏng thật".
+	if errors.Is(err, context.DeadlineExceeded) {
+		return New(KindUnavailable, "REQUEST_TIMEOUT",
+			"Yêu cầu xử lý quá lâu, vui lòng thử lại")
+	}
+	// Client tự ngắt kết nối. Không phải lỗi, và cũng không ai còn ở đó để đọc.
+	if errors.Is(err, context.Canceled) {
+		return New(KindUnavailable, "REQUEST_CANCELED",
+			"Yêu cầu đã bị hủy")
+	}
 	return New(KindInternal, "INTERNAL_ERROR", "Đã có lỗi xảy ra")
 }
+
+// Lỗi ở tầng router, trước khi vào bất kỳ module nghiệp vụ nào.
+var (
+	ErrRouteNotFound = New(KindNotFound, "ROUTE_NOT_FOUND",
+		"Không tìm thấy đường dẫn này")
+	ErrMethodNotAllowed = New(KindMethodNotAllowed, "METHOD_NOT_ALLOWED",
+		"Phương thức HTTP không được hỗ trợ cho đường dẫn này")
+)

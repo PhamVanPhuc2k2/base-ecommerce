@@ -52,10 +52,21 @@ func (h *Handler) ListProducts(w http.ResponseWriter, r *http.Request) error {
 	if v := q.Get("price_max"); v != "" {
 		in.PriceMax = &v
 	}
-	if v, err := strconv.Atoi(q.Get("page")); err == nil {
+	// Giá trị không phải số phải báo lỗi chứ không im lặng dùng mặc định —
+	// cùng chính sách với `sort`. Bỏ qua âm thầm che mất lỗi phía client: họ
+	// gửi page=abc, nhận trang 1, và tưởng danh sách chỉ có bấy nhiêu.
+	if raw := q.Get("page"); raw != "" {
+		v, convErr := strconv.Atoi(raw)
+		if convErr != nil {
+			return domain.ErrInvalidPagination
+		}
 		in.Page = v
 	}
-	if v, err := strconv.Atoi(q.Get("limit")); err == nil {
+	if raw := q.Get("limit"); raw != "" {
+		v, convErr := strconv.Atoi(raw)
+		if convErr != nil {
+			return domain.ErrInvalidPagination
+		}
 		in.Limit = v
 	}
 	// Lọc thuộc tính qua tiền tố attr.: ?attr.ram=16GB&attr.socket=AM5
@@ -76,12 +87,21 @@ func (h *Handler) ListProducts(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	totalPages := (res.Total + res.Limit - 1) / res.Limit
+
+	// has_next phải tôn trọng trần MaxPage, nếu không hợp đồng dẫn client vào
+	// tường: ở trang 200 với 8334 trang, has_next là true, client bấm "trang
+	// sau" và nhận 400 PAGE_TOO_DEEP. total_pages vẫn báo con số thật để client
+	// biết còn bao nhiêu dữ liệu — nhưng cách đi tới phần còn lại là lọc hẹp
+	// lại, không phải lật tiếp.
+	hasNext := res.Page < totalPages && res.Page < app.MaxPage
+
 	return httpx.JSON(w, http.StatusOK, listResponse{
 		Data: items,
 		Meta: listMeta{
 			Page: res.Page, Limit: res.Limit, Total: res.Total,
 			TotalPages: totalPages,
-			HasNext:    res.Page < totalPages,
+			MaxPage:    app.MaxPage,
+			HasNext:    hasNext,
 			HasPrev:    res.Page > 1,
 		},
 	})
@@ -132,9 +152,20 @@ func (h *Handler) UpdateProduct(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	price, err := domain.NewMoney(req.Price, req.Currency)
-	if err != nil {
-		return err
+	// Chỉ dựng Money khi client thật sự gửi giá. Bản trước gọi NewMoney vô
+	// điều kiện, nên một lệnh PATCH chỉ đổi tên cũng ăn 422 INVALID_PRICE —
+	// tức là không PATCH nổi một trường nào nếu không gửi kèm giá.
+	var price *domain.Money
+	if req.Price != nil {
+		currency := domain.SupportedCurrency
+		if req.Currency != nil {
+			currency = *req.Currency
+		}
+		m, mErr := domain.NewMoney(*req.Price, currency)
+		if mErr != nil {
+			return mErr
+		}
+		price = &m
 	}
 
 	p, err := h.update.Execute(r.Context(), app.UpdateProductInput{

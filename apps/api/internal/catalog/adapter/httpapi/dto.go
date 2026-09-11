@@ -66,6 +66,7 @@ type listMeta struct {
 	Limit      int  `json:"limit"`
 	Total      int  `json:"total"`
 	TotalPages int  `json:"total_pages"`
+	MaxPage    int  `json:"max_page"`
 	HasNext    bool `json:"has_next"`
 	HasPrev    bool `json:"has_prev"`
 }
@@ -87,11 +88,19 @@ type createProductRequest struct {
 	Images           []string          `json:"images"`
 }
 
+// updateProductRequest dùng con trỏ cho mọi trường vô hướng vì đây là PATCH:
+// trường vắng mặt phải GIỮ NGUYÊN, không phải đặt về zero value. Dùng kiểu giá
+// trị thì không phân biệt được "client bỏ qua mô tả" với "client muốn xóa mô
+// tả", và mặc định im lặng rơi vào vế thứ hai.
+//
+// Attributes và Images để nguyên kiểu map/slice vì chúng đã có nil sẵn.
+//
+// Currency chỉ có ý nghĩa khi gửi kèm Price; gửi một mình thì bị bỏ qua.
 type updateProductRequest struct {
-	Name             string            `json:"name"`
-	ShortDescription string            `json:"short_description"`
-	Price            string            `json:"price"`
-	Currency         string            `json:"currency"`
+	Name             *string           `json:"name"`
+	ShortDescription *string           `json:"short_description"`
+	Price            *string           `json:"price"`
+	Currency         *string           `json:"currency"`
 	Attributes       map[string]string `json:"attributes"`
 	Images           []string          `json:"images"`
 }

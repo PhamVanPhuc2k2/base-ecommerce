@@ -40,6 +40,9 @@ var (
 	ErrBrandNotFound = errs.New(errs.KindValidation, "BRAND_NOT_FOUND",
 		"Thương hiệu không tồn tại")
 
+	ErrInvalidPagination = errs.New(errs.KindInvalid, "INVALID_PAGINATION",
+		"Tham số phân trang không hợp lệ")
+
 	ErrInvalidSort = errs.New(errs.KindInvalid, "INVALID_SORT",
 		"Giá trị sắp xếp không hợp lệ")
 	ErrPageTooDeep = errs.New(errs.KindInvalid, "PAGE_TOO_DEEP",
