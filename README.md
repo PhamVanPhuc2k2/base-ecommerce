@@ -266,8 +266,11 @@ base-ecommerce/
 │   │
 │   └── web/                                  # ===== Next.js frontend =====
 │       ├── lib/api/generated/                # sinh từ openapi.yaml — KHÔNG sửa tay
-│       ├── package.json                      # ⬜ P0.4 — dự án Next.js chưa khởi tạo
-│       ├── app/                              # ⬜ P0.4 — (shop), (account), admin
+│       ├── app/                              # App Router; layout.tsx + page.tsx tạm
+│       ├── package.json                      # Next.js 16 + React 19
+│       ├── next.config.ts                    # output: standalone (cho Docker ở Task 6)
+│       ├── tsconfig.json                     # strict + noUncheckedIndexedAccess
+│       ├── biome.jsonc                       # thay ESLint + Prettier; bỏ qua lib/api/generated/
 │       └── components/                       # ⬜ P0.4
 ├── deploy/
 │   ├── compose.dev.yml                       # hạ tầng; service `api` nằm sau profile "app"

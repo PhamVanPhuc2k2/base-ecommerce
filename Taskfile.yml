@@ -90,6 +90,23 @@ tasks:
       - task: tree
       - task: sqlc-drift
 
+  web-dev:
+    desc: Chạy Next.js ở chế độ phát triển
+    dir: apps/web
+    cmd: npm run dev
+
+  web-build:
+    desc: Build Next.js production
+    dir: apps/web
+    cmd: npm run build
+
+  web-check:
+    desc: Biome + kiểm kiểu TypeScript
+    dir: apps/web
+    cmds:
+      - npm run lint
+      - npm run typecheck
+
   run:
     desc: Chạy API server trên máy (vòng lặp sửa–chạy nhanh nhất)
     dir: apps/api
