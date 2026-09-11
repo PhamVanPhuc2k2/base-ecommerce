@@ -30,6 +30,11 @@ tasks:
     # và goose panic khi thấy trùng version.
     cmd: goose -dir db/migrations create {{.CLI_ARGS}} sql
 
+  sqlc:
+    desc: Sinh code Go từ file SQL
+    dir: apps/api
+    cmd: sqlc generate
+
   build:
     desc: Biên dịch toàn bộ
     dir: apps/api
