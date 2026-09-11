@@ -23,9 +23,9 @@ func (uc *PublishProduct) Execute(ctx context.Context, id uuid.UUID) (*domain.Pr
 	var published *domain.Product
 
 	// repo.ByID PHẢI nằm trong closure. TxManager chạy lại closure khi gặp lỗi
-	// tuần tự hóa, và cả sự kiện lẫn oldSlug đều phụ thuộc vào việc đọc lại
-	// aggregate ở mỗi lần thử. Nhấc nó ra ngoài thì lần thử thứ hai phát ra
-	// không sự kiện nào và xóa nhầm khóa cache.
+	// tuần tự hóa, và PullEvents làm rỗng danh sách sự kiện của entity — nhấc
+	// repo.ByID ra ngoài thì lần thử thứ hai dùng lại entity đã bị rút sạch
+	// sự kiện và phát ra không gì cả.
 	if err := uc.tx.Run(ctx, func(ctx context.Context) error {
 		p, err := uc.repo.ByID(ctx, id)
 		if err != nil {
