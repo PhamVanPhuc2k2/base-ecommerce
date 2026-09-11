@@ -271,14 +271,18 @@ base-ecommerce/
 │       │   ├── api/server.ts                 # apiGet(), chỉ gọi từ Server Component
 │       │   ├── errors.ts                     # mã lỗi → thông điệp tiếng Việt, một chỗ duy nhất
 │       │   ├── format.ts                     # formatVND (nhận chuỗi decimal), formatDate
-│       │   └── search-params.ts              # dựng link lọc: giữ tham số khác, luôn reset page
+│       │   ├── search-params.ts              # dựng link lọc: giữ tham số khác, luôn reset page
+│       │   └── site.ts                       # SITE_URL đọc lúc chạy → canonical, sitemap, JSON-LD
 │       ├── app/                              # App Router
 │       │   ├── layout.tsx                    # <html lang="vi">, header, footer, metadata mặc định
 │       │   ├── page.tsx                      # trang chủ tối giản, dẫn sang /danh-muc
 │       │   ├── danh-muc/page.tsx             # danh sách sản phẩm: lọc trên URL, force-dynamic
+│       │   ├── danh-muc/loading.tsx          # skeleton; ở đây chứ KHÔNG ở app/ — xem mục 7.8
+│       │   ├── san-pham/[slug]/page.tsx      # chi tiết: ISR 60s, generateMetadata, JSON-LD Product
+│       │   ├── sitemap.ts                    # sinh từ API, trần 20.000 sản phẩm, API chết vẫn ra XML
+│       │   ├── robots.ts                     # chặn /admin, trỏ Sitemap:
 │       │   ├── error.tsx                     # lưới an toàn cuối; production KHÔNG còn mã lỗi để đọc
 │       │   ├── global-error.tsx              # phủ cả lỗi ném từ layout.tsx; tự khai <html>/<body>
-│       │   ├── loading.tsx                   # skeleton giữ chỗ, không phải chữ "Đang tải..."
 │       │   └── not-found.tsx                 # 404 tiếng Việt, dẫn về trang danh mục
 │       ├── components/
 │       │   ├── breadcrumb.tsx                # đường dẫn phân cấp; mục cuối không bao giờ là link
@@ -517,6 +521,27 @@ Mỗi route group có `error.tsx` và `loading.tsx`. Lỗi API phải hiện th�
 nghĩa cho người dùng, không được im lặng. Mã lỗi từ backend map sang thông điệp
 tiếng Việt ở một chỗ duy nhất.
 
+### 7.8. `loading.tsx` làm hỏng mã trạng thái 404 — đặt đúng chỗ
+
+**Không được có `app/loading.tsx`.** Đo được ở P0.4 Task 5, trên bản production
+standalone:
+
+| | `/san-pham/<slug-không-tồn-tại>` |
+|---|---|
+| có `app/loading.tsx` | HTTP **200** |
+| không có | HTTP **404** |
+
+`loading.tsx` bọc mọi trang con trong một Suspense boundary, nên Next.js xả
+phần vỏ kèm dòng trạng thái 200 ngay lập tức rồi mới stream nội dung. Tới lúc
+`notFound()` chạy thì mã trạng thái đã đi mất — gọi `notFound()` sớm hơn, ngay
+trong `generateMetadata`, cũng không cứu được.
+
+Đây là kiểu hỏng câm: trình duyệt vẫn hiện trang 404 tiếng Việt đúng đắn, chỉ
+có Google là đọc 200 rồi giữ mọi URL sản phẩm đã chết trong chỉ mục dưới dạng
+"soft 404". Vì vậy skeleton nằm ở `app/danh-muc/loading.tsx` — đúng trang nó
+được vẽ ra để phục vụ. Thêm `loading.tsx` cho một route có thể trả 404 là đánh
+đổi phải cân nhắc, không phải chuyện làm cho đẹp.
+
 ---
 
 ## 8. Hợp đồng API
@@ -737,9 +762,9 @@ nghiệp vụ thật đi xuyên mọi tầng, thay vì khung xương trên lý t
 - [x] `lib/api/server.ts`: base URL đọc lúc chạy, `ApiError` mang `code` + `request_id`
 - [x] `lib/format.ts`: format VND và ngày giờ
 - [x] Trang danh sách sản phẩm (Server Component, có bộ lọc trên URL) — `/danh-muc`
-- [ ] Trang chi tiết sản phẩm (`generateMetadata` + JSON-LD `Product`)
+- [x] Trang chi tiết sản phẩm (`generateMetadata` + JSON-LD `Product`)
 - [x] `error.tsx` + `global-error.tsx` + `loading.tsx` + `not-found.tsx`
-- [ ] `sitemap.ts` + `robots.ts`
+- [x] `sitemap.ts` + `robots.ts`
 
 ### Kiểm chứng & CI
 - [ ] Chạy hết danh sách kiểm chứng thủ công của từng task trong kế hoạch

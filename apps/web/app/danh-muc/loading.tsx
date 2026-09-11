@@ -11,6 +11,28 @@
  * vào nhiều nhất. Khung xương không cần giống y hệt, chỉ cần chiếm gần đúng
  * chiều cao.
  *
+ * ---------------------------------------------------------------------------
+ * VÌ SAO FILE NÀY NẰM Ở `app/danh-muc/` CHỨ KHÔNG PHẢI `app/` — đừng dời lên
+ * ---------------------------------------------------------------------------
+ * Ban đầu nó ở `app/loading.tsx`, tức là bọc MỌI trang con trong một Suspense
+ * boundary. Hệ quả đo được ở Task 5, trên bản production standalone:
+ *
+ *     có app/loading.tsx   → /san-pham/<slug-không-tồn-tại> trả HTTP **200**
+ *     không có             → trả đúng HTTP **404**
+ *
+ * Vì có boundary thì Next.js xả ngay phần vỏ (header + chính khung xương này)
+ * kèm dòng trạng thái 200, rồi mới stream nội dung thật. Tới lúc `notFound()`
+ * chạy thì mã trạng thái đã đi mất. Với một site sống bằng SEO đó là hỏng
+ * nặng và hỏng câm: khách vẫn thấy trang 404 tiếng Việt đúng đắn, còn Google
+ * đọc 200 và giữ lại mọi URL sản phẩm đã chết trong chỉ mục ("soft 404").
+ *
+ * Đặt ở `app/danh-muc/` thì khung xương chỉ áp cho đúng trang nó được vẽ ra để
+ * phục vụ — trang danh mục, cũng là trang `force-dynamic` chờ API lâu nhất —
+ * còn trang chi tiết sản phẩm giữ được mã trạng thái thật. Trang chi tiết chưa
+ * cần khung xương riêng: nó chạy ISR nên hầu hết lượt xem đã có sẵn HTML.
+ * Muốn thêm sau này thì phải chấp nhận đánh đổi ở trên — xem chú thích trong
+ * app/san-pham/[slug]/page.tsx.
+ *
  * aria-hidden + role="status": khung xương là hiệu ứng thị giác thuần túy,
  * đọc lên thành "hộp rỗng, hộp rỗng, hộp rỗng" thì vô nghĩa. Trình đọc màn
  * hình chỉ cần nghe đúng một câu "Đang tải nội dung".
