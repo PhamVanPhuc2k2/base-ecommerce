@@ -56,6 +56,18 @@ func (m *Manager) DB(ctx context.Context) DBTX {
 	return m.pool
 }
 
+// InTx cho biết ctx có đang mang một transaction không.
+//
+// Có hàm này để những câu lệnh chỉ đúng khi ở trong transaction tự chặn được
+// mình. Ví dụ thật: SELECT ... FOR UPDATE SKIP LOCKED chạy ngoài transaction
+// vẫn trả về dữ liệu và không lỗi gì — nhưng khóa nhả ngay khi câu lệnh kết
+// thúc, nên SKIP LOCKED mất tác dụng và hai tiến trình sẽ xử lý trùng nhau.
+// Hỏng kiểu đó không có triệu chứng cho tới khi chạy hai bản cùng lúc.
+func (m *Manager) InTx(ctx context.Context) bool {
+	_, ok := ctx.Value(txKey{}).(pgx.Tx)
+	return ok
+}
+
 // Run chạy fn trong một transaction với tùy chọn mặc định.
 func (m *Manager) Run(ctx context.Context, fn func(ctx context.Context) error) error {
 	return m.RunWith(ctx, TxOptions{}, fn)

@@ -2,6 +2,7 @@ package outbox
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -69,6 +70,15 @@ func (r *Repository) Append(ctx context.Context, recs ...Record) error {
 // rồi publish trùng. Cách dùng đúng là gói cả vòng đời một lô — fetch,
 // publish, MarkPublished/MarkFailed — trong một Manager.Run.
 func (r *Repository) FetchUnpublished(ctx context.Context, limit int32) ([]Record, error) {
+	// Chặn thẳng thay vì chỉ cảnh báo trong tài liệu. Câu truy vấn dùng
+	// FOR UPDATE SKIP LOCKED: chạy ngoài transaction thì nó vẫn trả về dữ liệu
+	// và không lỗi gì, nhưng khóa nhả ngay khi câu lệnh kết thúc — hai bản relay
+	// sẽ cùng lấy một dòng và publish trùng. Không có triệu chứng nào cho tới
+	// lúc chạy hai bản cùng lúc trên production.
+	if !r.db.InTx(ctx) {
+		return nil, errors.New("FetchUnpublished phải chạy trong transaction: " +
+			"ngoài transaction thì FOR UPDATE SKIP LOCKED không giữ được khóa")
+	}
 	rows, err := gen.New(r.db.DB(ctx)).FetchUnpublished(ctx, limit)
 	if err != nil {
 		return nil, fmt.Errorf("đọc sự kiện chưa gửi: %w", err)
