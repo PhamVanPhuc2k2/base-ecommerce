@@ -255,7 +255,9 @@ base-ecommerce/
 │   │   │   │   │   └── logpublisher/         # driven: ghi event ra log — P0.3 thay bằng outbox
 │   │   │   │   └── module.go                 # lắp ráp module, expose Mount()
 │   │   │   │
-│   │   │   ├── outbox/                       # ⬜ P0.3 — module hạ tầng dùng chung
+│   │   │   ├── outbox/                       # hạ tầng dùng chung: outbox + khử trùng lặp
+│   │   │   │   ├── queries/                  # *.sql cho sqlc (entry thứ hai trong sqlc.yaml)
+│   │   │   │   └── gen/                      # sqlc sinh ra — KHÔNG sửa tay
 │   │   │   └── server/                       # router.go: nơi DUY NHẤT ráp module vào Chi
 │   │   ├── db/migrations/                    # goose
 │   │   ├── sqlc.yaml

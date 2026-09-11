@@ -9,7 +9,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/shopspring/decimal"
 )
 
 type Brand struct {
@@ -22,7 +21,7 @@ type Brand struct {
 
 type Category struct {
 	ID        uuid.UUID
-	ParentID  *uuid.UUID
+	ParentID  pgtype.UUID
 	Slug      string
 	Name      string
 	Position  int32
@@ -38,7 +37,7 @@ type Outbox struct {
 	Payload       []byte
 	TraceID       *string
 	CreatedAt     time.Time
-	PublishedAt   pgtype.Timestamptz
+	PublishedAt   *time.Time
 	Attempts      int32
 	LastError     *string
 }
@@ -57,12 +56,12 @@ type Product struct {
 	ShortDescription string
 	CategoryID       uuid.UUID
 	BrandID          uuid.UUID
-	Price            decimal.Decimal
+	Price            pgtype.Numeric
 	Currency         string
 	Status           string
 	Attributes       []byte
 	Images           []string
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
-	DeletedAt        pgtype.Timestamptz
+	DeletedAt        *time.Time
 }

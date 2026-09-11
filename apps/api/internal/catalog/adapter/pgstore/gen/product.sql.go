@@ -120,6 +120,13 @@ type UpsertProductParams struct {
 	UpdatedAt        time.Time
 }
 
+// sku KHÔNG nằm trong DO UPDATE SET: đó là chủ đích, chốt thêm một lần nữa ở
+// tầng lưu trữ cho quy tắc "SKU không đổi được" của domain.
+//
+// category_id và brand_id cũng không nằm trong danh sách, và đây KHÔNG phải
+// quy tắc nghiệp vụ — chưa có use case nào đổi chúng. Nghĩa là sửa entity rồi
+// Save sẽ trả về nil mà thay đổi biến mất. Thêm use case đổi danh mục thì phải
+// thêm cột vào đây trước.
 func (q *Queries) UpsertProduct(ctx context.Context, arg UpsertProductParams) error {
 	_, err := q.db.Exec(ctx, upsertProduct,
 		arg.ID,
