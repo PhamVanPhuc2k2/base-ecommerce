@@ -1022,14 +1022,19 @@ for pkg in $(printf '%s\n' "$all_pkgs" | grep -E '/app(/|$)' || true); do
   fi
 done
 
-# 3. repository phải dùng DBTX, không được giữ pool trực tiếp.
-adapter_hits="$(grep -rn --include='*.go' 'pgxpool\.Pool' internal/ 2>/dev/null \
-                | grep '/adapter/' || true)"
-if [ -n "$adapter_hits" ]; then
-  echo "LỖI KIẾN TRÚC: adapter giữ *pgxpool.Pool — phải nhận DBTX qua Manager.DB(ctx)"
-  printf '%s\n' "$adapter_hits" | sed 's/^/    /'
-  fail=1
-fi
+# 3. adapter phải nhận DBTX qua Manager.DB(ctx), không được tự giữ pool.
+#
+# Kiểm import TRỰC TIẾP thay vì grep mã nguồn: grep vừa bắn nhầm vào comment,
+# vừa bị qua mặt bởi `import pp "..."` rồi dùng pp.Pool. Dùng .Imports chứ không
+# phải -deps vì adapter hoàn toàn có quyền chạm pgxpool gián tiếp qua
+# platform/postgres.
+for pkg in $(printf '%s\n' "$all_pkgs" | grep -E '/adapter(/|$)' || true); do
+  if go list -f '{{join .Imports "\n"}}' "$pkg" 2>/dev/null \
+     | grep -q '^github\.com/jackc/pgx/v5/pgxpool$'; then
+    echo "LỖI KIẾN TRÚC: $pkg import pgxpool trực tiếp — phải nhận DBTX qua Manager.DB(ctx)"
+    fail=1
+  fi
+done
 
 if [ "$fail" -eq 0 ]; then
   echo "Kiểm tra kiến trúc: OK"
