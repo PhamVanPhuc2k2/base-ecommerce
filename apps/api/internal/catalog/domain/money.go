@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"encoding/json"
+
 	"github.com/shopspring/decimal"
 )
 
@@ -66,3 +68,32 @@ func (m Money) Decimal() decimal.Decimal { return m.amount }
 // String trả chuỗi thập phân, dạng dùng trong JSON. Không định dạng hiển thị —
 // việc đó là của frontend.
 func (m Money) String() string { return m.amount.String() }
+
+// MarshalJSON và UnmarshalJSON cần cho việc cache entity.
+//
+// Money có field không xuất khẩu, nên nếu không có hai hàm này thì giá sẽ biến
+// mất khi đi qua cache — sản phẩm đọc từ cache có giá bằng 0, còn đọc thẳng từ
+// database thì đúng. Đây là loại lỗi rất khó tìm vì nó chỉ xuất hiện ở lần đọc
+// thứ hai trở đi.
+type moneyJSON struct {
+	Amount   string `json:"amount"`
+	Currency string `json:"currency"`
+}
+
+func (m Money) MarshalJSON() ([]byte, error) {
+	return json.Marshal(moneyJSON{Amount: m.amount.String(), Currency: m.currency})
+}
+
+func (m *Money) UnmarshalJSON(b []byte) error {
+	var raw moneyJSON
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	d, err := decimal.NewFromString(raw.Amount)
+	if err != nil {
+		return ErrInvalidPrice
+	}
+	m.amount = d
+	m.currency = raw.Currency
+	return nil
+}
