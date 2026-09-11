@@ -265,7 +265,12 @@ base-ecommerce/
 │   │   └── .dockerignore
 │   │
 │   └── web/                                  # ===== Next.js frontend =====
-│       ├── lib/api/generated/                # sinh từ openapi.yaml — KHÔNG sửa tay
+│       ├── lib/
+│       │   ├── api/generated/                # sinh từ openapi.yaml — KHÔNG sửa tay
+│       │   ├── api/error.ts                  # ApiError — mọi hỏng hóc về đúng một dạng
+│       │   ├── api/server.ts                 # apiGet(), chỉ gọi từ Server Component
+│       │   ├── errors.ts                     # mã lỗi → thông điệp tiếng Việt, một chỗ duy nhất
+│       │   └── format.ts                     # formatVND (nhận chuỗi decimal), formatDate
 │       ├── app/                              # App Router; layout.tsx + page.tsx tạm
 │       ├── package.json                      # Next.js 16 + React 19
 │       ├── next.config.ts                    # output: standalone (cho Docker ở Task 6)
@@ -279,6 +284,7 @@ base-ecommerce/
 ├── scripts/
 │   ├── check-arch.sh                         # chiều phụ thuộc hexagonal
 │   ├── check-openapi-codes.sh                # mã lỗi Go ↔ enum trong openapi.yaml
+│   ├── check-error-messages.sh               # enum trong openapi.yaml ↔ bảng thông điệp của web
 │   └── check-tree.sh                         # cây thư mục ở mục này ↔ đĩa
 ├── docs/
 │   ├── design/                               # 01..06, xem mục 16

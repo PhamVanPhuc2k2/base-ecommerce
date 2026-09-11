@@ -63,6 +63,10 @@ tasks:
     desc: Đối chiếu mã lỗi trong openapi.yaml với mã lỗi thật trong code Go
     cmd: bash scripts/check-openapi-codes.sh
 
+  error-messages:
+    desc: Đối chiếu mã lỗi trong openapi.yaml với bảng thông điệp tiếng Việt của web
+    cmd: bash scripts/check-error-messages.sh
+
   tree:
     desc: Đối chiếu cây thư mục ở README mục 4 với đĩa thật
     cmd: bash scripts/check-tree.sh
@@ -87,6 +91,7 @@ tasks:
       - task: lint
       - task: arch
       - task: api-codes
+      - task: error-messages
       - task: tree
       - task: sqlc-drift
 
