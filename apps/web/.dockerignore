@@ -1,0 +1,27 @@
+# Mọi thứ ở đây bị loại khỏi build context. Context nhỏ thì `docker build` gửi
+# ít dữ liệu hơn sang daemon, và quan trọng hơn: không vô tình nhét file bí mật
+# vào image.
+
+# Bí mật — KHÔNG bao giờ được vào image
+.env
+.env.*
+!.env.example
+
+# node_modules của máy host: có thể chứa native binding build cho Windows, hoàn
+# toàn vô dụng trong image Linux. Tầng build tự chạy `npm ci` để có cây sạch.
+node_modules/
+
+# Kết quả build trên máy host. Chép vào chỉ tổ làm bẩn cache và có nguy cơ lẫn
+# output cũ vào image; `next build` trong container sinh lại từ đầu.
+.next/
+out/
+*.tsbuildinfo
+
+# Không cần để build
+.git/
+.gitignore
+Dockerfile
+.dockerignore
+README.md
+AGENTS.md
+CLAUDE.md

@@ -203,6 +203,34 @@ cặp `digest ↔ lỗi gốc`.
 
 ---
 
+### 8.2. `loading.tsx` ở gốc gây soft 404 — đo được khi làm Task 5
+
+Cái bẫy im lặng nhất của cả P0.4.
+
+| | `/san-pham/<slug-lạ>` |
+|---|---|
+| Có `app/loading.tsx` | **HTTP 200** |
+| Dời `loading.tsx` xuống `app/danh-muc/` | **HTTP 404** |
+
+`loading.tsx` ở gốc bọc **mọi route con** trong một Suspense boundary, nên
+Next.js xả phần vỏ HTML kèm status `200` rồi mới stream nội dung — tới lúc
+`notFound()` chạy thì status đã gửi đi rồi. Gọi `notFound()` sớm hơn nữa, ngay
+trong `generateMetadata`, cũng **vẫn 200**.
+
+Vì sao nó tệ hơn một lỗi 500: trình duyệt **vẫn hiện trang 404 tiếng Việt đúng
+đắn**, nên mắt người không thấy gì sai. Chỉ có Google đọc `200`, kết luận đây là
+soft 404, và giữ mọi sản phẩm đã ngừng bán trong chỉ mục — vĩnh viễn. Với một dự
+án sống bằng SEO thì đó là hỏng thật.
+
+Đánh đổi của cách sửa: khi `notFound()` chạy trong render động, Next trả vỏ
+`<html id="__next_error__">` với `<body>` rỗng và nội dung `not-found.tsx` đi
+trong gói RSC, dựng ở client. Khách vẫn thấy đúng trang; HTML thô thì không.
+Chấp nhận được vì đã là 404 thì không bot nào đọc tới thân trang.
+
+⚠️ **Ai thêm lại `app/loading.tsx` là lỗi này quay lại, không một dấu hiệu nào.**
+
+---
+
 ## 9. Docker
 
 `output: 'standalone'` trong `next.config`. Image multi-stage giống backend.

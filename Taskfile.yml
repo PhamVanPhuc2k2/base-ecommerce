@@ -126,12 +126,19 @@ tasks:
       -t base-ecommerce-{{.CLI_ARGS | default "api"}}:dev
       apps/api
 
+  web-docker-build:
+    desc: Build image storefront Next.js (kiểm nhanh mà không phải dựng cả compose)
+    # Build context là apps/web chứ không phải gốc repo: apps/web có
+    # package-lock.json riêng và Dockerfile chép thẳng `package.json` ở gốc
+    # context.
+    cmd: docker build -t base-ecommerce-web:dev apps/web
+
   up-docker:
-    desc: Dựng hạ tầng VÀ chạy API trong container (kiểm shutdown, image, máy sạch)
+    desc: Dựng hạ tầng VÀ toàn bộ tiến trình ứng dụng trong container (api, worker, outboxrelay, web)
     cmd: docker compose -f deploy/compose.dev.yml --profile app up -d --build --wait
 
   down-docker:
-    desc: Dừng cả hạ tầng lẫn API trong container
+    desc: Dừng cả hạ tầng lẫn mọi tiến trình ứng dụng trong container
     cmd: docker compose -f deploy/compose.dev.yml --profile app down
 
   logs:

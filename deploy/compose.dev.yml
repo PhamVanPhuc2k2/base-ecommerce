@@ -221,6 +221,51 @@ services:
     # nhưng mỗi lần deploy lại sinh một đợt xử lý trùng không cần thiết.
     stop_grace_period: 45s
 
+  # web là storefront Next.js. Cùng profile "app": `task up` thường ngày chỉ dựng
+  # hạ tầng, `task up-docker` dựng thêm toàn bộ tiến trình ứng dụng.
+  #
+  # Chạy trong container kiểm được ba thứ mà `task web-dev` trên máy KHÔNG kiểm
+  # được, và cả ba đều đã suýt lọt:
+  #   - `output: 'standalone'` không tự chép .next/static → trang mất sạch CSS
+  #   - server.js mặc định nghe localhost → không ai từ ngoài container vào được
+  #   - Next.js phải gọi API qua tên service, không phải localhost
+  web:
+    profiles: ["app"]
+    build:
+      context: ../apps/web
+    environment:
+      # Tên service, KHÔNG phải localhost. Bên trong container, `localhost` trỏ
+      # về chính tiến trình Next.js — gọi API kiểu đó luôn bị từ chối kết nối.
+      # Và là cổng TRONG container: api nghe 8080.
+      API_URL: http://api:8080/api/v1
+      # Gốc của mọi URL tuyệt đối: <link rel="canonical">, sitemap.xml, JSON-LD.
+      # Ở dev thì đúng là localhost:3000. Trên production PHẢI đổi thành tên
+      # miền thật — xem chú thích ở .env.example, đặt sai thì Google gộp mọi
+      # tín hiệu xếp hạng về localhost và tên miền thật biến mất khỏi kết quả.
+      SITE_URL: ${SITE_URL:-http://localhost:3000}
+    ports: ["127.0.0.1:3000:3000"]
+    depends_on:
+      # Chỉ service_started, KHÔNG phải service_healthy. Next.js không gọi API
+      # lúc khởi động — mọi lời gọi xảy ra khi có request — và trang đã có sẵn
+      # đường xử lý ApiError để hiện <ErrorState> tiếng Việt khi backend chết.
+      # Bắt chờ api healthy chỉ làm `up --wait` lâu hơn mà không đổi hành vi.
+      api: { condition: service_started }
+    healthcheck:
+      # Image có Node nên dùng thẳng `node -e` được — không cần curl (alpine
+      # không có sẵn) và cũng không cần binary healthcheck riêng như bên API.
+      # 127.0.0.1 chứ không phải localhost: trong container `localhost` có thể
+      # phân giải ra ::1 trước, mà server nghe 0.0.0.0 (IPv4).
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      # Next.js khởi động nhanh nhưng lần đầu vẫn mất vài giây để nạp xong.
+      start_period: 10s
+    # Next.js đóng HTTP server êm khi nhận SIGTERM, và request của storefront
+    # đều ngắn. 20 giây là dư — nhưng vẫn phải khai rõ hơn là để mặc định 10s,
+    # vì một request đang chờ backend chậm cũng ngốn tới HTTP_HANDLER_TIMEOUT.
+    stop_grace_period: 20s
+
 volumes:
   pgdata:
   redisdata:
