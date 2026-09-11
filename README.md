@@ -252,7 +252,7 @@ base-ecommerce/
 │   │   │   │   │   │   ├── product_repo.go
 │   │   │   │   │   │   └── category_repo.go
 │   │   │   │   │   ├── rediscache/           # driven: cache-aside cho sản phẩm và cây danh mục
-│   │   │   │   │   └── logpublisher/         # driven: ghi event ra log — P0.3 thay bằng outbox
+│   │   │   │   │   └── outboxpub/            # driven: domain.Event → outbox.Record, cùng transaction
 │   │   │   │   └── module.go                 # lắp ráp module, expose Mount()
 │   │   │   │
 │   │   │   ├── outbox/                       # hạ tầng dùng chung: outbox + khử trùng lặp
@@ -697,10 +697,10 @@ nghiệp vụ thật đi xuyên mọi tầng, thay vì khung xương trên lý t
 - [x] `pgstore`: sqlc cho query tĩnh, squirrel cho `ListProducts` có filter
 - [x] `rediscache`: cache chi tiết sản phẩm + invalidate khi cập nhật
 - [x] `httpapi`: handler + DTO khớp OpenAPI
-- [x] `EventPublisher` port + adapter `logpublisher` — P0.3 thay bằng outbox mà không sửa `domain`/`app`
+- [x] `EventPublisher` port + adapter `outboxpub` — P0.3 đã thay `logpublisher` bằng outbox mà không sửa `domain`/`app`
 
 ### Outbox & worker
-- [ ] Bảng `outbox` + `outbox.Append` chạy trong transaction
+- [x] Bảng `outbox` + `outbox.Append` chạy trong transaction
 - [ ] `outboxrelay`: poll outbox → publish RabbitMQ → đánh dấu đã gửi
 - [ ] `worker`: consume `product.published`, ghi log (sau này thành indexer Meilisearch)
 - [ ] Consumer idempotent (bảng `processed_events` hoặc khóa theo event ID)

@@ -6,10 +6,11 @@ import (
 	"log/slog"
 
 	"base-ecommerce/api/internal/catalog/adapter/httpapi"
-	"base-ecommerce/api/internal/catalog/adapter/logpublisher"
+	"base-ecommerce/api/internal/catalog/adapter/outboxpub"
 	"base-ecommerce/api/internal/catalog/adapter/pgstore"
 	"base-ecommerce/api/internal/catalog/adapter/rediscache"
 	"base-ecommerce/api/internal/catalog/app"
+	"base-ecommerce/api/internal/outbox"
 	"base-ecommerce/api/internal/platform/postgres"
 	platformredis "base-ecommerce/api/internal/platform/redis"
 
@@ -25,7 +26,10 @@ func New(db *postgres.Manager, cache *platformredis.Cache, log *slog.Logger, adm
 	productRepo := pgstore.NewProductRepository(db)
 	categoryRepo := pgstore.NewCategoryRepository(db)
 	c := rediscache.New(cache)
-	events := logpublisher.New(log)
+	// Sự kiện đi vào bảng outbox trong CÙNG transaction với dữ liệu nghiệp vụ,
+	// thay cho logpublisher của P0.2 (ghi log, mất khi tiến trình chết). Cả
+	// domain lẫn app KHÔNG đổi một dòng nào — chỉ đúng dòng lắp ráp này.
+	events := outboxpub.New(outbox.NewRepository(db))
 
 	treeUC := app.NewGetCategoryTree(categoryRepo, c)
 
