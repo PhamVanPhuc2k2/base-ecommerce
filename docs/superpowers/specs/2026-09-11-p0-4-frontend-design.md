@@ -177,6 +177,30 @@ Không có test tự động. Phần tự động chỉ có: `biome check`, `tsc
 **Mục 9 quan trọng nhất.** Đó là mục duy nhất kiểm đường lỗi, và nó là thứ khách
 thật sẽ gặp. Trang trắng hoặc stack trace lộ ra là hỏng thật.
 
+### 8.1. Đo được khi làm Task 3 — và nó sửa lại chính tài liệu này
+
+React **tước sạch thuộc tính tùy biến** của lỗi ném từ Server Component trước khi
+giao cho `error.tsx`. Không phải chỉ ở production như tôi viết ban đầu, mà ở
+**cả hai chế độ**:
+
+| | `next dev` | production build |
+|---|---|---|
+| `error.name` | `ApiError` | `Error` |
+| `error.message` | `PRODUCT_NOT_FOUND (HTTP 404)` | `Minified React error #441` |
+| `error.code` / `status` / `requestId` | **undefined** | **undefined** |
+| `Object.keys(error)` | `name`, `environmentName`, `digest` | `digest` |
+
+Nghĩa là cái bẫy thật không phải "đọc `error.code` chạy được ở dev rồi hỏng ở
+prod" — nó **không bao giờ** chạy được. Bẫy thật là **parse `error.message`**:
+chuỗi đó còn ở dev nhưng ở prod thành `Minified React error #441`. Và ở prod cả
+`error.name` cũng thành `Error`, nên `instanceof ApiError` lẫn
+`err.name === 'ApiError'` đều vô dụng.
+
+Kết luận kiến trúc không đổi, chỉ mạnh hơn: **Server Component phải tự bắt
+`ApiError`** và render component lỗi của chính nó. `error.tsx` chỉ hiện thông
+điệp chung chung cộng `digest` — và `digest` dùng được thật, log server có đúng
+cặp `digest ↔ lỗi gốc`.
+
 ---
 
 ## 9. Docker
