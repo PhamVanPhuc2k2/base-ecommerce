@@ -130,8 +130,33 @@ lũy tiến) trên cùng một queue: một message TTL 10 phút nằm đầu h�
 message TTL 30 giây phía sau. Muốn backoff lũy tiến thì cần nhiều queue retry,
 mỗi queue một TTL — để P1.
 
-Đếm số lần thử bằng header `x-death` do RabbitMQ tự gắn. Quá **5** lần → publish
-thẳng sang DLQ và ghi log mức ERROR.
+⚠️⚠️ **ĐỪNG đếm số lần thử bằng `x-death`.** Đây là chỗ đặc tả này ban đầu viết
+sai, và cái sai thì im lặng tuyệt đối.
+
+Tài liệu RabbitMQ nói `x-death` có trường `count` tăng lên mỗi lần message bị
+dead-letter qua cùng một cặp `(queue, reason)` — nghe đúng hệt thứ ta cần. Nhưng
+nó chỉ tăng khi **chính RabbitMQ** dead-letter message đó. Ở đây consumer tự
+publish một **bản sao** vào queue retry, nên mỗi vòng là một message mới:
+RabbitMQ dead-letter nó đúng một lần (lúc hết TTL) rồi đặt `count = 1`. Vòng sau
+lại một message mới, lại `count = 1`.
+
+Đã dựng lại: cho một message lỗi quay **5 vòng**, `x-death` đứng yên ở `count: 1`
+suốt, và message **không bao giờ tới DLQ**:
+
+```
+x-death = [{"count": 1, "queue": "catalog.indexer.retry", "reason": "expired", ...}]
+log     = 1× attempts:0, 4× attempts:1        ← đứng yên
+```
+
+Nó đi mãi giữa queue chính và queue retry, mỗi 30 giây một lần, không một dòng
+lỗi nào — đúng thứ mà retry/DLQ sinh ra để tránh.
+
+**Cách đúng:** consumer giữ bộ đếm của chính mình trong header `x-retry-count`,
+tăng lên mỗi lần republish. Nằm hoàn toàn trong tầm kiểm soát, không phụ thuộc
+ngữ nghĩa dead-letter của broker. Vẫn đọc `x-death` và lấy giá trị lớn hơn, cho
+những message tới bằng đường dead-letter thật mà chưa từng qua republish.
+
+Quá **5** lần → publish thẳng sang DLQ và ghi log mức ERROR.
 
 ### 5.2. Hai loại lỗi phải phân biệt
 

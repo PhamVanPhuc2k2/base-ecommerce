@@ -352,16 +352,32 @@ if tag.RowsAffected() == 0 {
 
 ## 8. Việc cần làm
 
-- [ ] `platform/postgres/tx.go`: `Manager`, `DB(ctx)`, `Run`, `RunWith`, retry
-- [ ] Kiểm chứng `Manager` bằng kịch bản `cmd/scratch` tạm: commit, rollback, lồng
+- [x] `platform/postgres/tx.go`: `Manager`, `DB(ctx)`, `Run`, `RunWith`, retry
+- [x] Kiểm chứng `Manager` bằng kịch bản `cmd/scratch` tạm: commit, rollback, lồng
       transaction, context bị hủy, và `pool.Stat().AcquiredConns() == 0`
-- [ ] Migration bảng `outbox` + `processed_events`
-- [ ] `internal/outbox`: `Append`, `FetchUnpublished`, `MarkPublished`, `MarkFailed`
-- [ ] `cmd/outboxrelay`: vòng lặp poll + publisher confirm + graceful shutdown
-- [ ] `platform/rabbitmq`: publisher (confirm), consumer (prefetch, manual ack, retry, DLQ)
-- [ ] Helper `worker.Idempotent(consumer, fn)` bọc `processed_events`
-- [ ] Job dọn outbox cũ
-- [ ] Kiểm chứng bằng tay: tạo product → `psql` thấy dòng outbox → relay publish →
+- [x] Migration bảng `outbox` + `processed_events`
+- [x] `internal/outbox`: `Append`, `FetchUnpublished`, `MarkPublished`, `MarkFailed`
+- [x] `cmd/outboxrelay`: vòng lặp poll + publisher confirm + graceful shutdown
+- [x] `platform/rabbitmq`: publisher (confirm), consumer (prefetch, manual ack, retry, DLQ)
+- [x] Khử trùng lặp bằng `outbox.MarkProcessed` trong CÙNG transaction với việc xử lý.
+      Không tách ra thành helper `worker.Idempotent` như dự định ban đầu: bọc nó
+      trong một hàm nhận callback làm mờ đúng cái quan trọng nhất — rằng đánh dấu
+      và xử lý phải cùng sống hoặc cùng chết trong một transaction
+- [x] Job dọn outbox cũ (và `processed_events`), xóa theo lô, chạy ngay lúc khởi động
+- [x] Kiểm chứng bằng tay: tạo product → `psql` thấy dòng outbox → relay publish →
       worker nhận (xem log) → `published_at` được cập nhật
-- [ ] Kiểm chứng bằng tay: publish lại cùng `event_id` → worker bỏ qua, `processed_events`
+- [x] Kiểm chứng bằng tay: publish lại cùng `event_id` → worker bỏ qua, `processed_events`
       không thêm dòng mới
+
+### Thêm vào sau khi làm thật (11/09/2026)
+
+- [x] **Chặn `FetchUnpublished` chạy ngoài transaction bằng máy.** `FOR UPDATE
+      SKIP LOCKED` ngoài transaction vẫn trả dữ liệu và không lỗi gì, nhưng khóa
+      nhả ngay — hai bản relay sẽ lấy trùng dòng. Không có triệu chứng nào cho
+      tới lúc chạy hai bản cùng lúc trên production. `Manager.InTx(ctx)` để câu
+      lệnh tự chặn mình
+- [x] **Message không route được phải là LỖI**, không chỉ là dòng log. Broker ack
+      chỉ có nghĩa "tôi đã nhận", không có nghĩa "có queue nào giữ nó" — thiếu
+      chỗ này thì relay đánh dấu `published_at` cho message đã bị vứt
+- [x] **Luật kiến trúc 4**: hạ tầng dùng chung không được phụ thuộc module nghiệp
+      vụ, kể cả gián tiếp

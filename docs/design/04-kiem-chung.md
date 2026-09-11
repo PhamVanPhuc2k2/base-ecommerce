@@ -20,7 +20,7 @@ tử tế, và để người đọc sau này biết chính xác điều gì kh�
 Đây là thứ duy nhất chạy tự động, cả ở máy dev lẫn CI.
 
 ```bash
-task check     # = build + vet + lint + arch + api-codes + tree
+task check     # = build + vet + lint + arch + api-codes + tree + sqlc-drift
 ```
 
 | Bước | Bắt được gì |
@@ -31,6 +31,7 @@ task check     # = build + vet + lint + arch + api-codes + tree
 | `scripts/check-arch.sh` | `domain` chạm hạ tầng, `app` import `net/http`, adapter giữ `*pgxpool.Pool` |
 | `scripts/check-openapi-codes.sh` | Mã lỗi code Go trả ra nhưng `api/openapi.yaml` không khai báo (và ngược lại) |
 | `scripts/check-tree.sh` | Cây thư mục ở README mục 4 mô tả thứ không tồn tại, hoặc đánh dấu ⬜ cho thứ đã có |
+| `task sqlc-drift` | Code sqlc đã sinh không khớp file `.sql` — sửa query mà quên `task sqlc` |
 
 **Không có bước nào bắt được lỗi logic.** Một hàm biên dịch được, không vi phạm
 linter, không phá kiến trúc — nhưng tính sai tiền — sẽ đi thẳng vào production.
@@ -152,6 +153,15 @@ gì báo, frontend vỡ lúc chạy.
 **6. Lỗi ở nhánh hiếm.** Nhánh xử lý lỗi, timeout, retry gần như không bao giờ
 được chạy khi thao tác tay. `TxManager` retry lỗi 40001 là ví dụ: kiểm chứng thủ
 công không dựng được tình huống tranh chấp tuần tự hóa.
+
+Từ P0.3, nhánh retry/DLQ của worker **đã dựng lại được** bằng cách tắt Postgres
+rồi thả một message vào queue: message đi qua retry queue năm vòng rồi vào DLQ,
+xem được từng bước qua `rabbitmqctl list_queues` và log. Mất khoảng ba phút.
+
+Và nó **đáng giá**: chính phép thử đó phát hiện consumer đếm số lần thử bằng
+`x-death` của RabbitMQ là sai — bộ đếm đứng yên ở 1, message quay vòng vĩnh viễn
+và không bao giờ tới DLQ. Không một dòng lỗi nào, và không phép kiểm tĩnh nào
+bắt được. Xem [đặc tả P0.3](../superpowers/specs/2026-09-11-p0-3-outbox-design.md) §5.1.
 
 ---
 

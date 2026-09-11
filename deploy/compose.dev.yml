@@ -173,6 +173,54 @@ services:
     # đoạn dừng êm có chạy xong hay không.
     stop_grace_period: 70s
 
+  # worker đọc queue catalog.indexer và xử lý sự kiện sản phẩm. Cùng profile
+  # "app" với api và outboxrelay: `task up` thường ngày chỉ dựng hạ tầng, còn
+  # `task up-docker` dựng cả tiến trình nền.
+  #
+  # Khác outboxrelay ở chỗ service này CHẠY NHIỀU BẢN ĐƯỢC. RabbitMQ chia
+  # message cho các consumer cùng queue, và bản nào xử lý trùng thì
+  # processed_events chặn lại (khóa chính là (consumer, event_id), nên hai bản
+  # cùng xử lý một sự kiện thì bản thứ hai thấy MarkProcessed trả false).
+  # Đổi lại, thứ tự giữa các sự kiện của CÙNG một sản phẩm không còn bảo đảm khi
+  # chạy nhiều bản — P7 muốn scale thì phải tính tới chuyện đó.
+  worker:
+    profiles: ["app"]
+    build:
+      context: ../apps/api
+      args:
+        BINARY: worker
+        VERSION: dev-docker
+    environment:
+      APP_ENV: development
+      LOG_LEVEL: debug
+      # Tên service, không phải localhost — trong mạng của compose thì
+      # "postgres" và "rabbitmq" mới phân giải được, và cổng là cổng TRONG
+      # container.
+      DATABASE_URL: postgres://app:app@postgres:5432/base_ecommerce?sslmode=disable
+      RABBITMQ_URL: amqp://app:app@rabbitmq:5672/
+      # Worker không phục vụ request nào nên không cần khóa admin, nhưng
+      # config.Load đánh dấu ADMIN_API_KEY là bắt buộc cho MỌI binary dùng
+      # chung package config. Để trống thì tiến trình không khởi động được.
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-dev-khoa-chi-dung-cho-may-local}
+      # Vòng lặp consume xử lý tuần tự nên một kết nối là đủ; để 3 cho thoải
+      # mái. Mặc định 20 mà nhân với số tiến trình thì Postgres hết slot nhanh.
+      DB_MAX_CONNS: "3"
+      DB_MIN_CONNS: "1"
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    # KHÔNG có healthcheck, cùng lý do đã ghi ở outboxrelay: /healthcheck trong
+    # image gọi một URL HTTP, mà worker không mở cổng HTTP nào. Dấu hiệu sống
+    # của nó là log và bảng processed_events, không phải một cái đèn xanh giả.
+    #
+    # PHẢI lớn hơn handleTimeout của consumer (30s) cộng thời gian xử lý nốt
+    # những message đã prefetch. 45 giây: docker stop gửi SIGTERM, worker hủy
+    # consumer rồi xử lý nốt phần đang dở. Để mặc định 10 giây thì container bị
+    # SIGKILL giữa chừng, exit code 137, và ta không bao giờ biết đoạn dừng êm
+    # có chạy xong hay không. Message chưa ack thì không mất (broker giao lại),
+    # nhưng mỗi lần deploy lại sinh một đợt xử lý trùng không cần thiết.
+    stop_grace_period: 45s
+
 volumes:
   pgdata:
   redisdata:
