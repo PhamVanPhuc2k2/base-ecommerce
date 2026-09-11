@@ -181,7 +181,7 @@ Thêm ở tầng platform: `internal/platform/redis` — client dùng chung, tim
 | Port | Dùng cho |
 |---|---|
 | `ProductRepository` | `Save`, `ByID`, `BySlug`, `List` |
-| `CategoryRepository` | `All` (dựng cây), `BySlug` |
+| `CategoryRepository` | `All` — đọc toàn bộ để dựng cây. **Không có `BySlug`**: tra slug làm trong bộ nhớ bằng `Tree.BySlug`, cây đã nằm sẵn trong cache nên thêm một truy vấn nữa là thừa |
 | `Cache` | `GetOrLoad`, `Delete` |
 | `EventPublisher` | `Publish(ctx, ...domain.Event)` |
 | `TxManager` | `Run(ctx, fn)` |
