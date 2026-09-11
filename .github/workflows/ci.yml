@@ -39,6 +39,12 @@ jobs:
           version: v2.13.2      # pin cứng để CI và máy dev dùng cùng một bản
           working-directory: apps/api
 
+  api-codes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/check-openapi-codes.sh
+
   arch:
     runs-on: ubuntu-latest
     steps:

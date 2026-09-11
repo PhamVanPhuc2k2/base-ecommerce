@@ -59,6 +59,10 @@ tasks:
     desc: Kiểm tra chiều phụ thuộc kiến trúc
     cmd: bash scripts/check-arch.sh
 
+  api-codes:
+    desc: Đối chiếu mã lỗi trong openapi.yaml với mã lỗi thật trong code Go
+    cmd: bash scripts/check-openapi-codes.sh
+
   check:
     desc: Chạy tất cả kiểm tra tĩnh — chạy trước mỗi lần commit
     # Dự án không dùng unit test. Đây là lưới an toàn duy nhất chạy tự động,
@@ -69,6 +73,7 @@ tasks:
       - task: vet
       - task: lint
       - task: arch
+      - task: api-codes
 
   run:
     desc: Chạy API server
