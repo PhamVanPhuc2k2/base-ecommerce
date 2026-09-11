@@ -19,41 +19,13 @@ export interface paths {
          *     `?attr.ram=16GB&attr.socket=AM5`. `<tên>` là tên thuộc tính bất kỳ do
          *     người bán tự đặt (lưu trong `Product.attributes`), nên không thể liệt
          *     kê hết trong OpenAPI — không có giới hạn nào ngoài quy ước tiền tố này.
+         *
+         *     ⚠️ Type sinh bằng `openapi-typescript` KHÔNG phủ tham số này: object
+         *     `query` sinh ra là object đóng, không có index signature. Frontend phải
+         *     tự nối `attr.<tên>=<giá trị>` vào query string thay vì truyền qua tham
+         *     số `query` đã sinh type.
          */
-        get: {
-            parameters: {
-                query?: {
-                    /** @description Lọc theo slug danh mục (bao gồm danh mục con). */
-                    category?: string;
-                    /** @description Lọc theo slug thương hiệu. */
-                    brand?: string;
-                    /** @description Giá tối thiểu */
-                    price_min?: string;
-                    /** @description Giá tối đa */
-                    price_max?: string;
-                    sort?: "newest" | "price_asc" | "price_desc";
-                    page?: number;
-                    limit?: number;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ProductList"];
-                    };
-                };
-                400: components["responses"]["Problem"];
-                422: components["responses"]["Problem"];
-            };
-        };
+        get: operations["listProducts"];
         put?: never;
         post?: never;
         delete?: never;
@@ -70,29 +42,7 @@ export interface paths {
             cookie?: never;
         };
         /** Chi tiết sản phẩm theo slug */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    slug: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["Product"];
-                    };
-                };
-                404: components["responses"]["Problem"];
-            };
-        };
+        get: operations["getProductBySlug"];
         put?: never;
         post?: never;
         delete?: never;
@@ -109,28 +59,7 @@ export interface paths {
             cookie?: never;
         };
         /** Cây danh mục */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            data: components["schemas"]["Category"][];
-                        };
-                    };
-                };
-            };
-        };
+        get: operations["getCategoryTree"];
         put?: never;
         post?: never;
         delete?: never;
@@ -149,35 +78,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Tạo sản phẩm */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["CreateProductRequest"];
-                };
-            };
-            responses: {
-                /** @description Đã tạo */
-                201: {
-                    headers: {
-                        Location?: string;
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["Product"];
-                    };
-                };
-                400: components["responses"]["Problem"];
-                401: components["responses"]["Problem"];
-                409: components["responses"]["Problem"];
-                422: components["responses"]["Problem"];
-            };
-        };
+        post: operations["createProduct"];
         delete?: never;
         options?: never;
         head?: never;
@@ -198,36 +99,7 @@ export interface paths {
         options?: never;
         head?: never;
         /** Sửa sản phẩm */
-        patch: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["UpdateProductRequest"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["Product"];
-                    };
-                };
-                400: components["responses"]["Problem"];
-                401: components["responses"]["Problem"];
-                404: components["responses"]["Problem"];
-                422: components["responses"]["Problem"];
-            };
-        };
+        patch: operations["updateProduct"];
         trace?: never;
     };
     "/admin/products/{id}/publish": {
@@ -240,32 +112,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Đăng bán sản phẩm */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["Product"];
-                    };
-                };
-                401: components["responses"]["Problem"];
-                404: components["responses"]["Problem"];
-                409: components["responses"]["Problem"];
-                422: components["responses"]["Problem"];
-            };
-        };
+        post: operations["publishProduct"];
         delete?: never;
         options?: never;
         head?: never;
@@ -284,7 +131,7 @@ export interface components {
              * @description Mã ổn định để frontend map sang thông điệp tiếng Việt.
              * @enum {string}
              */
-            code: "MALFORMED_REQUEST" | "PAYLOAD_TOO_LARGE" | "UNAUTHENTICATED" | "INTERNAL_ERROR" | "INVALID_SKU" | "NAME_REQUIRED" | "NAME_TOO_LONG" | "INVALID_PRICE" | "UNSUPPORTED_CURRENCY" | "INVALID_SLUG" | "NO_IMAGE" | "PRICE_REQUIRED" | "INVALID_STATUS" | "CATEGORY_NOT_FOUND" | "BRAND_NOT_FOUND" | "ALREADY_PUBLISHED" | "DUPLICATE_SKU" | "DUPLICATE_SLUG" | "PRODUCT_NOT_FOUND" | "INVALID_SORT" | "PAGE_TOO_DEEP";
+            code: "INTERNAL_ERROR" | "INVALID_PAGINATION" | "MALFORMED_REQUEST" | "METHOD_NOT_ALLOWED" | "PAYLOAD_TOO_LARGE" | "REQUEST_CANCELED" | "REQUEST_TIMEOUT" | "ROUTE_NOT_FOUND" | "UNAUTHENTICATED" | "VALIDATION_FAILED" | "INVALID_SKU" | "NAME_REQUIRED" | "NAME_TOO_LONG" | "INVALID_PRICE" | "UNSUPPORTED_CURRENCY" | "INVALID_SLUG" | "NO_IMAGE" | "PRICE_REQUIRED" | "INVALID_STATUS" | "CATEGORY_NOT_FOUND" | "BRAND_NOT_FOUND" | "ALREADY_PUBLISHED" | "DUPLICATE_SKU" | "DUPLICATE_SLUG" | "PRODUCT_NOT_FOUND" | "INVALID_SORT" | "PAGE_TOO_DEEP";
             /**
              * @description Luôn có mặt trong response (không bao giờ bị lược bỏ), nhưng có
              *     thể là chuỗi rỗng nếu middleware RequestID chưa gán được giá trị.
@@ -308,7 +155,7 @@ export interface components {
             /** Format: uuid */
             brand_id: string;
             /**
-             * @description Chuỗi thập phân, ví dụ "25990000.00". KHÔNG BAO GIỜ dùng number:
+             * @description Chuỗi thập phân. Số 0 thừa ở cuối BỊ CẮT ("25990000.50" đọc lại thành "25990000.5"), nên đừng so sánh bằng chuỗi — hãy parse bằng thư viện decimal. KHÔNG BAO GIỜ dùng number:
              *     JSON number qua JS mất chính xác với NUMERIC(15,2) lớn (IEEE 754
              *     double chỉ biểu diễn chính xác số nguyên tới 2^53), nên giá đọc lại
              *     có thể lệch so với giá đã ghi. Server luôn trả amount đã được
@@ -345,6 +192,8 @@ export interface components {
                 limit: number;
                 total: number;
                 total_pages: number;
+                /** @description Trang sâu nhất truy cập được (vượt qua trả 400 PAGE_TOO_DEEP). `has_next` đã tính tới trần này, nên cứ theo `has_next` là an toàn: nó về false ở trang `max_page` dù `total_pages` còn lớn hơn. */
+                max_page: number;
                 has_next: boolean;
                 has_prev: boolean;
             };
@@ -365,7 +214,7 @@ export interface components {
             category_id: string;
             /** Format: uuid */
             brand_id: string;
-            /** @description Chuỗi thập phân VND, ví dụ "25990000". Bỏ trống hoặc "0" hợp lệ ở trạng thái draft. */
+            /** @description Chuỗi thập phân VND, ví dụ "25990000". BẮT BUỘC. Muốn tạo nháp chưa có giá thì gửi "0" — chuỗi rỗng hoặc thiếu hẳn field đều trả 422 INVALID_PRICE. */
             price: string;
             /** @default VND */
             currency: string;
@@ -374,12 +223,21 @@ export interface components {
             };
             images?: string[];
         };
+        /**
+         * @description Sửa TỪNG PHẦN: mọi trường đều không bắt buộc, và trường vắng mặt GIỮ NGUYÊN giá trị đang có. Gửi `{}` là lệnh không đổi gì.
+         *
+         *     Ràng buộc của sản phẩm đang "live" được kiểm trên trạng thái SAU khi sửa: không thể PATCH để nó còn 0 ảnh (422 NO_IMAGE) hay giá 0 (422 PRICE_REQUIRED).
+         */
         UpdateProductRequest: {
-            name: string;
+            /** @description Đổi tên sẽ sinh lại slug; trùng slug sản phẩm khác trả 409 DUPLICATE_SLUG. */
+            name?: string;
             short_description?: string;
             /** @description Chuỗi thập phân VND. Sản phẩm đang "live" bắt buộc giá > 0. */
-            price: string;
-            /** @default VND */
+            price?: string;
+            /**
+             * @description Chỉ có ý nghĩa khi gửi kèm `price`; gửi một mình thì bị bỏ qua.
+             * @default VND
+             */
             currency: string;
             attributes?: {
                 [key: string]: string;
@@ -404,4 +262,187 @@ export interface components {
     pathItems: never;
 }
 export type $defs = Record<string, never>;
-export type operations = Record<string, never>;
+export interface operations {
+    listProducts: {
+        parameters: {
+            query?: {
+                /** @description Lọc theo slug danh mục, bao gồm toàn bộ danh mục con. */
+                category?: string;
+                /** @description Lọc theo slug thương hiệu. */
+                brand?: string;
+                /** @description Giá tối thiểu, chuỗi thập phân VND. */
+                price_min?: string;
+                /** @description Giá tối đa, chuỗi thập phân VND. */
+                price_max?: string;
+                /** @description Giá trị ngoài danh sách này trả 400 INVALID_SORT. */
+                sort?: "newest" | "price_asc" | "price_desc";
+                /** @description Vượt 200 trả 400 PAGE_TOO_DEEP: offset sâu quá đắt. Không phải số trả 400 INVALID_PAGINATION. Nhỏ hơn 1 thì bị kẹp về 1. */
+                page?: number;
+                /** @description Không phải số trả 400 INVALID_PAGINATION. Ngoài khoảng thì bị KẸP về biên chứ không bị từ chối: 0 và số âm thành 24, lớn hơn 100 thành 100. Đọc `meta.limit` để biết server thật sự dùng bao nhiêu. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductList"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getProductBySlug: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Product"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getCategoryTree: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Category"][];
+                    };
+                };
+            };
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProductRequest"];
+            };
+        };
+        responses: {
+            /** @description Đã tạo */
+            201: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Product"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProductRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Product"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    publishProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Product"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+}
