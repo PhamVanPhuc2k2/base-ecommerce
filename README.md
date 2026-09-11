@@ -51,7 +51,7 @@ trả lời được câu hỏi "nó giải quyết vấn đề gì" — nếu k
 
 | Hạng mục | Công nghệ | Ghi chú |
 |---|---|---|
-| Ngôn ngữ | **Go** 1.25 | `http.ServeMux` chuẩn đã hỗ trợ method + path param |
+| Ngôn ngữ | **Go** 1.26 | `http.ServeMux` chuẩn đã hỗ trợ method + path param |
 | Router | **Chi** | Router mỏng trên `net/http`, không che giấu stdlib |
 | Database | **PostgreSQL** | Source of truth |
 | Driver | **pgx/v5** (`pgxpool`) | Không dùng chế độ `database/sql` |
@@ -559,8 +559,8 @@ mọi cổng chỉ bind vào `127.0.0.1`, không mở ra mạng LAN.
 |---|---|---|
 | API (Go) | 8080 | P0 |
 | PostgreSQL | 5432 | P0 |
-| Redis (một instance) | 6380 | P0 |
-| ↳ tách thành `redis-cache` / `redis-data` | 6380 / 6381 | P0.2 — instance 6380 ở trên **đổi vai** thành `redis-cache`, thêm mới 6381. Xem [thiết kế 03](docs/design/03-redis-cache.md) |
+| Redis (một instance) | 6380 | P0 — P0.2 đã dùng làm cache catalog, không đổi cổng |
+| ↳ tách thành `redis-cache` / `redis-data` | 6380 / 6381 | **P4** khi có giỏ hàng — instance 6380 ở trên **đổi vai** thành `redis-cache`, thêm mới 6381. Hoãn tới P4 vì P0.2 chỉ dùng vai trò cache. Xem [thiết kế 03](docs/design/03-redis-cache.md) |
 | RabbitMQ + management UI | 5672 / 15672 | P0 |
 | MinIO | 9000 / 9001 | P1 |
 | imgproxy | 8081 | P1 |
@@ -617,29 +617,33 @@ nghiệp vụ thật đi xuyên mọi tầng, thay vì khung xương trên lý t
 > Đây là danh sách rút gọn. Mỗi tài liệu trong `docs/design/` có phần "Việc cần làm"
 > chi tiết hơn ở cuối — đọc kèm khi bắt tay vào hạng mục tương ứng.
 
+> Trạng thái: **P0.1 xong** (nền móng backend), **P0.2 xong** (module catalog).
+> Còn lại P0.3 (outbox + worker) và P0.4 (Next.js).
+
 ### Chuẩn bị
-- [ ] `git init`, `.gitignore`, `.editorconfig`
-- [ ] Cài công cụ: `goose`, `sqlc`, `golangci-lint`, `openapi-typescript`
-- [ ] `Taskfile.yml`: `up`, `down`, `migrate`, `sqlc`, `openapi`, `build`, `vet`, `lint`, `arch`, `check`
-- [ ] `deploy/compose.dev.yml`: PostgreSQL, Redis, RabbitMQ
-- [ ] `.env.example` + `platform/config` đọc env và validate lúc khởi động
+- [x] `git init`, `.gitignore`, `.editorconfig`
+- [x] Cài công cụ: `goose`, `sqlc`, `golangci-lint`, `openapi-typescript`
+- [x] `Taskfile.yml`: `up`, `down`, `migrate`, `migrate-create`, `sqlc`, `openapi`, `build`, `vet`, `lint`, `arch`, `api-codes`, `check`
+- [x] `deploy/compose.dev.yml`: PostgreSQL, Redis, RabbitMQ
+- [x] `.env.example` + `platform/config` đọc env và validate lúc khởi động
 
 ### Nền tảng Go
-- [ ] `platform/httpx`: `Wrap()`, `decodeJSON`, `respondJSON`, `writeError`, phân trang
-- [ ] `platform/postgres`: pgxpool + config, `DBTX`, `txmanager` (Unit of Work)
-- [ ] `platform/redis`: client + helper cache có TTL
-- [ ] `platform/rabbitmq`: publisher, consumer có retry + DLQ
-- [ ] `platform/observability`: slog JSON, request ID, `/healthz`, `/readyz`, Sentry
-- [ ] Graceful shutdown cho cả 3 binary (`api`, `worker`, `outboxrelay`)
-- [ ] `server/router.go` + middleware theo thứ tự ở mục 5.5
+- [x] `platform/httpx`: `Wrap()`, `decodeJSON`, `respondJSON`, `writeError`, phân trang
+- [x] `platform/postgres`: pgxpool + config, `DBTX`, `txmanager` (Unit of Work)
+- [x] `platform/redis`: client + helper cache có TTL
+- [ ] `platform/rabbitmq`: publisher, consumer có retry + DLQ — **P0.3**
+- [x] `platform/observability`: slog JSON, request ID, `/healthz`, `/readyz` ⬜ Sentry
+- [ ] Graceful shutdown cho cả 3 binary — `api` đã xong; `worker` và `outboxrelay` chưa tồn tại, làm ở **P0.3**
+- [x] `server/router.go` + middleware theo thứ tự ở mục 5.5
 
 ### Module `catalog` (lát cắt dọc)
-- [ ] Migration: `categories`, `brands`, `products` (có `attributes JSONB` + GIN index)
-- [ ] `domain`: `Product`, `Money`, `Slug`, sentinel errors, `ProductPublished`
-- [ ] `app`: use case `CreateProduct`, `GetProductBySlug`, `ListProducts`
-- [ ] `pgstore`: sqlc cho query tĩnh, squirrel cho `ListProducts` có filter
-- [ ] `rediscache`: cache chi tiết sản phẩm + invalidate khi cập nhật
-- [ ] `httpapi`: handler + DTO khớp OpenAPI
+- [x] Migration: `categories`, `brands`, `products` (có `attributes JSONB` + GIN index)
+- [x] `domain`: `Product`, `Money`, `Slug`, sentinel errors, `ProductPublished`
+- [x] `app`: use case `CreateProduct`, `GetProductBySlug`, `ListProducts`
+- [x] `pgstore`: sqlc cho query tĩnh, squirrel cho `ListProducts` có filter
+- [x] `rediscache`: cache chi tiết sản phẩm + invalidate khi cập nhật
+- [x] `httpapi`: handler + DTO khớp OpenAPI
+- [x] `EventPublisher` port + adapter `logpublisher` — P0.3 thay bằng outbox mà không sửa `domain`/`app`
 
 ### Outbox & worker
 - [ ] Bảng `outbox` + `outbox.Append` chạy trong transaction
@@ -648,9 +652,9 @@ nghiệp vụ thật đi xuyên mọi tầng, thay vì khung xương trên lý t
 - [ ] Consumer idempotent (bảng `processed_events` hoặc khóa theo event ID)
 
 ### Hợp đồng API
-- [ ] Chốt mô hình lỗi, phân trang, quy ước đặt tên JSON (mục 8.2)
-- [ ] `api/openapi.yaml` cho các endpoint catalog
-- [ ] `task openapi` sinh client TS vào `apps/web/lib/api/generated`
+- [x] Chốt mô hình lỗi, phân trang, quy ước đặt tên JSON (mục 8.2)
+- [x] `api/openapi.yaml` cho các endpoint catalog
+- [x] `task openapi` sinh client TS vào `apps/web/lib/api/generated`
 
 ### Frontend
 - [ ] Khởi tạo Next.js + TypeScript strict + Tailwind + shadcn/ui
@@ -665,7 +669,12 @@ nghiệp vụ thật đi xuyên mọi tầng, thay vì khung xương trên lý t
 - [ ] Chạy hết danh sách kiểm chứng thủ công của từng task trong kế hoạch
 - [ ] E2E: tạo sản phẩm → đọc lại → có bản ghi trong outbox
 - [ ] Mở trình duyệt: trang danh sách → vào chi tiết, xem tab Network không có lỗi
-- [ ] GitHub Actions: build + vet + lint + arch + openapi-drift
+- [x] GitHub Actions: build + vet + lint + arch + openapi-drift + `api-codes`
+
+> `openapi-drift` chỉ soi `openapi.yaml` với output do chính nó sinh ra — nó
+> **không bao giờ nhìn vào code Go**, nên một spec sai hoàn toàn về tập mã lỗi vẫn
+> qua được. `scripts/check-openapi-codes.sh` (task `api-codes`) bù chỗ đó: đối
+> chiếu mã lỗi thật trong `errs.New`/`errs.Wrap` với enum `code` trong spec.
 
 ### Tiêu chí hoàn thành P0
 `task up && task migrate && task check` chạy xanh; mở trình duyệt thấy trang sản
@@ -780,6 +789,40 @@ chuyển đã cập nhật chưa.
 8. **Dual-write** — publish RabbitMQ ngoài transaction. Luôn qua outbox.
 9. **Số tiền thành `number` trong JS** — mất chính xác. Truyền dạng chuỗi.
 10. **`"use client"` đặt quá cao** trong cây component — mất hết lợi ích SSR/SEO.
+11. **Hai timeout bằng nhau** — `HTTP_WRITE_TIMEOUT` phải LỚN HƠN
+    `HTTP_HANDLER_TIMEOUT`. Bằng nhau thì đúng lúc handler hết giờ, write
+    deadline cũng hết, và client nhận connection reset thay vì mã lỗi — đúng lúc
+    quá tải và cần chẩn đoán nhất. Config từ chối khởi động nếu đặt sai.
+12. **Tin vào `json.Unmarshal`** — nó nhận `null` và `{}` mà không báo lỗi gì.
+    Dữ liệu dựng lại từ nguồn KHÔNG đi qua hàm dựng (cache, hàng đợi, file) phải
+    được kiểm bất biến lại. Xem `domain.Product.Validate`.
+13. **Cache là phụ thuộc "có thì tốt", đừng để nó thành bắt buộc** — Redis chết
+    thì API phải khởi động được, `/readyz` phải vẫn 200, và mỗi lệnh Redis phải
+    có ngân sách thời gian riêng. `DialTimeout` của go-redis chỉ giới hạn MỘT
+    lần dial, không giới hạn tổng thời gian một lệnh.
+14. **`PATCH` nhận kiểu giá trị thay vì con trỏ** — không phân biệt được "client
+    bỏ qua trường này" với "client muốn xóa trường này", và mặc định im lặng rơi
+    vào vế thứ hai. Mất dữ liệu không có lỗi nào báo.
+
+### 15.1. Cạm bẫy của chính môi trường dev này (Windows)
+
+Những thứ đã làm hỏng phép kiểm chứng, không phải làm hỏng sản phẩm:
+
+- **Ký tự tiếng Việt gõ thẳng vào lệnh shell bị biến thành `U+FFFD`** trước cả
+  khi `curl` nhìn thấy, vì console dùng codepage cp1258. Triệu chứng: dữ liệu
+  lưu xuống có `octet_length` lớn hơn mong đợi và hiện ra dấu `?`. **Cách đúng:**
+  ghi body ra file bằng Python (`encoding='utf-8'`) rồi `curl --data-binary @file`.
+- **`command -v python3` tìm thấy shim rỗng của Microsoft Store.** Phải thử
+  `python3 -c "import yaml"` thật mới biết có dùng được không.
+- **Python trên Windows in `CRLF`**, nên `comm`/`diff` coi `MÃ` khác `MÃ`.
+  Luôn `tr -d ''` trước khi so sánh.
+- **`docker compose exec` bên trong `while read` nuốt stdin** và vòng lặp im lặng
+  chạy sai. Gom danh sách vào biến trước rồi mới lặp.
+- **Nhiều `psql -c` trong một lệnh là MỘT transaction ngầm** — câu cuối lỗi thì
+  mọi câu trước rollback theo. Tách từng lệnh khi muốn chứng minh ràng buộc.
+- **Cổng 8080 còn bị tiến trình cũ giữ** thì bản build mới không lên được, và
+  log vẫn in "server đang lắng nghe" trước khi bind thất bại. Kiểm bằng
+  `netstat -ano | grep :8080` chứ đừng tin dòng log đó.
 
 ---
 

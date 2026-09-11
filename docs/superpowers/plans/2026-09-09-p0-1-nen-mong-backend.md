@@ -4,7 +4,7 @@
 
 **Architecture:** Modular monolith + Hexagonal. Kế hoạch này chỉ dựng `internal/platform/*` (hạ tầng dùng chung) và `internal/server` — chưa có module nghiệp vụ nào. Chiều phụ thuộc `adapter → app → domain` được CI kiểm bằng máy.
 
-**Tech Stack:** Go 1.25 · Chi v5 · pgx/v5 (pgxpool) · goose · log/slog · go-task · Docker Compose · GitHub Actions
+**Tech Stack:** Go 1.26 · Chi v5 · pgx/v5 (pgxpool) · goose · log/slog · go-task · Docker Compose · GitHub Actions
 
 **Tài liệu thiết kế:** [01-transaction-outbox](../../design/01-transaction-outbox.md) · [02-api-contract](../../design/02-api-contract.md) · [04-kiem-chung](../../design/04-kiem-chung.md) · [05-deployment](../../design/05-deployment.md)
 
@@ -70,7 +70,7 @@ Chi tiết đầy đủ nằm trong lịch sử git; đây là bản tóm tắt 
 
 **Năm quyết định các task sau phải tôn trọng:**
 
-1. **`go 1.25`** trong `go.mod`, CI cũng pin 1.25. Sau mỗi `go get`, kiểm
+1. **`go 1.26`** trong `go.mod`, CI cũng pin 1.26. Sau mỗi `go get`, kiểm
    `git diff apps/api/go.mod`. Nếu một thư viện đòi bản Go cao hơn thì **nâng sàn
    Go lên**, đừng hạ phiên bản thư viện xuống — mốc Go là do ta tự đặt, còn hãm
    thư viện sẽ làm mọi lần cài đặt sau đều vấp lại đúng chỗ đó. Nhớ sửa cả
@@ -935,7 +935,7 @@ thì được, nhưng nếu server chạy nền thì không gửi tín hiệu t�
 với **binary làm PID 1**:
 
 ```bash
-docker run -d --name api-stop-test --network base-ecommerce-dev_default   -v "D:/Projects/base-ecommerce/apps/api:/src" -w /src   -e "DATABASE_URL=postgres://app:app@postgres:5432/base_ecommerce?sslmode=disable"   golang:1.25-alpine sh -c 'go build -o /tmp/api ./cmd/api && exec /tmp/api'
+docker run -d --name api-stop-test --network base-ecommerce-dev_default   -v "D:/Projects/base-ecommerce/apps/api:/src" -w /src   -e "DATABASE_URL=postgres://app:app@postgres:5432/base_ecommerce?sslmode=disable"   golang:1.26-alpine sh -c 'go build -o /tmp/api ./cmd/api && exec /tmp/api'
 
 docker stop api-stop-test
 docker logs api-stop-test | tail -3          # phải có "nhận tín hiệu tắt" rồi "đã dừng"
@@ -981,41 +981,60 @@ set -euo pipefail
 cd "$(dirname "$0")/../apps/api"
 fail=0
 
-# Danh sách package hạ tầng mà domain và app không được chạm tới.
-FORBIDDEN='^(github\.com/go-chi/|github\.com/jackc/pgx|github\.com/redis/|github\.com/rabbitmq/|net/http)$'
-
 all_pkgs="$(go list ./internal/... 2>/dev/null || true)"
 
-# 1. domain không được chạm hạ tầng.
-#    Danh sách trắng: stdlib, platform/errs, google/uuid, shopspring/decimal.
+# 1. domain chỉ được import stdlib và ba package trong danh sách trắng.
+#
+# Đây là ALLOWLIST, không phải denylist. Denylist chỉ chặn được những thứ ta
+# nghĩ ra trước; allowlist chặn mọi thứ chưa được cho phép — đúng như README
+# mục 3.1 hứa ("muốn thêm gì nữa phải sửa tài liệu này trước").
+ALLOWED_DOMAIN_DEPS='^(base-ecommerce/api/internal/platform/errs|github\.com/google/uuid|github\.com/shopspring/decimal)$'
+
 for pkg in $(printf '%s\n' "$all_pkgs" | grep -E '/domain(/|$)' || true); do
-  hits="$(go list -deps "$pkg" 2>/dev/null | grep -E "$FORBIDDEN" || true)"
-  if [ -n "$hits" ]; then
-    echo "LỖI KIẾN TRÚC: $pkg import package hạ tầng"
-    printf '%s\n' "$hits" | sed 's/^/    /'
+  # Lọc lấy package trong dự án và package bên thứ ba; stdlib có thành phần
+  # đầu không chứa dấu chấm nên bị loại. Bỏ chính nó ra khỏi danh sách.
+  offenders="$(go list -deps "$pkg" 2>/dev/null \
+    | grep -E '^(base-ecommerce/|[^/]+\.[^/]+/)' \
+    | grep -v "^$pkg\$" \
+    | grep -Ev "$ALLOWED_DOMAIN_DEPS" || true)"
+  if [ -n "$offenders" ]; then
+    echo "LỖI KIẾN TRÚC: $pkg import package ngoài danh sách trắng"
+    printf '%s\n' "$offenders" | sed 's/^/    /'
     fail=1
   fi
 done
 
-# 2. app không được import net/http hay adapter.
+# 2. app chỉ được import domain, errs và hai package tính toán thuần.
+#
+# ALLOWLIST giống rule 1. Bản denylist cũ chỉ xét import TRỰC TIẾP, nên pgx,
+# redis và chi đều lọt, và platform/httpx kéo net/http vào cũng lọt.
+ALLOWED_APP_DEPS='^(base-ecommerce/api/internal/catalog/domain|base-ecommerce/api/internal/platform/errs|github\.com/google/uuid|github\.com/shopspring/decimal)$'
+
 for pkg in $(printf '%s\n' "$all_pkgs" | grep -E '/app(/|$)' || true); do
-  hits="$(go list -f '{{join .Imports "\n"}}' "$pkg" 2>/dev/null \
-          | grep -E '^net/http$|/adapter/' || true)"
-  if [ -n "$hits" ]; then
-    echo "LỖI KIẾN TRÚC: $pkg import net/http hoặc adapter"
-    printf '%s\n' "$hits" | sed 's/^/    /'
+  offenders="$(go list -deps "$pkg" 2>/dev/null \
+    | grep -E '^(base-ecommerce/|[^/]+\.[^/]+/)' \
+    | grep -v "^$pkg\$" \
+    | grep -Ev "$ALLOWED_APP_DEPS" || true)"
+  if [ -n "$offenders" ]; then
+    echo "LỖI KIẾN TRÚC: $pkg import package ngoài danh sách trắng"
+    printf '%s\n' "$offenders" | sed 's/^/    /'
     fail=1
   fi
 done
 
-# 3. repository phải dùng DBTX, không được giữ pool trực tiếp.
-adapter_hits="$(grep -rn --include='*.go' 'pgxpool\.Pool' internal/ 2>/dev/null \
-                | grep '/adapter/' || true)"
-if [ -n "$adapter_hits" ]; then
-  echo "LỖI KIẾN TRÚC: adapter giữ *pgxpool.Pool — phải nhận DBTX qua Manager.DB(ctx)"
-  printf '%s\n' "$adapter_hits" | sed 's/^/    /'
-  fail=1
-fi
+# 3. adapter phải nhận DBTX qua Manager.DB(ctx), không được tự giữ pool.
+#
+# Kiểm import TRỰC TIẾP thay vì grep mã nguồn: grep vừa bắn nhầm vào comment,
+# vừa bị qua mặt bởi `import pp "..."` rồi dùng pp.Pool. Dùng .Imports chứ không
+# phải -deps vì adapter hoàn toàn có quyền chạm pgxpool gián tiếp qua
+# platform/postgres.
+for pkg in $(printf '%s\n' "$all_pkgs" | grep -E '/adapter(/|$)' || true); do
+  if go list -f '{{join .Imports "\n"}}' "$pkg" 2>/dev/null \
+     | grep -q '^github\.com/jackc/pgx/v5/pgxpool$'; then
+    echo "LỖI KIẾN TRÚC: $pkg import pgxpool trực tiếp — phải nhận DBTX qua Manager.DB(ctx)"
+    fail=1
+  fi
+done
 
 if [ "$fail" -eq 0 ]; then
   echo "Kiểm tra kiến trúc: OK"
@@ -1093,7 +1112,7 @@ on:
   pull_request:
 
 env:
-  GO_VERSION: '1.25'
+  GO_VERSION: '1.26'
 
 jobs:
   build:

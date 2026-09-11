@@ -20,27 +20,36 @@ tham số **toàn server** — các database logic (DB 0, DB 1...) dùng chung m
 bộ nhớ và một chính sách xóa. Không có cách nào đặt `allkeys-lru` cho DB 0 và
 `noeviction` cho DB 1 trên cùng một instance. Đây là hiểu nhầm phổ biến.
 
-**Quyết định: hai instance Redis riêng biệt**, ngay từ P0.2 khi bắt đầu dùng Redis.
+**Quyết định: hai instance Redis riêng biệt**, tách khi vai trò dữ liệu gốc thật
+sự xuất hiện — tức là **P4 khi có giỏ hàng**, không phải P0.2.
 
-| Instance | Cổng dev | Chính sách | Persistence |
-|---|---|---|---|
-| `redis-cache` | 6380 | `maxmemory 512mb` + `maxmemory-policy allkeys-lru` | Tắt — mất là đọc lại từ Postgres |
-| `redis-data` | 6381 | `maxmemory-policy noeviction` | **Bật AOF**, `appendfsync everysec` |
+P0.2 chỉ dùng vai trò cache (chi tiết sản phẩm, cây danh mục), nên dựng thêm một
+instance chưa ai đọc ghi là thừa.
 
-Hai container trong `compose.dev.yml`, hai service trong production. Chi phí gần
-như bằng không so với rủi ro xóa nhầm giỏ hàng của khách.
+| Instance | Cổng dev | Chính sách | Persistence | Có từ |
+|---|---|---|---|---|
+| `redis-cache` | 6380 | `maxmemory 512mb` + `maxmemory-policy allkeys-lru` | Tắt — mất là đọc lại từ Postgres | P0.2 (hiện chạy cấu hình mặc định của P0.1) |
+| `redis-data` | 6381 | `maxmemory-policy noeviction` | **Bật AOF**, `appendfsync everysec` | P4 |
 
 Với `noeviction`, khi đầy bộ nhớ Redis trả lỗi ghi thay vì âm thầm xóa dữ liệu —
 lỗi ồn ào tốt hơn mất giỏ hàng im lặng. Còn `redis-cache` thì ngược lại: xóa key cũ
 là hành vi đúng, vì mọi thứ trong đó đều dựng lại được.
 
-*(Ở P0.1 compose chỉ có một Redis chạy mặc định `noeviction` + AOF — an toàn cho cả
-hai vai trò vì chưa có code nào dùng tới. P0.2 tách thành hai instance.)*
+**Hiện trạng sau P0.2.** Compose chỉ có một Redis ở cổng 6380, chạy mặc định
+`noeviction` + AOF. Với riêng vai trò cache thì cấu hình này *an toàn nhưng sai
+hướng*: khi đầy bộ nhớ nó sẽ **từ chối ghi cache** thay vì xóa key cũ. Ở quy mô
+dev không chạm tới, nhưng đừng nhầm là đã cấu hình đúng.
 
-**Việc P0.2 phải làm khi tách:** biến `REDIS_ADDR` hiện có trong `.env.example`
-không diễn tả được hai instance, phải đổi thành `REDIS_CACHE_ADDR` (6380) và
-`REDIS_DATA_ADDR` (6381). Lưu ý cổng 6380 sẽ **đổi ngữ nghĩa**: từ `noeviction` +
-AOF sang `allkeys-lru` + không persistence. Đừng để giỏ hàng nằm lại trên cổng đó.
+**Việc P4 phải làm khi tách:**
+
+1. Thêm container `redis-data` (6381) vào `compose.dev.yml`, bật AOF.
+2. Đổi `redis-cache` (6380) sang `allkeys-lru` + tắt persistence. Cổng 6380 vì thế
+   **đổi ngữ nghĩa**: từ chỗ dữ liệu sống được sang chỗ dữ liệu bị xóa bất cứ lúc
+   nào. Đừng để giỏ hàng nằm lại trên cổng đó.
+3. Biến `REDIS_ADDR` hiện có trong `.env.example` và `platform/config` không diễn
+   tả được hai instance, phải tách thành `REDIS_CACHE_ADDR` và `REDIS_DATA_ADDR`.
+4. Bộ đếm rate limit đi vào `redis-cache` — mất bộ đếm chỉ làm nới hạn mức tạm
+   thời, không mất gì của khách.
 
 ---
 

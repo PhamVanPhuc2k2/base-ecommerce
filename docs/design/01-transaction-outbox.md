@@ -167,9 +167,15 @@ func (uc *CreateProduct) Execute(ctx context.Context, in CreateProductInput) (*d
         return nil, err                       // lỗi nghiệp vụ, chưa chạm DB
     }
 
+    // PullEvents gọi TRƯỚC closure, không phải trong. TxManager chạy lại closure
+    // khi gặp lỗi tuần tự hóa, mà PullEvents làm rỗng danh sách sự kiện của
+    // entity — gọi trong closure thì lần thử thứ hai ghi vào outbox KHÔNG sự
+    // kiện nào, và event mất vĩnh viễn đúng lúc hệ thống đang tranh chấp.
+    events := p.PullEvents()
+
     err = uc.tx.Run(ctx, func(ctx context.Context) error {
         if err := uc.repo.Save(ctx, p); err != nil { return err }
-        return uc.outbox.Append(ctx, p.PullEvents()...)   // CÙNG transaction
+        return uc.outbox.Append(ctx, events...)   // CÙNG transaction
     })
     if err != nil {
         return nil, err

@@ -20,7 +20,7 @@ tử tế, và để người đọc sau này biết chính xác điều gì kh�
 Đây là thứ duy nhất chạy tự động, cả ở máy dev lẫn CI.
 
 ```bash
-task check     # = build + vet + lint + arch
+task check     # = build + vet + lint + arch + api-codes
 ```
 
 | Bước | Bắt được gì |
@@ -29,6 +29,7 @@ task check     # = build + vet + lint + arch
 | `go vet ./...` | Format string sai, lỗi copy mutex, shadow biến nguy hiểm |
 | `golangci-lint run` | Bỏ qua lỗi trả về, quên đóng body, quên `rows.Err()`, so sánh lỗi bằng `==` thay vì `errors.Is`, `return nil` khi `err != nil`, thiếu context |
 | `scripts/check-arch.sh` | `domain` chạm hạ tầng, `app` import `net/http`, adapter giữ `*pgxpool.Pool` |
+| `scripts/check-openapi-codes.sh` | Mã lỗi code Go trả ra nhưng `api/openapi.yaml` không khai báo (và ngược lại) |
 
 **Không có bước nào bắt được lỗi logic.** Một hàm biên dịch được, không vi phạm
 linter, không phá kiến trúc — nhưng tính sai tiền — sẽ đi thẳng vào production.
@@ -89,6 +90,13 @@ rồi `Ctrl+C` — phải thấy `"đã dừng"` và thoát mã 0.
 
 Ghi thẳng, không giảm nhẹ. Đây là những thứ không có gì bảo vệ:
 
+⚠️ **Và một cảnh báo về chính cách kiểm chứng thủ công.** Mọi bước kiểm trong các
+kế hoạch đều chạy trên vài dòng dữ liệu. Ở quy mô đó Postgres luôn chọn `Seq Scan`
+và **mọi kế hoạch truy vấn trông giống hệt nhau** — nghĩa là bước kiểm chứng không
+phân biệt được index tốt với không có index. `SET enable_seqscan = off` chứng minh
+index *tồn tại*, không chứng minh nó *được chọn*. Chỗ nào đo hiệu năng thì phải nạp
+vài trăm nghìn dòng bằng `generate_series`, chạy `ANALYZE`, rồi mới `EXPLAIN`.
+
 **1. Lỗi hồi quy khi sửa code cũ.** Sửa `errs` hay `httpx` sẽ không có gì báo là
 đã làm hỏng chỗ gọi tới nó. Phải tự nhớ và tự chạy lại phần kiểm chứng liên quan.
 Rủi ro này lớn dần theo số module — tới P0.4 sẽ có 4 module cùng dùng `platform/*`.
@@ -104,16 +112,43 @@ kết quả đúng. Khi làm P3 (Inventory), tối thiểu phải:
   thành công với tồn kho ban đầu, rồi xóa file
 - Đối soát tồn kho với tổng đơn đã đặt định kỳ trên production
 
-**3. Lỗi mapping dữ liệu.** `JSONB`, mảng, `NUMERIC`, `timestamptz` rất dễ sai khi
+**3. Vòng lặp trong cây danh mục.** `categories.parent_id` tự tham chiếu, và khóa
+ngoại **không** ngăn được vòng lặp. Một câu `UPDATE` là đủ:
+
+```sql
+-- A → B → C đã tồn tại
+UPDATE categories SET parent_id = C_id WHERE id = A_id;   -- vòng lặp, không lỗi
+```
+
+Migration `catalog_guards` đã chặn trường hợp một node (`CHECK (parent_id <> id)`),
+nhưng vòng lặp nhiều node **vẫn tạo được**.
+
+Hậu quả tệ hơn vẻ ngoài. `Tree.DescendantIDs` có tập visited nên tiến trình không
+treo — nhưng `NewTree` chỉ đưa danh mục vào `roots` khi `parent_id IS NULL`, mà mọi
+thành viên của vòng lặp đều có cha. Nghĩa là **cả nhánh biến mất khỏi `Roots()`**:
+điều hướng cửa hàng mất nguyên một mảng danh mục, không có lỗi nào ở đâu cả.
+
+P0.2 không có endpoint ghi danh mục nên chỉ chạm tới được bằng SQL viết tay — đúng
+cách dữ liệu mẫu được nạp. Khi P1 thêm CRUD danh mục, endpoint đó **bắt buộc** phải
+kiểm tổ tiên trước khi ghi.
+
+**4. Lỗi mapping dữ liệu.** `JSONB`, mảng, `NUMERIC`, `timestamptz` rất dễ sai khi
 chuyển qua lại giữa Go và Postgres. Không có round-trip test thì phải tự lưu rồi
 đọc lại và so từng trường bằng mắt, ít nhất một lần cho mỗi entity.
 
-**4. Trôi lệch hợp đồng API.** Backend đổi tên trường mà quên sửa `openapi.yaml`
-sẽ không ai báo. Từ P0.2, job `openapi-drift` trong CI (sinh lại client TS rồi
-kiểm `git diff`) bù được **một phần**: nó bắt được spec và code TS lệch nhau,
-nhưng không bắt được spec và handler Go lệch nhau.
+**5. Trôi lệch hợp đồng API.** Backend đổi tên trường mà quên sửa `openapi.yaml`
+sẽ không ai báo. Từ P0.2 có hai lớp bù, và cần hiểu rõ **lớp nào bắt được gì**:
 
-**5. Lỗi ở nhánh hiếm.** Nhánh xử lý lỗi, timeout, retry gần như không bao giờ
+| Lớp | Bắt được | KHÔNG bắt được |
+|---|---|---|
+| `openapi-drift` (sinh lại client TS rồi kiểm `git diff`) | Spec và file `schema.ts` đã commit lệch nhau | Bất cứ thứ gì liên quan tới code Go — nó không bao giờ đọc code Go. Một spec sai hoàn toàn nhưng nhất quán với chính nó vẫn qua |
+| `api-codes` (`scripts/check-openapi-codes.sh`) | Mã lỗi trong `errs.New`/`errs.Wrap` mà spec thiếu, và mã spec khai báo nhưng code không thể sinh ra | Tên trường, kiểu dữ liệu, mã trạng thái HTTP, tham số truy vấn. Nó cũng chỉ `grep` được chuỗi viết thẳng — mã lỗi tạo từ biến hay hằng thì nó mù |
+
+Nghĩa là **tên trường và hình dạng JSON vẫn hoàn toàn không được bảo vệ**. Đổi
+`short_description` thành `summary` trong `dto.go` mà quên sửa spec thì không có
+gì báo, frontend vỡ lúc chạy.
+
+**6. Lỗi ở nhánh hiếm.** Nhánh xử lý lỗi, timeout, retry gần như không bao giờ
 được chạy khi thao tác tay. `TxManager` retry lỗi 40001 là ví dụ: kiểm chứng thủ
 công không dựng được tình huống tranh chấp tuần tự hóa.
 

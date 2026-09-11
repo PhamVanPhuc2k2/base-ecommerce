@@ -12,10 +12,12 @@ import (
 	"syscall"
 	"time"
 
+	"base-ecommerce/api/internal/catalog"
 	"base-ecommerce/api/internal/platform/config"
 	"base-ecommerce/api/internal/platform/health"
 	"base-ecommerce/api/internal/platform/observability"
 	"base-ecommerce/api/internal/platform/postgres"
+	platformredis "base-ecommerce/api/internal/platform/redis"
 	"base-ecommerce/api/internal/server"
 )
 
@@ -70,11 +72,21 @@ func run() error {
 	defer pool.Close()
 	log.Info("đã kết nối database")
 
-	h := health.New(cfg.Version, postgres.NewHealthChecker(pool))
+	rdb := platformredis.NewClient(startCtx, cfg.Redis, log)
+	defer func() { _ = rdb.Close() }()
+
+	txManager := postgres.NewManager(pool)
+	cache := platformredis.NewCache(rdb, log)
+	catalogModule := catalog.New(txManager, cache, log, cfg.AdminKey)
+
+	h := health.New(cfg.Version,
+		postgres.NewHealthChecker(pool),
+		platformredis.NewHealthChecker(rdb),
+	)
 
 	srv := &http.Server{
 		Addr:              cfg.HTTP.Addr,
-		Handler:           server.New(log, h),
+		Handler:           server.New(log, h, cfg.HTTP.HandlerTimeout, catalogModule),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       cfg.HTTP.ReadTimeout,
 		WriteTimeout:      cfg.HTTP.WriteTimeout,

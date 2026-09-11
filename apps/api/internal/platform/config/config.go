@@ -17,14 +17,20 @@ type Config struct {
 	Env      string
 	Version  string
 	LogLevel string
+	AdminKey string
 	HTTP     HTTP
 	DB       DB
+	Redis    Redis
 }
 
 type HTTP struct {
-	Addr            string
-	ReadTimeout     time.Duration
+	Addr string
+	// HandlerTimeout là trần thời gian cho một handler nghiệp vụ.
+	HandlerTimeout time.Duration
+	// WriteTimeout là trần thời gian net/http cho phép ghi response. PHẢI lớn
+	// hơn HandlerTimeout — xem phần kiểm tra trong Load.
 	WriteTimeout    time.Duration
+	ReadTimeout     time.Duration
 	ShutdownTimeout time.Duration
 }
 
@@ -35,13 +41,19 @@ type DB struct {
 	MaxConnLifetime time.Duration
 }
 
+type Redis struct {
+	Addr     string
+	PoolSize int
+}
+
 func (c *Config) IsProduction() bool { return c.Env == "production" }
 
 // String che các giá trị nhạy cảm để an toàn khi ghi log toàn bộ config.
 func (c *Config) String() string {
 	return fmt.Sprintf(
-		"Config{Env:%s Version:%s HTTP.Addr:%s DB.DSN:%s DB.MaxConns:%d}",
+		"Config{Env:%s Version:%s HTTP.Addr:%s DB.DSN:%s DB.MaxConns:%d Redis.Addr:%s AdminKey:%s}",
 		c.Env, c.Version, c.HTTP.Addr, redactDSN(c.DB.DSN), c.DB.MaxConns,
+		c.Redis.Addr, redactSecret(c.AdminKey),
 	)
 }
 
@@ -59,6 +71,14 @@ func redactDSN(dsn string) string {
 	return dsn
 }
 
+// redactSecret chỉ để lại dấu vết đủ để biết đã nạp đúng biến hay chưa.
+func redactSecret(s string) string {
+	if s == "" {
+		return "(rỗng)"
+	}
+	return fmt.Sprintf("(đã đặt, %d ký tự)", len(s))
+}
+
 func Load() (*Config, error) {
 	l := &loader{}
 
@@ -69,7 +89,8 @@ func Load() (*Config, error) {
 		HTTP: HTTP{
 			Addr:            l.str("HTTP_ADDR", ":8080"),
 			ReadTimeout:     l.dur("HTTP_READ_TIMEOUT", 15*time.Second),
-			WriteTimeout:    l.dur("HTTP_WRITE_TIMEOUT", 30*time.Second),
+			HandlerTimeout:  l.dur("HTTP_HANDLER_TIMEOUT", 30*time.Second),
+			WriteTimeout:    l.dur("HTTP_WRITE_TIMEOUT", 35*time.Second),
 			ShutdownTimeout: l.dur("HTTP_SHUTDOWN_TIMEOUT", 30*time.Second),
 		},
 		DB: DB{
@@ -78,6 +99,28 @@ func Load() (*Config, error) {
 			MinConns:        int32(l.num("DB_MIN_CONNS", 2)),
 			MaxConnLifetime: l.dur("DB_MAX_CONN_LIFETIME", time.Hour),
 		},
+		// Khóa tạm bảo vệ API ghi cho tới khi P2 có JWT + RBAC.
+		// BẮT BUỘC: thiếu thì server không khởi động, nên không thể vô tình
+		// deploy một API ghi không ai bảo vệ.
+		AdminKey: l.required("ADMIN_API_KEY"),
+		Redis: Redis{
+			Addr:     l.str("REDIS_ADDR", "localhost:6380"),
+			PoolSize: l.num("REDIS_POOL_SIZE", 20),
+		},
+	}
+
+	// WriteTimeout phải lớn hơn HandlerTimeout, nếu không response lỗi không
+	// bao giờ tới được client.
+	//
+	// Đây là lỗi đã đo được: hai mốc cùng là 30s, handler hết giờ, httpx ghi
+	// problem+json — nhưng write deadline của net/http hết đúng khoảnh khắc đó
+	// nên kết nối bị đóng trước khi flush. Client nhận "Empty reply from
+	// server" thay vì mã lỗi, đúng lúc hệ thống quá tải và cần chẩn đoán nhất.
+	if c.HTTP.WriteTimeout <= c.HTTP.HandlerTimeout {
+		l.errs = append(l.errs, fmt.Errorf(
+			"HTTP_WRITE_TIMEOUT (%s) phải lớn hơn HTTP_HANDLER_TIMEOUT (%s), "+
+				"nếu không response lỗi lúc hết giờ không kịp ghi ra cho client",
+			c.HTTP.WriteTimeout, c.HTTP.HandlerTimeout))
 	}
 
 	if err := l.err(); err != nil {

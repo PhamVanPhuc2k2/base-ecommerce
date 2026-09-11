@@ -6,7 +6,7 @@ on:
   pull_request:
 
 env:
-  GO_VERSION: '1.25'
+  GO_VERSION: '1.26'
 
 jobs:
   build:
@@ -38,6 +38,16 @@ jobs:
         with:
           version: v2.13.2      # pin cứng để CI và máy dev dùng cùng một bản
           working-directory: apps/api
+
+  api-codes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/api/go.mod
+      - run: pip install pyyaml
+      - run: bash scripts/check-openapi-codes.sh
 
   arch:
     runs-on: ubuntu-latest
