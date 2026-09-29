@@ -7,6 +7,9 @@ package gen
 
 import (
 	"context"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 const allCategories = `-- name: AllCategories :many
@@ -41,4 +44,95 @@ func (q *Queries) AllCategories(ctx context.Context) ([]Category, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const categoryByID = `-- name: CategoryByID :one
+SELECT id, parent_id, slug, name, position, created_at, updated_at
+FROM categories
+WHERE id = $1
+`
+
+func (q *Queries) CategoryByID(ctx context.Context, id uuid.UUID) (Category, error) {
+	row := q.db.QueryRow(ctx, categoryByID, id)
+	var i Category
+	err := row.Scan(
+		&i.ID,
+		&i.ParentID,
+		&i.Slug,
+		&i.Name,
+		&i.Position,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const deleteCategory = `-- name: DeleteCategory :execrows
+DELETE FROM categories WHERE id = $1
+`
+
+func (q *Queries) DeleteCategory(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteCategory, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const insertCategory = `-- name: InsertCategory :exec
+INSERT INTO categories (id, parent_id, slug, name, position, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+`
+
+type InsertCategoryParams struct {
+	ID        uuid.UUID
+	ParentID  *uuid.UUID
+	Slug      string
+	Name      string
+	Position  int32
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+func (q *Queries) InsertCategory(ctx context.Context, arg InsertCategoryParams) error {
+	_, err := q.db.Exec(ctx, insertCategory,
+		arg.ID,
+		arg.ParentID,
+		arg.Slug,
+		arg.Name,
+		arg.Position,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	return err
+}
+
+const updateCategory = `-- name: UpdateCategory :execrows
+UPDATE categories
+SET parent_id = $2, slug = $3, name = $4, position = $5, updated_at = $6
+WHERE id = $1
+`
+
+type UpdateCategoryParams struct {
+	ID        uuid.UUID
+	ParentID  *uuid.UUID
+	Slug      string
+	Name      string
+	Position  int32
+	UpdatedAt time.Time
+}
+
+func (q *Queries) UpdateCategory(ctx context.Context, arg UpdateCategoryParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateCategory,
+		arg.ID,
+		arg.ParentID,
+		arg.Slug,
+		arg.Name,
+		arg.Position,
+		arg.UpdatedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
