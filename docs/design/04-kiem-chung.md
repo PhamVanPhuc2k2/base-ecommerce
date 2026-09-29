@@ -28,7 +28,7 @@ task check     # = build + vet + lint + arch + api-codes + tree + sqlc-drift
 | `go build ./...` | Lỗi biên dịch, sai kiểu, thiếu/thừa import |
 | `go vet ./...` | Format string sai, lỗi copy mutex, shadow biến nguy hiểm |
 | `golangci-lint run` | Bỏ qua lỗi trả về, quên đóng body, quên `rows.Err()`, so sánh lỗi bằng `==` thay vì `errors.Is`, `return nil` khi `err != nil`, thiếu context |
-| `scripts/check-arch.sh` | `domain` chạm hạ tầng, `app` import `net/http`, adapter giữ `*pgxpool.Pool` |
+| `scripts/check-arch.sh` | `domain` chạm hạ tầng, `usecase` import `net/http`, repository giữ `*pgxpool.Pool`, delivery gọi thẳng repository, `pkg/` biết `internal/` |
 | `scripts/check-openapi-codes.sh` | Mã lỗi code Go trả ra nhưng `api/openapi.yaml` không khai báo (và ngược lại) |
 | `scripts/check-tree.sh` | Cây thư mục ở README mục 4 mô tả thứ không tồn tại, hoặc đánh dấu ⬜ cho thứ đã có |
 | `task sqlc-drift` | Code sqlc đã sinh không khớp file `.sql` — sửa query mà quên `task sqlc` |
@@ -101,7 +101,7 @@ vài trăm nghìn dòng bằng `generate_series`, chạy `ANALYZE`, rồi mới 
 
 **1. Lỗi hồi quy khi sửa code cũ.** Sửa `errs` hay `httpx` sẽ không có gì báo là
 đã làm hỏng chỗ gọi tới nó. Phải tự nhớ và tự chạy lại phần kiểm chứng liên quan.
-Rủi ro này lớn dần theo số module — tới P0.4 sẽ có 4 module cùng dùng `platform/*`.
+Rủi ro này lớn dần theo số module — tới P0.4 sẽ có 4 module cùng dùng `pkg/*`.
 
 **2. Sai sót về đồng thời.** Đây là rủi ro nghiêm trọng nhất, vì nghiệp vụ có
 **bán vượt tồn kho**. Một lỗi kiểu 50 người cùng mua 10 sản phẩm cuối và 12 đơn

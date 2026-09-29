@@ -1,0 +1,41 @@
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    // arr[0] trở thành T | undefined, nên quên kiểm mảng rỗng là lỗi biên dịch
+    // thay vì undefined lúc chạy. Cùng tinh thần với backend: dịch lỗi runtime
+    // thành lỗi build.
+    "noUncheckedIndexedAccess": true,
+    // Ghi đè method mà quên `override` là lỗi — tránh việc đổi tên ở lớp cha
+    // biến lớp con thành method mới chẳng ai gọi, im lặng không báo gì.
+    "noImplicitOverride": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": ["./*"]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts",
+    "**/*.mts"
+  ],
+  "exclude": ["node_modules"]
+}

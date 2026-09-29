@@ -1,0 +1,27 @@
+# Hot-reload cho cmd/api khi phát triển trên máy: sửa file .go là air tự
+# build lại và khởi động lại tiến trình. Chạy: task dev
+#
+# Không dùng trong Docker hay CI — image production build một lần bằng Dockerfile.
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  # Đuôi .exe để chạy được trên Windows; trên Linux/macOS nó chỉ là tên file.
+  cmd = "go build -o ./tmp/api.exe ./cmd/api"
+  bin = "./tmp/api.exe"
+  include_ext = ["go"]
+  exclude_dir = ["tmp", "migrations"]
+  # Chờ một nhịp sau lần lưu cuối để editor lưu nhiều file cùng lúc chỉ gây
+  # MỘT lần build.
+  delay = 500
+  # Gửi SIGINT và chờ trước khi giết, để đoạn dừng êm trong main.go kịp chạy —
+  # đúng hành vi sẽ gặp khi deploy thật.
+  send_interrupt = true
+  kill_delay = "5s"
+  stop_on_error = true
+
+[log]
+  time = false
+
+[misc]
+  clean_on_exit = true

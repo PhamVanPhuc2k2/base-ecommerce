@@ -134,11 +134,11 @@ Phân biệt 400 và 422: **400 = tôi không hiểu request, 422 = tôi hiểu 
 
 ### 2.3. Cài đặt trong Go
 
-Package kernel `platform/errs`, **không phụ thuộc gì ngoài stdlib**, nên `domain`
+Package kernel `pkg/errs`, **không phụ thuộc gì ngoài stdlib**, nên `domain`
 được phép import (xem nới lỏng quy tắc 3.1 ở README).
 
 ```go
-// internal/platform/errs/errs.go
+// pkg/errs/errs.go
 package errs
 
 type Kind uint8
@@ -212,7 +212,7 @@ chặn, vì chúng nằm ở phía người gọi:
 Domain khai báo lỗi của mình:
 
 ```go
-// internal/catalog/domain/errors.go
+// internal/domain/errors.go
 var ErrProductNotFound = &errs.Error{
     Kind: errs.KindNotFound, Code: "PRODUCT_NOT_FOUND",
     Message: "Không tìm thấy sản phẩm",
@@ -222,7 +222,7 @@ var ErrProductNotFound = &errs.Error{
 Tầng HTTP map một chỗ duy nhất:
 
 ```go
-// internal/platform/httpx/error.go
+// pkg/httpx/error.go
 func writeError(w http.ResponseWriter, r *http.Request, err error) {
     var e *errs.Error
     if !errors.As(err, &e) {
@@ -425,9 +425,9 @@ Linter `contextcheck` và `noctx` bắt được phần lớn trường hợp, n
 
 ## 7. Việc cần làm
 
-- [ ] `platform/errs`: `Kind`, `Error`, constructor, `statusOf`
-- [ ] `platform/httpx`: `writeProblem`, `writeError`, `decodeJSON` có giới hạn kích thước
-- [ ] `platform/httpx/paging`: parse + validate `page`/`limit`/`sort`/`after`
+- [ ] `pkg/errs`: `Kind`, `Error`, constructor, `statusOf`
+- [ ] `pkg/httpx`: `writeProblem`, `writeError`, `decodeJSON` có giới hạn kích thước
+- [ ] `pkg/httpx/paging`: parse + validate `page`/`limit`/`sort`/`after`
 - [ ] Middleware: RequestID, Logger, Recoverer, Timeout, CORS, RateLimit, BodyLimit
 - [ ] Middleware `Idempotency-Key` (lưu Redis 24h)
 - [ ] `api/openapi.yaml` + cấu trúc `paths/` `components/`

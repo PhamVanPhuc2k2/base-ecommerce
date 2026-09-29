@@ -1,6 +1,6 @@
 # 01 — Transaction & Outbox
 
-Thiết kế cách `app` mở transaction mà **không biết pgx là gì**, và cách phát sự
+Thiết kế cách `usecase` mở transaction mà **không biết pgx là gì**, và cách phát sự
 kiện ra RabbitMQ mà không mất event.
 
 ---
@@ -13,16 +13,16 @@ Use case `CreateProduct` cần làm 3 việc **nguyên tử**:
 lưu product  +  ghi outbox event  →  cùng commit hoặc cùng rollback
 ```
 
-Nhưng theo nguyên tắc 3.1, `app` không được import `pgx`. Vậy `app` mở transaction
+Nhưng theo nguyên tắc 3.1, `usecase` không được import `pgx`. Vậy `usecase` mở transaction
 bằng cách nào, và làm sao để hai repository khác nhau cùng dùng **đúng một** `pgx.Tx`?
 
-Đây là chỗ Hexagonal trong Go hay vỡ trận. Ba cách giải thường gặp:
+Đây là chỗ Clean Architecture trong Go hay vỡ trận. Ba cách giải thường gặp:
 
 | Cách | Đánh giá |
 |---|---|
-| Truyền `Tx` qua tham số: `repo.Save(ctx, tx, p)` | Rò rỉ kiểu hạ tầng vào port của `app`. Loại |
-| Repository có `WithTx(tx) Repository` | Vẫn phải cầm `tx` ở `app`. Loại |
-| **Truyền `Tx` ngầm qua `context`** | `app` chỉ thấy interface thuần. **Chọn cách này** |
+| Truyền `Tx` qua tham số: `repo.Save(ctx, tx, p)` | Rò rỉ kiểu hạ tầng vào port của `usecase`. Loại |
+| Repository có `WithTx(tx) Repository` | Vẫn phải cầm `tx` ở `usecase`. Loại |
+| **Truyền `Tx` ngầm qua `context`** | `usecase` chỉ thấy interface thuần. **Chọn cách này** |
 
 Đánh đổi của cách 3: nó **ngầm** — nhìn chữ ký hàm không biết đang trong transaction
 hay không. Bù lại bằng một kỷ luật duy nhất, có thể kiểm bằng máy:
@@ -30,10 +30,10 @@ hay không. Bù lại bằng một kỷ luật duy nhất, có thể kiểm bằ
 
 ---
 
-## 2. Port khai báo trong `app`
+## 2. Port khai báo trong `usecase`
 
 ```go
-// internal/catalog/app/ports.go
+// internal/usecase/ports.go
 package app
 
 // TxManager cho phép use case gom nhiều thao tác vào một transaction.
@@ -48,10 +48,10 @@ muộn sẽ có người quên `Rollback`.
 
 ---
 
-## 3. Cài đặt trong `platform/postgres`
+## 3. Cài đặt trong `pkg/postgres`
 
 ```go
-// internal/platform/postgres/tx.go
+// pkg/postgres/tx.go
 package postgres
 
 type txKey struct{}
@@ -134,7 +134,7 @@ vẹn nên **`fn` phải không có tác dụng phụ bên ngoài DB** — xem q
 ## 4. Repository dùng như thế nào
 
 ```go
-// internal/catalog/adapter/pgstore/repository.go
+// internal/repository/pgstore/repository.go
 type ProductRepository struct{ db *postgres.Manager }
 
 func (r *ProductRepository) Save(ctx context.Context, p *domain.Product) error {
@@ -146,7 +146,7 @@ func (r *ProductRepository) Save(ctx context.Context, p *domain.Product) error {
 Repository **không có** field `pool`. Đó là toàn bộ kỷ luật cần giữ, và CI kiểm được:
 
 ```bash
-grep -rn "pgxpool.Pool" internal/*/adapter/ && exit 1
+grep -rn "pgxpool.Pool" internal/repository/ && exit 1
 ```
 
 ---
@@ -154,7 +154,7 @@ grep -rn "pgxpool.Pool" internal/*/adapter/ && exit 1
 ## 5. Use case dùng như thế nào
 
 ```go
-// internal/catalog/app/create_product.go
+// internal/usecase/create_product.go
 type CreateProduct struct {
     tx     TxManager
     repo   ProductRepository
@@ -184,13 +184,13 @@ func (uc *CreateProduct) Execute(ctx context.Context, in CreateProductInput) (*d
 }
 ```
 
-`app` không hề nhắc tới pgx. Đổi sang database khác chỉ cần viết `Manager` mới.
+`usecase` không hề nhắc tới pgx. Đổi sang database khác chỉ cần viết `Manager` mới.
 
 ---
 
 ## 6. Bốn quy tắc bắt buộc
 
-1. **Transaction chỉ được mở ở tầng `app`.** Không mở trong handler, không mở trong
+1. **Transaction chỉ được mở ở tầng `usecase`.** Không mở trong handler, không mở trong
    repository. Một use case = tối đa một transaction.
 2. **Không gọi I/O bên ngoài bên trong transaction** — không HTTP, không publish
    RabbitMQ, không gửi email. Lý do: transaction giữ kết nối Postgres, mà kết nối
@@ -352,13 +352,13 @@ if tag.RowsAffected() == 0 {
 
 ## 8. Việc cần làm
 
-- [x] `platform/postgres/tx.go`: `Manager`, `DB(ctx)`, `Run`, `RunWith`, retry
+- [x] `pkg/postgres/tx.go`: `Manager`, `DB(ctx)`, `Run`, `RunWith`, retry
 - [x] Kiểm chứng `Manager` bằng kịch bản `cmd/scratch` tạm: commit, rollback, lồng
       transaction, context bị hủy, và `pool.Stat().AcquiredConns() == 0`
 - [x] Migration bảng `outbox` + `processed_events`
-- [x] `internal/outbox`: `Append`, `FetchUnpublished`, `MarkPublished`, `MarkFailed`
+- [x] `internal/repository/outbox`: `Append`, `FetchUnpublished`, `MarkPublished`, `MarkFailed`
 - [x] `cmd/outboxrelay`: vòng lặp poll + publisher confirm + graceful shutdown
-- [x] `platform/rabbitmq`: publisher (confirm), consumer (prefetch, manual ack, retry, DLQ)
+- [x] `pkg/rabbitmq`: publisher (confirm), consumer (prefetch, manual ack, retry, DLQ)
 - [x] Khử trùng lặp bằng `outbox.MarkProcessed` trong CÙNG transaction với việc xử lý.
       Không tách ra thành helper `worker.Idempotent` như dự định ban đầu: bọc nó
       trong một hàm nhận callback làm mờ đúng cái quan trọng nhất — rằng đánh dấu

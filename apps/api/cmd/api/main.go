@@ -12,13 +12,12 @@ import (
 	"syscall"
 	"time"
 
-	"base-ecommerce/api/internal/catalog"
-	"base-ecommerce/api/internal/platform/config"
-	"base-ecommerce/api/internal/platform/health"
-	"base-ecommerce/api/internal/platform/observability"
-	"base-ecommerce/api/internal/platform/postgres"
-	platformredis "base-ecommerce/api/internal/platform/redis"
-	"base-ecommerce/api/internal/server"
+	"base-ecommerce/api/internal/delivery/httpapi"
+	"base-ecommerce/api/pkg/config"
+	"base-ecommerce/api/pkg/health"
+	"base-ecommerce/api/pkg/observability"
+	"base-ecommerce/api/pkg/postgres"
+	platformredis "base-ecommerce/api/pkg/redis"
 )
 
 // version được nhúng lúc build: -ldflags="-X main.version=$GIT_SHA"
@@ -77,7 +76,7 @@ func run() error {
 
 	txManager := postgres.NewManager(pool)
 	cache := platformredis.NewCache(rdb, log)
-	catalogModule := catalog.New(txManager, cache, cfg.AdminKey)
+	catalogHandler := newCatalogHandler(txManager, cache, cfg.AdminKey)
 
 	h := health.New(cfg.Version,
 		postgres.NewHealthChecker(pool),
@@ -86,7 +85,7 @@ func run() error {
 
 	srv := &http.Server{
 		Addr:              cfg.HTTP.Addr,
-		Handler:           server.New(log, h, cfg.HTTP.HandlerTimeout, catalogModule),
+		Handler:           httpapi.NewRouter(log, h, cfg.HTTP.HandlerTimeout, catalogHandler),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       cfg.HTTP.ReadTimeout,
 		WriteTimeout:      cfg.HTTP.WriteTimeout,

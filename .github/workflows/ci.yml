@@ -49,6 +49,15 @@ jobs:
       - run: pip install pyyaml
       - run: bash scripts/check-openapi-codes.sh
 
+  error-messages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install pyyaml
+      # Không cần Node: script đọc bảng tra bằng regex trên khối errorMessages,
+      # xem phần giải thích chọn cách (a) trong chính script đó.
+      - run: bash scripts/check-error-messages.sh
+
   tree:
     runs-on: ubuntu-latest
     steps:

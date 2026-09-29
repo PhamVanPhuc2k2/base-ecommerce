@@ -1,0 +1,54 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.13/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    // Đọc .gitignore để Biome khỏi quét node_modules/ và .next/. Không có
+    // dòng này thì mỗi lần `biome check .` phải duyệt hàng chục nghìn file.
+    "useIgnoreFile": true
+  },
+  "files": {
+    "ignoreUnknown": false,
+    // lib/api/generated/ do `task openapi` sinh ra. Nếu Biome format lại nó,
+    // lần chạy `task openapi` kế tiếp sẽ ghi đè bằng bản chưa format và
+    // git diff không bao giờ sạch — hai công cụ giằng co vĩnh viễn.
+    "includes": ["**", "!lib/api/generated"]
+  },
+  "formatter": {
+    "enabled": true,
+    // Khớp .editorconfig ở gốc repo (space, 2) để hai công cụ không đá nhau.
+    "indentStyle": "space",
+    "indentWidth": 2,
+    // .gitattributes ép eol=lf; ghi CRLF ở đây là mỗi file đều lệch trên Windows.
+    "lineEnding": "lf",
+    "lineWidth": 100
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended"
+    }
+  },
+  "css": {
+    "parser": {
+      // globals.css dùng @theme của Tailwind 4; không bật cờ này thì Biome
+      // coi đó là cú pháp sai và bỏ luôn việc format file.
+      "tailwindDirectives": true
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "semicolons": "asNeeded"
+    }
+  },
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        // Sắp xếp import tự động — thay cho eslint-plugin-import.
+        "organizeImports": "on"
+      }
+    }
+  }
+}
