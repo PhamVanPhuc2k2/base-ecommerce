@@ -302,6 +302,7 @@ base-ecommerce/
 │       │   ├── search-params.ts              # dựng link lọc: giữ tham số khác, luôn reset page
 │       │   └── site.ts                       # SITE_URL đọc lúc chạy → canonical, sitemap, JSON-LD
 │       ├── app/                              # App Router
+│       │   ├── fonts/                        # Geist .woff2 tự host + OFL.txt — build không cần Google Fonts
 │       │   ├── layout.tsx                    # <html lang="vi">, header, footer, metadata mặc định
 │       │   ├── page.tsx                      # trang chủ tối giản, dẫn sang /danh-muc
 │       │   ├── danh-muc/page.tsx             # danh sách sản phẩm: lọc trên URL, force-dynamic
@@ -752,7 +753,7 @@ nghiệp vụ thật đi xuyên mọi tầng, thay vì khung xương trên lý t
 > chi tiết hơn ở cuối — đọc kèm khi bắt tay vào hạng mục tương ứng.
 
 > Trạng thái: **P0.1 xong** (nền móng backend), **P0.2 xong** (module catalog).
-> Trạng thái: **P0.1, P0.2, P0.3 xong**. Còn lại P0.4 (Next.js).
+> Trạng thái: **P0.1 → P0.4 xong**. P0.4 chờ merge vào `main`.
 
 ### Chuẩn bị
 - [x] `git init`, `.gitignore`, `.editorconfig`
@@ -799,11 +800,15 @@ nghiệp vụ thật đi xuyên mọi tầng, thay vì khung xương trên lý t
 - [x] Trang chi tiết sản phẩm (`generateMetadata` + JSON-LD `Product`)
 - [x] `error.tsx` + `global-error.tsx` + `loading.tsx` + `not-found.tsx`
 - [x] `sitemap.ts` + `robots.ts`
+- [x] Dockerfile `standalone` (node:24-alpine, user `node`, chỉ `.next/cache` ghi được) + service `web` trong compose dev và prod
+- [x] Font Geist tự host (`next/font/local`) — build không cần mạng ra Google
+- [x] `apiGet` có timeout 10 giây — API treo không làm storefront treo theo
 
 ### Kiểm chứng & CI
 - [ ] Chạy hết danh sách kiểm chứng thủ công của từng task trong kế hoạch
 - [ ] E2E: tạo sản phẩm → đọc lại → có bản ghi trong outbox
-- [ ] Mở trình duyệt: trang danh sách → vào chi tiết, xem tab Network không có lỗi
+- [x] Mở trình duyệt: trang danh sách → vào chi tiết, xem tab Network không có lỗi
+  (Chrome headless, P0.4 Task 6 — chỉ còn ảnh bịa của dữ liệu mẫu trả 500)
 - [x] GitHub Actions: build + vet + lint + arch + openapi-drift + `api-codes` + `tree` + build image Docker
 
 > `openapi-drift` chỉ soi `openapi.yaml` với output do chính nó sinh ra — nó

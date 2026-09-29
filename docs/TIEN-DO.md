@@ -1,6 +1,6 @@
 # Tiến độ dự án
 
-Ảnh chụp trạng thái, cập nhật 11/09/2026. Chi tiết kỹ thuật nằm ở
+Ảnh chụp trạng thái, cập nhật 29/09/2026. Chi tiết kỹ thuật nằm ở
 [`docs/design/`](design/); đặc tả và kế hoạch từng giai đoạn ở
 [`docs/superpowers/`](superpowers/).
 
@@ -13,7 +13,7 @@
 | **P0.1** | Nền móng backend | ✅ xong, đã merge |
 | **P0.2** | Module `catalog` (lát cắt dọc) | ✅ xong, đã merge |
 | **P0.3** | Outbox + relay + worker | ✅ xong, đã merge |
-| **P0.4** | Storefront Next.js | 🟡 **5/6 task xong**, đang ở nhánh `feat/p0-4-frontend` |
+| **P0.4** | Storefront Next.js | ✅ **6/6 task xong**, ở nhánh `feat/p0-4-frontend`, **chờ merge** vào `main` |
 | P1 | Catalog & PIM đầy đủ | chưa bắt đầu |
 
 ---
@@ -138,12 +138,12 @@ Thông lượng publish: **19 → 1028 msg/s** sau khi bỏ một khe chờ 50 m
 
 ---
 
-## P0.4 — Storefront Next.js 🟡
+## P0.4 — Storefront Next.js ✅
 
 **Stack:** Next.js 16.3.4, React 19.2.8, TypeScript strict (có
 `noUncheckedIndexedAccess`), Tailwind CSS 4, Biome 2.5. shadcn/ui để P1.
 
-### Đã xong (Task 1–5)
+### Task 1–5
 
 | | |
 |---|---|
@@ -172,42 +172,63 @@ nó — đó là chỗ duy nhất `code` và `request_id` còn nguyên vẹn.
 Thiếu nó thì trình duyệt vẫn hiện chữ nhưng lấy riêng các chữ có dấu từ font dự
 phòng của hệ điều hành — một dòng tiêu đề pha hai bộ chữ.
 
-### Task 6 — Docker: code đã viết, mới xác minh được một phần
+### Task 6 — Docker và kiểm chứng đầy đủ ✅
 
-`apps/web/Dockerfile` và service `web` trong `compose.dev.yml` đã có, cùng
-`API_URL` và `SITE_URL` trong `.env.example`.
+Dựng cả stack bằng `task up-docker` (api, outboxrelay, worker, web đều healthy)
+rồi chạy 12 mục của đặc tả §8. Mục 4, 5, 10 chạy bằng **Chrome thật** (headless,
+bấm link, bấm Back) chứ không chỉ đọc HTML.
 
-**Đã tự chạy và đo được:**
+| # | Kiểm | Kết quả |
+|---|---|---|
+| 1 | `task check` | 8/8 xanh |
+| 2 | build | `next build` sạch trong Docker, cả khi **chặn Google Fonts** |
+| 3 | `/danh-muc` | 24 sản phẩm thật, giá `22.590.000 ₫` |
+| 4 | Lọc + Back | Lọc → sắp xếp → Back → Back: URL, số sản phẩm, sản phẩm đầu **khớp từng bước** |
+| 5 | Phân trang | Trang 1 có "trang sau", trang 2 (9 sp) thì **không**; mọi link phân trang đều 200 |
+| 6 | Chi tiết | Dấu tiếng Việt đúng, JSON-LD `Product` có `offers.price` |
+| 7 | Metadata | `<title>`, `og:title`, `canonical` đúng |
+| 8 | Slug lạ | **HTTP 404** thật (không phải soft 404) |
+| 9 | API chết / API treo | Thông điệp tiếng Việt, không stack trace — xem phát hiện 2 |
+| 10 | Network/Console | Không lỗi JS. Có `/_next/image` **500** — do dữ liệu mẫu dùng ảnh bịa `https://vi.du/anh.jpg`, xem giới hạn |
+| 11 | sitemap/robots | 35 URL (33 sản phẩm), `Disallow: /admin` |
+| 12 | Docker | Lên đủ, dừng êm — xem phát hiện 3 |
 
-| Kiểm | Kết quả |
-|---|---|
-| `docker build` | **thành công**, image **76 MB** |
-| User chạy | `node` (không phải root) ✅ |
-| Entrypoint | `["node","server.js"]` — dạng exec ✅ |
-| **CSS có tới trình duyệt không** | **có** — `/_next/static/chunks/*.css` trả `200 text/css`, 19.319 byte. Cái bẫy `standalone` không chép `.next/static` đã được xử lý đúng |
-| Font | `@font-face` trỏ `../media/*.woff2`, tải được `200 font/woff2` — `next/font/google` đã nhúng font vào build, **runtime không phụ thuộc Google Fonts** |
-| `docker stop` | dừng sau **0,36 giây** |
+### Bốn phát hiện của Task 6
 
-⚠️ **`docker stop` trả exit code `143`, không phải `0`.** Cần hiểu đúng con số
-này: `143 = 128 + 15` nghĩa là tiến trình **nhận được SIGTERM** — tức entrypoint
-dạng exec hoạt động, binary đúng là PID 1. Nếu sai thì sẽ là `137` (SIGKILL sau
-khi hết thời gian chờ), và `docker stop` sẽ mất 10 giây chứ không phải 0,36.
+**1. Build phụ thuộc Google Fonts — đã cắt.** `docker build --no-cache` xanh chỉ
+chứng minh "có mạng thì build được". Chặn riêng hai tên miền font
+(`--add-host fonts.googleapis.com:127.0.0.1 ...`) thì build **hỏng hẳn**:
+`Failed to fetch Geist from Google Fonts`. Chuyển sang `next/font/local` với
+Geist 1.7.2 (OFL) trong `app/fonts/`; kiểm bằng fontTools là đủ mọi chữ có dấu
+tiếng Việt. Build lại khi vẫn chặn Google: xanh, không một cảnh báo.
 
-Nhưng `server.js` của Next.js standalone **không cài handler SIGTERM**, nên nó
-chết theo tín hiệu thay vì tự thoát sạch. Hệ quả: request đang xử lý bị cắt
-ngang lúc deploy. Backend Go thì thoát `0` vì có đoạn dừng êm tự viết. Đây là
-khoảng cách thật giữa hai tiến trình, **chưa xử lý**.
+**2. `apiGet` không có timeout.** API *chết* thì không sao — kết nối bị từ chối
+ngay. API *treo* (`docker pause`) thì `fetch` chờ tới 300 giây mặc định của
+undici, request dồn ứ. Thêm `AbortSignal.timeout(10s)`: đo lại, trang ra
+thông điệp lỗi tiếng Việt sau 12 giây. Next.js 16 xử lý `signal` riêng nên
+không phá cache ISR (`patch-fetch.js`).
 
-**Chưa làm:**
+**3. Ghi chú cũ về SIGTERM là SAI — Next.js có dừng êm.** Bản trước của file
+này viết "server.js không cài handler SIGTERM, request đang xử lý bị cắt
+ngang". Đọc `next/dist/server/lib/start-server.js`: Next 16 **có** handler — nó
+gọi `server.close()` (ngừng nhận kết nối mới, chờ request đang dở) rồi **cố ý**
+`process.exit(143)`. Đo thật: API bị pause, gửi request, `docker stop` ở giây
+thứ 2 → client vẫn nhận **đủ HTTP 200, 19 KB ở giây 10,2**, container thoát
+**143** (không phải 137 = SIGKILL). Không cần sửa gì; 143 là con số đúng của
+Next.js, không phải lỗi.
 
-- [ ] **12 mục kiểm chứng cuối chạy trong container** — còn thiếu: slug lạ có
-      còn trả 404 không (xem cảnh báo `loading.tsx` ở trên), tắt container `api`
-      thì trang có hiện lỗi tử tế không, phân trang, JSON-LD
-- [ ] `docker build --no-cache` để lộ phụ thuộc mạng vào `fonts.gstatic.com`
-      **lúc build** (runtime đã chứng minh là không phụ thuộc)
-- [ ] Xử lý SIGTERM cho Next.js, hoặc ghi nhận đây là giới hạn chấp nhận được
-- [ ] `compose.prod.yml` thêm service `web`
-- [ ] Đồng bộ tài liệu, merge vào `main`
+**4. Container không ghi được cache ISR.** Log đầy
+`Failed to update prerender cache ... EACCES mkdir '/app/.next/cache'`: mọi
+file COPY vào thuộc root, tiến trình chạy bằng `node`. Trang vẫn đúng nhờ cache
+RAM nên thử nhanh không thấy. Sửa: chỉ `chown` đúng `.next/cache` — `server.js`
+vẫn chỉ đọc với `node` (đã thử `touch`: Permission denied).
+
+Ngoài ra: `compose.prod.yml` thêm `web`, và mở `worker` + `outboxrelay` (vẫn bị
+comment dù P0.3 đã xong), kèm `RABBITMQ_URL` còn thiếu. Biến chung tách thành
+anchor `x-go-env` vì `<<` của YAML chỉ gộp nông. Thiếu `SITE_URL` thì compose từ
+chối chạy.
+
+**Còn lại:** merge `feat/p0-4-frontend` vào `main`.
 
 ---
 
@@ -222,6 +243,9 @@ khoảng cách thật giữa hai tiến trình, **chưa xử lý**.
 | **Một bản `outboxrelay`** | `FOR UPDATE SKIP LOCKED` cho phép nhiều bản nhưng **phá vỡ thứ tự event** |
 | **At-least-once, không exactly-once** | Consumer bắt buộc idempotent. Không có cách nào bỏ yêu cầu này |
 | **Backoff cố định 30 giây** | `x-message-ttl` hết hạn theo thứ tự đầu hàng, nên không đặt TTL riêng từng message được |
+| **Trang lỗi trả HTTP 200** | API chết thì `/danh-muc` hiện `<ErrorState>` với status 200 — App Router không cho Server Component đặt 503. Crawler có thể index trang lỗi nếu API chết đúng lúc nó ghé |
+| **Dữ liệu mẫu dùng ảnh bịa** | `https://vi.du/anh.jpg` làm `/_next/image` trả 500. Kèm theo: `remotePatterns` đang cho `hostname: '**'` — lỗ hổng lạm dụng băng thông/SSRF, P1 phải siết về CDN thật (đã có TODO trong `next.config.ts`) |
+| **Ký hiệu ₫ không có trong Geist** | Hiện bằng font dự phòng — y như bản Google Fonts trước đây |
 | **Tách hai instance Redis** | Hoãn tới P4 khi có giỏ hàng — P0 chỉ dùng vai trò cache |
 
 ---

@@ -291,18 +291,18 @@ duyệt, mở sẵn tab **Network** (không được có request đỏ) và **Co
 
 ## 14. Việc cần làm
 
-- [ ] Khởi tạo Next.js + TypeScript strict + Tailwind + shadcn/ui + Biome
-- [ ] `next.config.js`: `output: 'standalone'`, cấu hình image loader
-- [ ] `lib/api/client.ts` + `server.ts` + `ApiError`
-- [ ] `lib/errors.ts` map code → tiếng Việt (CI kiểm khớp enum trong OpenAPI)
-- [ ] `lib/format.ts`: `formatVND`, `formatDate`
+- [x] Khởi tạo Next.js + TypeScript strict + Tailwind + Biome — P0.4 (shadcn/ui để P1)
+- [x] `next.config.ts`: `output: 'standalone'` — P0.4 (image loader → imgproxy để P1)
+- [x] `lib/api/server.ts` + `ApiError` — P0.4 (có timeout 10s) · [ ] `client.ts` khi có giỏ hàng (P4)
+- [x] `lib/errors.ts` map code → tiếng Việt (CI kiểm khớp enum trong OpenAPI) — P0.4
+- [x] `lib/format.ts`: `formatVND`, `formatDate` — P0.4
 - [ ] `lib/seo.ts`: helper JSON-LD cho Product, Breadcrumb, Organization
 - [ ] Layout: header, footer, breadcrumb, mega menu danh mục
 - [ ] Trang danh mục: bộ lọc trên URL bằng nuqs, phân trang có số trang
 - [ ] Trang chi tiết sản phẩm: gallery, thông số, `generateMetadata`, JSON-LD
 - [ ] `AddToCartButton` + Zustand store + badge giỏ hàng
 - [ ] `error.tsx`, `loading.tsx`, `not-found.tsx` cho từng route group
-- [ ] `sitemap.ts`, `robots.ts`
+- [x] `sitemap.ts`, `robots.ts` — P0.4
 - [ ] `app/api/revalidate/route.ts` (xác thực bằng secret)
 - [ ] Kiểm tra ngân sách bundle trong CI
 - [ ] Chạy tay 3 luồng ở mục 13 sau mỗi thay đổi lớn
