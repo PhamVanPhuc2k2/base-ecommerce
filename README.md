@@ -753,7 +753,7 @@ nghiệp vụ thật đi xuyên mọi tầng, thay vì khung xương trên lý t
 > chi tiết hơn ở cuối — đọc kèm khi bắt tay vào hạng mục tương ứng.
 
 > Trạng thái: **P0.1 xong** (nền móng backend), **P0.2 xong** (module catalog).
-> Trạng thái: **P0.1 → P0.4 xong**. P0.4 chờ merge vào `main`.
+> Trạng thái: **P0.1 → P0.4 xong, đã merge**. Tiếp theo: P1 (Catalog & PIM).
 
 ### Chuẩn bị
 - [x] `git init`, `.gitignore`, `.editorconfig`

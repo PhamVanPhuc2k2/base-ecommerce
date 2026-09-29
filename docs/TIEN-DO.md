@@ -13,7 +13,7 @@
 | **P0.1** | Nền móng backend | ✅ xong, đã merge |
 | **P0.2** | Module `catalog` (lát cắt dọc) | ✅ xong, đã merge |
 | **P0.3** | Outbox + relay + worker | ✅ xong, đã merge |
-| **P0.4** | Storefront Next.js | ✅ **6/6 task xong**, ở nhánh `feat/p0-4-frontend`, **chờ merge** vào `main` |
+| **P0.4** | Storefront Next.js | ✅ xong, đã merge |
 | P1 | Catalog & PIM đầy đủ | chưa bắt đầu |
 
 ---
@@ -227,8 +227,6 @@ Ngoài ra: `compose.prod.yml` thêm `web`, và mở `worker` + `outboxrelay` (v�
 comment dù P0.3 đã xong), kèm `RABBITMQ_URL` còn thiếu. Biến chung tách thành
 anchor `x-go-env` vì `<<` của YAML chỉ gộp nông. Thiếu `SITE_URL` thì compose từ
 chối chạy.
-
-**Còn lại:** merge `feat/p0-4-frontend` vào `main`.
 
 ---
 
