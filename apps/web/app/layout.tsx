@@ -1,20 +1,34 @@
 import type { Metadata } from 'next'
-import { Geist, Geist_Mono } from 'next/font/google'
+import localFont from 'next/font/local'
 import Link from 'next/link'
 import './globals.css'
 
-// subsets phải có 'latin-ext': dấu tiếng Việt (ắ ằ ễ ộ ự) nằm ở đó, không nằm
-// trong 'latin'. Thiếu nó thì trình duyệt vẫn hiện chữ, nhưng lấy riêng các
-// chữ có dấu từ font dự phòng của hệ điều hành — một dòng tiêu đề pha hai bộ
-// chữ khác nhau, nhìn là thấy lệch ngay.
-const geistSans = Geist({
+// Font tự host từ app/fonts/ (Geist 1.7.2 của Vercel, giấy phép OFL — xem
+// app/fonts/OFL.txt), KHÔNG dùng next/font/google.
+//
+// Lý do đo được ở P0.4 Task 6: next/font/google tải font từ fonts.googleapis.com
+// LÚC `next build`. Chặn riêng hai tên miền đó (docker build --add-host ...) thì
+// build hỏng hẳn với "Failed to fetch Geist from Google Fonts" — tức mỗi lần
+// deploy phụ thuộc vào việc máy build ra được Google. File .woff2 nằm trong repo
+// thì build chạy được cả khi không có mạng ngoài.
+//
+// Bản variable chứa ĐỦ glyph tiếng Việt (đã kiểm từng chữ ắ ằ ễ ộ ự Đ Ơ Ư bằng
+// fontTools), nên không còn chuyện chọn subsets 'latin-ext' như bản Google:
+// thiếu subset đó thì chữ có dấu lấy từ font hệ điều hành, một dòng tiêu đề pha
+// hai bộ chữ. Riêng ký hiệu ₫ thì Geist không có (bản Google cũng vậy) — nó vẫn
+// hiện bằng font dự phòng trong --font-sans.
+const geistSans = localFont({
+  src: './fonts/Geist-Variable.woff2',
   variable: '--font-geist-sans',
-  subsets: ['latin', 'latin-ext'],
+  weight: '100 900',
+  display: 'swap',
 })
 
-const geistMono = Geist_Mono({
+const geistMono = localFont({
+  src: './fonts/GeistMono-Variable.woff2',
   variable: '--font-geist-mono',
-  subsets: ['latin', 'latin-ext'],
+  weight: '100 900',
+  display: 'swap',
 })
 
 const STORE_NAME = 'Base E-commerce'

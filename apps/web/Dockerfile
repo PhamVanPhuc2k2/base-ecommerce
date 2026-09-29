@@ -36,11 +36,12 @@ COPY . .
 # ngoài những gì ta chủ ý.
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# ⚠️ Bước này CÓ phụ thuộc mạng: app/layout.tsx dùng next/font/google, nên
-# `next build` tải file font từ fonts.gstatic.com. Máy build không ra được
-# Google Fonts thì build hỏng. Đã kiểm bằng `docker build --no-cache` ở Task 6.
-# Muốn cắt hẳn phụ thuộc này thì chuyển sang next/font/local với .woff2 commit
-# vào repo — xem docs/superpowers/specs/2026-09-11-p0-4-frontend-design.md.
+# Bước này KHÔNG cần mạng ra ngoài: font tự host ở app/fonts/ qua
+# next/font/local. Trước đây dùng next/font/google và `next build` tải font từ
+# fonts.googleapis.com — chặn tên miền đó là build hỏng. Kiểm lại được bằng:
+#   docker build --no-cache --add-host fonts.googleapis.com:127.0.0.1 \
+#     --add-host fonts.gstatic.com:127.0.0.1 apps/web
+# Đừng quay lại next/font/google.
 RUN npm run build
 
 FROM node:24-alpine AS runtime
@@ -71,6 +72,19 @@ ENV PORT=3000
 # public/ thì phải thêm dòng đó, nếu không ảnh tĩnh sẽ 404 đúng theo kiểu trên.
 COPY --from=build /src/.next/standalone ./
 COPY --from=build /src/.next/static ./.next/static
+
+# ⚠️ ISR CẦN GHI ĐĨA LÚC CHẠY, vào đúng một chỗ: .next/cache.
+#
+# Mọi thứ COPY ở trên thuộc root, còn tiến trình chạy bằng `node`. Thiếu dòng
+# này thì mỗi lần ISR làm mới một trang, log in "Failed to update prerender
+# cache ... EACCES: permission denied, mkdir '/app/.next/cache'". Trang vẫn ra
+# đúng nhờ cache trong RAM, nên thử nhanh không thấy gì — đã đo được ở P0.4
+# Task 6 khi đọc log container.
+#
+# Chỉ trao quyền ghi cho ĐÚNG thư mục cache, không `COPY --chown` cả ứng dụng:
+# server.js và node_modules vẫn thuộc root, tiến trình Node bị chiếm quyền cũng
+# không sửa được code của chính nó.
+RUN mkdir -p .next/cache && chown node:node .next/cache
 
 # `node` là user không phải root có sẵn trong image chính thức (uid 1000).
 # Không cần tạo user mới.
