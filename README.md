@@ -112,17 +112,32 @@ Chi tiết: [`docs/design/06-frontend.md`](docs/design/06-frontend.md)
 
 ## 3. Nguyên tắc kiến trúc (luật bất di bất dịch)
 
-**Kiến trúc:** Modular monolith ở tầng ngoài + **Hexagonal (Ports & Adapters)** bên
-trong mỗi module. Một binary, nhiều module có ranh giới rõ ràng.
+**Kiến trúc:** ✅ **Clean Architecture**, một binary (monolith). Code backend chia
+theo **tầng**: `domain` → `usecase` → `repository` / `delivery`, cộng `pkg/` cho
+hạ tầng dùng chung. **Router HTTP là [go-chi](https://github.com/go-chi/chi)** (`chi/v5`).
+
+| Tầng Clean Architecture | Thư mục | Chứa gì |
+|---|---|---|
+| Entities | `internal/domain/` | Entity, value object, quy tắc nghiệp vụ, domain event, lỗi nghiệp vụ |
+| Use Cases | `internal/usecase/` | Use case + interface (port) nó cần: `Repository`, `Cache`, `EventPublisher`, `TxManager` |
+| Interface Adapters (vào) | `internal/delivery/` | Router go-chi, handler HTTP, DTO khớp OpenAPI |
+| Interface Adapters (ra) | `internal/repository/` | Cài đặt port: Postgres (sqlc/squirrel), Redis cache, outbox |
+| Frameworks & Drivers | `pkg/` | config, errs, httpx, postgres, redis, rabbitmq, observability, health |
+| Composition root | `cmd/*/` | `main.go` + `wire.go` — nơi DUY NHẤT biết mọi tầng và ráp chúng lại |
 
 ### 3.1. Chiều phụ thuộc luôn hướng vào trong
 
 ```
-adapter ──► app ──► domain ──► (chỉ stdlib)
+delivery ────► usecase ────► domain ────► (stdlib + danh sách trắng)
+                  ▲
+repository ───────┘  cài đặt interface khai báo ở usecase
 ```
 
-- `app/` chỉ import `domain/`.
-- `adapter/` import cả hai. Không bao giờ có chiều ngược lại.
+- `usecase/` chỉ import `domain/`.
+- `delivery/` gọi `usecase/`; `repository/` cài đặt interface của `usecase/`.
+  **`delivery` và `repository` không bao giờ biết nhau** — handler gọi thẳng
+  repository là bỏ qua transaction và quy tắc nghiệp vụ nằm trong use case.
+- `pkg/` không được import bất cứ thứ gì trong `internal/`.
 - `domain/` chỉ được import **thư viện chuẩn Go và đúng ba package trong danh
   sách trắng** dưới đây. Không `chi`, không `pgx`, không `net/http`, không `redis`.
 
@@ -131,24 +146,30 @@ adapter ──► app ──► domain ──► (chỉ stdlib)
 | Package | Vì sao được phép |
 |---|---|
 | Thư viện chuẩn Go | |
-| `internal/platform/errs` | Package kernel, tự nó không phụ thuộc gì ngoài stdlib |
+| `pkg/errs` | Package kernel, tự nó không phụ thuộc gì ngoài stdlib |
 | `github.com/google/uuid` | Sinh UUIDv7 cho khóa chính, thuần tính toán |
 | `github.com/shopspring/decimal` | Kiểu tiền tệ. Dùng `float64` là sai về nghiệp vụ |
 
 Ba package này đều **thuần túy tính toán, không chạm I/O** — đó là tiêu chí duy
 nhất để một package được vào danh sách. Muốn thêm gì nữa phải sửa tài liệu này trước.
 
-**Kiểm chứng bằng máy, không bằng tự giác** — đưa vào CI:
+**Kiểm chứng bằng máy, không bằng tự giác** — `task arch` (chạy trong CI) kiểm
+6 luật bằng `go list -deps`, mỗi luật đã được chứng minh là báo đỏ khi bị vi phạm:
 
-```bash
-go list -deps ./internal/*/domain | grep -E 'chi|pgx|net/http|redis|amqp' && exit 1
-grep -rn "pgxpool.Pool" internal/*/adapter/ && exit 1   # repository phải dùng DBTX
-```
+| # | Luật |
+|---|---|
+| 1 | `domain` chỉ import stdlib + danh sách trắng (allowlist, không phải denylist) |
+| 2 | `usecase` chỉ import `domain` + danh sách trắng |
+| 3 | `repository` không import `pgxpool` trực tiếp — nhận `DBTX` qua `Manager.DB(ctx)` |
+| 4 | `pkg/` không phụ thuộc bất cứ gì trong `internal/` |
+| 5 | `repository/outbox` (dùng chung) không phụ thuộc `domain`/`usecase`/`delivery` |
+| 6 | `delivery` và `repository` không import lẫn nhau |
 
-### 3.2. Ports đặt trong `app/`, không tạo package `port/` riêng
+### 3.2. Interface (port) đặt trong `usecase/`, không tạo package `port/` riêng
 
-`app` chính là bên tiêu thụ các port, mà Go quy ước đặt interface ở nơi tiêu thụ.
-Vừa đúng hexagonal (core định nghĩa hợp đồng) vừa đúng văn hóa Go.
+`usecase` chính là bên tiêu thụ các interface, mà Go quy ước đặt interface ở nơi
+tiêu thụ (`internal/usecase/ports.go`). Vừa đúng Clean Architecture (tầng trong
+định nghĩa hợp đồng, tầng ngoài cài đặt) vừa đúng văn hóa Go.
 
 ### 3.3. Một port cho một hệ thống bên ngoài — không phải một port cho mỗi hàm
 
@@ -180,17 +201,25 @@ func (p *Product) Publish() error {
 }
 ```
 
-### 3.6. Module chỉ nói chuyện với nhau qua hàm public của `app`
+### 3.6. Nghiệp vụ này chỉ nói chuyện với nghiệp vụ khác qua `usecase`
 
-Module `order` **không được** đọc bảng của `catalog`, không import `catalog/adapter/pgstore`.
-Chỉ gọi `catalog/app`. Đây là điều kiện để sau này tách microservice nếu cần.
+Use case đơn hàng **không được** đọc bảng của catalog qua repository của catalog.
+Cần dữ liệu sản phẩm thì gọi use case của catalog. Đây là điều kiện để sau này
+tách một phần ra service riêng nếu cần.
 
 ### 3.7. Không nối chuỗi SQL
 
 Luôn dùng tham số `$1, $2`. Query động dùng squirrel (tự tham số hóa).
 `fmt.Sprintf` vào câu SQL là lỗi nghiêm trọng, không có ngoại lệ.
 
-### 3.8. 12-factor ngay từ đầu
+### 3.8. Không viết unit test ✅
+
+Dự án **không dùng unit test** — quyết định của chủ dự án. Lưới an toàn tự động
+là `task check` (build, vet, golangci-lint, 6 luật kiến trúc, đối chiếu mã lỗi,
+cây thư mục, sqlc drift); phần còn lại kiểm chứng thủ công theo
+[thiết kế 04](docs/design/04-kiem-chung.md). Đừng thêm file `_test.go`.
+
+### 3.9. 12-factor ngay từ đầu
 
 Config qua biến môi trường · log JSON ra stdout · không ghi state vào đĩa local ·
 `/healthz` + `/readyz` · graceful shutdown. Làm đúng thì chuyển sang K8s sau này
@@ -208,58 +237,57 @@ base-ecommerce/
 ├── api/
 │   └── openapi.yaml                  # NGUỒN SỰ THẬT của hợp đồng API
 ├── apps/
-│   ├── api/                                  # ===== Go backend =====
-│   │   ├── cmd/
-│   │   │   ├── api/                          # HTTP server
+│   ├── api/                                  # ===== Go backend (Clean Architecture) =====
+│   │   ├── cmd/                              # composition root: mỗi thư mục là một binary
+│   │   │   ├── api/                          # HTTP server; wire.go ráp repository → usecase → delivery
 │   │   │   ├── healthcheck/                  # binary tĩnh cho HEALTHCHECK (distroless không có curl)
 │   │   │   ├── checkcodes/                   # go/ast: liệt kê mã lỗi cho check-openapi-codes.sh
 │   │   │   ├── worker/                       # consumer catalog.indexer: khử trùng lặp, retry, DLQ
 │   │   │   └── outboxrelay/                  # poll outbox → publish RabbitMQ → đánh dấu đã gửi
 │   │   ├── internal/
-│   │   │   ├── platform/                     # hạ tầng dùng chung, KHÔNG chứa nghiệp vụ
-│   │   │   │   ├── config/                   # đọc env, validate lúc khởi động
-│   │   │   │   ├── errs/                     # Kind, Code, Message — mô hình lỗi
-│   │   │   │   ├── httpx/                    # Wrap(), Decode, JSON, WriteError, problem+json
-│   │   │   │   ├── health/                   # /healthz, /readyz, phụ thuộc Optional
-│   │   │   │   ├── observability/            # slog JSON, request ID
-│   │   │   │   ├── postgres/                 # pgxpool, DBTX, txmanager
-│   │   │   │   ├── redis/                    # client + cache-aside, singleflight, jitter
-│   │   │   │   └── rabbitmq/                 # topology + publisher có confirm + consumer manual ack
-│   │   │   │
-│   │   │   ├── catalog/                      # MODULE = một hexagon hoàn chỉnh
-│   │   │   │   ├── domain/
-│   │   │   │   │   ├── product.go            # entity + quy tắc nghiệp vụ + Validate()
-│   │   │   │   │   ├── category.go           # cây danh mục, DescendantIDs
-│   │   │   │   │   ├── brand.go
-│   │   │   │   │   ├── money.go              # value object (bọc NUMERIC)
-│   │   │   │   │   ├── slug.go               # chuẩn hóa tiếng Việt, xử lý cả NFD
-│   │   │   │   │   ├── events.go             # ProductCreated/Updated/Published
-│   │   │   │   │   └── errors.go             # sentinel errors, mỗi cái một mã lỗi
-│   │   │   │   ├── app/
-│   │   │   │   │   ├── ports.go              # Repository, Cache, EventPublisher, TxManager
-│   │   │   │   │   ├── create_product.go     # use case
-│   │   │   │   │   ├── update_product.go
-│   │   │   │   │   ├── publish_product.go
-│   │   │   │   │   ├── get_product.go
-│   │   │   │   │   ├── get_category_tree.go
-│   │   │   │   │   └── list_products.go
-│   │   │   │   ├── adapter/
-│   │   │   │   │   ├── httpapi/              # driving: Chi handler, DTO, RequireAdminKey
-│   │   │   │   │   ├── pgstore/              # driven: sqlc + squirrel + mapping → domain
-│   │   │   │   │   │   ├── queries/          # *.sql cho sqlc
-│   │   │   │   │   │   ├── gen/              # sqlc sinh ra — KHÔNG sửa tay
-│   │   │   │   │   │   ├── mapping.go        # row → domain, và mapErr cho lỗi Postgres
-│   │   │   │   │   │   ├── product_repo.go
-│   │   │   │   │   │   └── category_repo.go
-│   │   │   │   │   ├── rediscache/           # driven: cache-aside cho sản phẩm và cây danh mục
-│   │   │   │   │   └── outboxpub/            # driven: domain.Event → outbox.Record, cùng transaction
-│   │   │   │   └── module.go                 # lắp ráp module, expose Mount()
-│   │   │   │
-│   │   │   ├── outbox/                       # hạ tầng dùng chung: outbox + khử trùng lặp
-│   │   │   │   ├── queries/                  # *.sql cho sqlc (entry thứ hai trong sqlc.yaml)
-│   │   │   │   └── gen/                      # sqlc sinh ra — KHÔNG sửa tay
-│   │   │   └── server/                       # router.go: nơi DUY NHẤT ráp module vào Chi
-│   │   ├── db/migrations/                    # goose
+│   │   │   ├── domain/                       # ENTITIES — chỉ stdlib + danh sách trắng
+│   │   │   │   ├── product.go                # entity + quy tắc nghiệp vụ + Validate()
+│   │   │   │   ├── category.go               # cây danh mục, DescendantIDs
+│   │   │   │   ├── brand.go
+│   │   │   │   ├── money.go                  # value object (bọc NUMERIC)
+│   │   │   │   ├── slug.go                   # chuẩn hóa tiếng Việt, xử lý cả NFD
+│   │   │   │   ├── events.go                 # ProductCreated/Updated/Published
+│   │   │   │   └── errors.go                 # sentinel errors, mỗi cái một mã lỗi
+│   │   │   ├── usecase/                      # USE CASES — chỉ biết domain
+│   │   │   │   ├── ports.go                  # Repository, Cache, EventPublisher, TxManager
+│   │   │   │   ├── create_product.go
+│   │   │   │   ├── update_product.go
+│   │   │   │   ├── publish_product.go
+│   │   │   │   ├── get_product.go
+│   │   │   │   ├── get_category_tree.go
+│   │   │   │   └── list_products.go
+│   │   │   ├── repository/                   # cài đặt interface của usecase (đi RA ngoài)
+│   │   │   │   ├── pgstore/                  # Postgres: sqlc + squirrel + mapping → domain
+│   │   │   │   │   ├── queries/              # *.sql cho sqlc
+│   │   │   │   │   ├── gen/                  # sqlc sinh ra — KHÔNG sửa tay
+│   │   │   │   │   ├── mapping.go            # row → domain, và mapErr cho lỗi Postgres
+│   │   │   │   │   ├── product_repo.go
+│   │   │   │   │   └── category_repo.go
+│   │   │   │   ├── rediscache/               # cache-aside cho sản phẩm và cây danh mục
+│   │   │   │   ├── outboxpub/                # domain.Event → outbox.Record, cùng transaction
+│   │   │   │   └── outbox/                   # outbox + khử trùng lặp, dùng chung, KHÔNG biết domain
+│   │   │   │       ├── queries/              # *.sql cho sqlc (entry thứ hai trong sqlc.yaml)
+│   │   │   │       └── gen/                  # sqlc sinh ra — KHÔNG sửa tay
+│   │   │   └── delivery/                     # nhận request từ ngoài VÀO
+│   │   │       └── httpapi/                  # router go-chi, handler, DTO, RequireAdminKey
+│   │   ├── pkg/                              # hạ tầng dùng chung, KHÔNG biết gì về internal/
+│   │   │   ├── config/                       # đọc env, validate lúc khởi động
+│   │   │   ├── errs/                         # Kind, Code, Message — mô hình lỗi
+│   │   │   ├── httpx/                        # Wrap(), Decode, JSON, WriteError, problem+json
+│   │   │   ├── health/                       # /healthz, /readyz, phụ thuộc Optional
+│   │   │   ├── observability/                # slog JSON, request ID
+│   │   │   ├── postgres/                     # pgxpool, DBTX, txmanager
+│   │   │   ├── redis/                        # client + cache-aside, singleflight, jitter
+│   │   │   └── rabbitmq/                     # topology + publisher có confirm + consumer manual ack
+│   │   ├── migrations/                       # goose
+│   │   ├── .air.api.toml                     # hot-reload cho cmd/api (task dev)
+│   │   ├── .air.worker.toml                  # hot-reload cho cmd/worker (task dev-worker)
+│   │   ├── .golangci.yml
 │   │   ├── sqlc.yaml
 │   │   ├── Dockerfile                        # dùng chung cho cả ba binary, khác --build-arg
 │   │   └── .dockerignore
@@ -299,7 +327,7 @@ base-ecommerce/
 │   ├── compose.prod.yml                      # image ghim theo git SHA, không mở cổng DB
 │   └── caddy/                                # ⬜ khi lên production
 ├── scripts/
-│   ├── check-arch.sh                         # chiều phụ thuộc hexagonal
+│   ├── check-arch.sh                         # 6 luật phụ thuộc của Clean Architecture
 │   ├── check-openapi-codes.sh                # mã lỗi Go ↔ enum trong openapi.yaml
 │   ├── check-error-messages.sh               # enum trong openapi.yaml ↔ bảng thông điệp của web
 │   └── check-tree.sh                         # cây thư mục ở mục này ↔ đĩa
@@ -311,8 +339,8 @@ base-ecommerce/
 └── Taskfile.yml                      # go-task, thay Makefile (chạy được trên Windows)
 ```
 
-**Vì sao không có `platform/validate/`.** Tài liệu trước có nó, nhưng validate
-nằm trong `domain` mới đúng hexagonal: quy tắc "tên không được rỗng", "giá không
+**Vì sao không có `pkg/validate/`.** Tài liệu trước có nó, nhưng validate
+nằm trong `domain` mới đúng Clean Architecture: quy tắc "tên không được rỗng", "giá không
 được âm" là quy tắc nghiệp vụ, không phải hạ tầng. Một package validate dùng
 chung sẽ kéo quy tắc nghiệp vụ ra khỏi domain — đúng cái bẫy anemic domain ở
 mục 3.5.
@@ -321,7 +349,7 @@ mục 3.5.
 
 ## 5. Backend — quy ước theo tầng
 
-### 5.1. `domain/`
+### 5.1. `internal/domain/`
 
 - Chỉ import stdlib + 3 package trong danh sách trắng ở mục 3.1.
 - Entity tự bảo vệ tính toàn vẹn. Constructor `NewProduct(...)` trả `(*Product, error)`
@@ -332,19 +360,21 @@ mục 3.5.
 - Tiền tệ: **value object bọc `decimal`/`NUMERIC`**, tuyệt đối không `float64`.
 - Thời gian: `time.Time` lưu UTC; DB dùng `timestamptz`, **không** `timestamp`.
 - Lỗi nghiệp vụ định nghĩa ở đây bằng sentinel error, để tầng trên dùng `errors.Is`.
-- Domain event được entity `raise()`, `app` đọc ra và ghi vào outbox.
+- Domain event được entity `raise()`, `usecase` đọc ra và ghi vào outbox.
 
-### 5.2. `app/` (use case)
+### 5.2. `internal/usecase/`
 
 - Mỗi use case một file, một struct, một method `Execute`.
 - Là nơi **duy nhất** mở transaction. Domain không biết transaction là gì.
 - Không import `net/http`, không nhận `*http.Request`.
 - Nhận input là struct thuần Go đã validate xong, trả domain entity hoặc lỗi.
 
-### 5.3. `adapter/httpapi/` (driving adapter)
+### 5.3. `internal/delivery/httpapi/` (router go-chi + handler)
 
+- Router là **go-chi** (`chi.NewRouter()` trong `router.go`); mỗi nhóm handler
+  tự khai báo route qua `Mount(chi.Router)`.
 - Handler chỉ làm 3 việc: parse request → gọi use case → ghi response.
-- Không logic nghiệp vụ, không truy cập DB.
+- Không logic nghiệp vụ, không truy cập DB, không import `repository`.
 - DTO định nghĩa ở đây và **phải khớp `api/openapi.yaml`**.
 - Pattern handler trả `error` để dồn việc map lỗi về một chỗ:
 
@@ -360,13 +390,14 @@ func Wrap(h Handler) http.HandlerFunc {
 }
 ```
 
-### 5.4. `adapter/pgstore/` (driven adapter)
+### 5.4. `internal/repository/` (cài đặt interface của usecase)
 
 - SQL tĩnh → `queries/*.sql` → `sqlc generate`.
 - SQL động (bộ lọc catalog) → squirrel, viết tay trong `repository.go`.
 - Nơi **duy nhất** biết đến sqlc struct. Map sang domain entity trước khi trả ra.
+- `pgstore/` cho Postgres, `rediscache/` cho Redis, `outboxpub/` + `outbox/` cho outbox.
 
-### 5.5. Middleware bắt buộc (thứ tự trong `server/router.go`)
+### 5.5. Middleware bắt buộc (thứ tự trong `internal/delivery/httpapi/router.go`)
 
 `RequestID` → `RealIP` → `Logger` (slog) → `Recoverer` → `Timeout` → `CORS` → `RateLimit`
 
@@ -381,8 +412,8 @@ func Wrap(h Handler) http.HandlerFunc {
 | `pgx.Conn` | Một kết nối, **không an toàn goroutine**. Chỉ cho CLI/script |
 | `pgxpool.Pool` | Server. An toàn goroutine, tự quản lý vòng đời kết nối |
 
-Pool là chi tiết hạ tầng → chỉ tồn tại ở `platform/postgres`, inject vào adapter.
-`domain` và `app` không bao giờ nhìn thấy nó.
+Pool là chi tiết hạ tầng → chỉ tồn tại ở `pkg/postgres`, inject vào repository.
+`domain` và `usecase` không bao giờ nhìn thấy nó.
 
 ```go
 func NewPool(ctx context.Context, cfg Config) (*pgxpool.Pool, error) {
@@ -584,26 +615,29 @@ Chi tiết đầy đủ: [`docs/design/02-api-contract.md`](docs/design/02-api-c
 
 ---
 
-## 9. Khuôn mẫu thêm một module mới (fullstack)
+## 9. Khuôn mẫu thêm một tính năng mới (fullstack)
 
-Làm đúng thứ tự này cho mọi module từ P1 trở đi:
+Làm đúng thứ tự này cho mọi tính năng từ P1 trở đi — đi từ tầng trong ra tầng
+ngoài của Clean Architecture:
 
 **Backend**
-1. Viết migration goose trong `db/migrations/`
-2. Viết `domain/` trước — entity, value object, quy tắc, lỗi
-3. Khai báo port trong `app/ports.go` — chỉ những gì use case thật sự cần
-4. Viết use case trong `app/`
-5. Viết `queries/*.sql` → `sqlc generate` → cài đặt repository trong `adapter/pgstore/`.
+1. Viết migration goose trong `migrations/` (`task migrate-create -- ten`)
+2. Viết `internal/domain/` trước — entity, value object, quy tắc, lỗi
+3. Khai báo interface trong `internal/usecase/ports.go` — chỉ những gì use case thật sự cần
+4. Viết use case trong `internal/usecase/`
+5. Viết `queries/*.sql` → `task sqlc` → cài đặt repository trong `internal/repository/pgstore/`.
    Kiểm chứng bằng `psql`: lưu entity → đọc lại → so từng trường
 6. Cập nhật `api/openapi.yaml` **trước** khi viết handler
-7. Viết handler trong `adapter/httpapi/`
-8. Lắp ráp trong `module.go`, đăng ký route ở `server/router.go`
+7. Viết handler + route go-chi trong `internal/delivery/httpapi/`
+8. Ráp repository → usecase → handler trong `cmd/api/wire.go`, truyền handler vào
+   `httpapi.NewRouter` ở `cmd/api/main.go`
+9. `task check` phải xanh — không viết unit test, xem mục 3.8
 
 **Frontend**
-9. `task openapi` sinh lại type TS
-10. Viết page/component, ưu tiên Server Component
-11. Bổ sung `generateMetadata` + JSON-LD nếu là trang công khai
-12. Kiểm chứng luồng chính bằng tay trên trình duyệt
+10. `task openapi` sinh lại type TS
+11. Viết page/component, ưu tiên Server Component
+12. Bổ sung `generateMetadata` + JSON-LD nếu là trang công khai
+13. Kiểm chứng luồng chính bằng tay trên trình duyệt
 
 ---
 
@@ -675,7 +709,7 @@ Hai chỗ lệch so với cổng mặc định, đều có lý do:
 ### 10.2. Config
 
 - Toàn bộ qua biến môi trường, `.env.example` luôn cập nhật
-- `platform/config` **validate lúc khởi động** — thiếu biến thì fail ngay,
+- `pkg/config` **validate lúc khởi động** — thiếu biến thì fail ngay,
   không fail lúc 3 giờ sáng
 - Không commit `.env`. Production dùng ⬜ SOPS (hoặc Vault khi đủ lớn)
 
@@ -725,26 +759,26 @@ nghiệp vụ thật đi xuyên mọi tầng, thay vì khung xương trên lý t
 - [x] Cài công cụ: `goose`, `sqlc`, `golangci-lint`, `openapi-typescript`
 - [x] `Taskfile.yml`: `up`, `down`, `up-docker`, `down-docker`, `logs`, `migrate`, `migrate-create`, `sqlc`, `openapi`, `docker-build`, `build`, `vet`, `lint`, `arch`, `api-codes`, `tree`, `check`
 - [x] `deploy/compose.dev.yml`: PostgreSQL, Redis, RabbitMQ
-- [x] `.env.example` + `platform/config` đọc env và validate lúc khởi động
+- [x] `.env.example` + `pkg/config` đọc env và validate lúc khởi động
 - [x] `apps/api/Dockerfile` (distroless, binary là PID 1) + `deploy/compose.prod.yml`
 
 ### Nền tảng Go
-- [x] `platform/httpx`: `Wrap()`, `decodeJSON`, `respondJSON`, `writeError`, phân trang
-- [x] `platform/postgres`: pgxpool + config, `DBTX`, `txmanager` (Unit of Work)
-- [x] `platform/redis`: client + helper cache có TTL
-- [x] `platform/rabbitmq`: publisher có confirm, consumer manual ack + prefetch + retry + DLQ
-- [x] `platform/observability`: slog JSON, request ID, `/healthz`, `/readyz` ⬜ Sentry
+- [x] `pkg/httpx`: `Wrap()`, `decodeJSON`, `respondJSON`, `writeError`, phân trang
+- [x] `pkg/postgres`: pgxpool + config, `DBTX`, `txmanager` (Unit of Work)
+- [x] `pkg/redis`: client + helper cache có TTL
+- [x] `pkg/rabbitmq`: publisher có confirm, consumer manual ack + prefetch + retry + DLQ
+- [x] `pkg/observability`: slog JSON, request ID, `/healthz`, `/readyz` ⬜ Sentry
 - [x] Graceful shutdown cho cả 3 binary (`api`, `worker`, `outboxrelay`) — đã đo bằng `docker stop`: exit code 0
-- [x] `server/router.go` + middleware theo thứ tự ở mục 5.5
+- [x] `internal/delivery/httpapi/router.go` (go-chi) + middleware theo thứ tự ở mục 5.5
 
 ### Module `catalog` (lát cắt dọc)
 - [x] Migration: `categories`, `brands`, `products` (có `attributes JSONB` + GIN index)
 - [x] `domain`: `Product`, `Money`, `Slug`, sentinel errors, `ProductPublished`
-- [x] `app`: use case `CreateProduct`, `GetProductBySlug`, `ListProducts`
+- [x] `usecase`: `CreateProduct`, `GetProductBySlug`, `ListProducts`
 - [x] `pgstore`: sqlc cho query tĩnh, squirrel cho `ListProducts` có filter
 - [x] `rediscache`: cache chi tiết sản phẩm + invalidate khi cập nhật
 - [x] `httpapi`: handler + DTO khớp OpenAPI
-- [x] `EventPublisher` port + adapter `outboxpub` — P0.3 đã thay `logpublisher` bằng outbox mà không sửa `domain`/`app`
+- [x] `EventPublisher` port + adapter `outboxpub` — P0.3 đã thay `logpublisher` bằng outbox mà không sửa `domain`/`usecase`
 
 ### Outbox & worker
 - [x] Bảng `outbox` + `outbox.Append` chạy trong transaction
@@ -935,8 +969,8 @@ README này là bản tóm tắt và mục lục. Chi tiết nằm ở `docs/des
 
 | Tài liệu | Nội dung |
 |---|---|
-| [01 — Transaction & Outbox](docs/design/01-transaction-outbox.md) | `TxManager` truyền `pgx.Tx` qua `context` để `app` không biết pgx · isolation level và retry lỗi 40001 · schema outbox · relay có publisher confirm · consumer idempotent · cấu hình exchange/queue/DLQ |
-| [02 — Hợp đồng API](docs/design/02-api-contract.md) | Quy ước JSON · **UUID v7 cho toàn bộ ID** và mã hiển thị cho khách · mô hình lỗi RFC 7807 + `platform/errs` · phân trang offset và cursor · quy trình OpenAPI · CORS, rate limit, timeout |
+| [01 — Transaction & Outbox](docs/design/01-transaction-outbox.md) | `TxManager` truyền `pgx.Tx` qua `context` để `usecase` không biết pgx · isolation level và retry lỗi 40001 · schema outbox · relay có publisher confirm · consumer idempotent · cấu hình exchange/queue/DLQ |
+| [02 — Hợp đồng API](docs/design/02-api-contract.md) | Quy ước JSON · **UUID v7 cho toàn bộ ID** và mã hiển thị cho khách · mô hình lỗi RFC 7807 + `pkg/errs` · phân trang offset và cursor · quy trình OpenAPI · CORS, rate limit, timeout |
 | [03 — Redis](docs/design/03-redis-cache.md) | Tách cache và dữ liệu gốc · quy ước key có version · bảng TTL · cache-aside + singleflight + jitter · vô hiệu hóa cache · giỏ hàng · rate limit · **khi nào KHÔNG được dùng khóa Redis** |
 | [04 — Kiểm chứng](docs/design/04-kiem-chung.md) | Dự án **không dùng unit test** · `task check` là lưới an toàn tự động duy nhất · cách kiểm chứng thủ công theo loại thay đổi · **danh sách rủi ro đã chấp nhận** · khi nào nên xem lại quyết định |
 | [05 — Triển khai](docs/design/05-deployment.md) | Dockerfile distroless · bố trí production · graceful shutdown đúng thứ tự · **migration expand/contract** · quy trình deploy và rollback · sao lưu · ngưỡng cảnh báo · sổ tay sự cố |

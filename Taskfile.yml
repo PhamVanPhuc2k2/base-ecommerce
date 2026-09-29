@@ -15,12 +15,12 @@ tasks:
   migrate:
     desc: Chạy migration
     dir: apps/api
-    cmd: goose -dir db/migrations postgres "$DATABASE_URL" up
+    cmd: goose -dir migrations postgres "$DATABASE_URL" up
 
   migrate-down:
     desc: Lùi một migration (chỉ dùng khi phát triển)
     dir: apps/api
-    cmd: goose -dir db/migrations postgres "$DATABASE_URL" down
+    cmd: goose -dir migrations postgres "$DATABASE_URL" down
 
   migrate-create:
     desc: 'Tạo migration mới, ví dụ: task migrate-create -- them_bang_products'
@@ -28,7 +28,7 @@ tasks:
     # goose create mặc định đánh version bằng timestamp. Bắt buộc dùng lệnh này
     # thay vì tự đặt tên 00002_..., vì hai nhánh song song sẽ cùng chọn số 00002
     # và goose panic khi thấy trùng version.
-    cmd: goose -dir db/migrations create {{.CLI_ARGS}} sql
+    cmd: goose -dir migrations create {{.CLI_ARGS}} sql
 
   sqlc:
     desc: Sinh code Go từ file SQL
@@ -78,7 +78,7 @@ tasks:
     # câu SQL khác với câu đang nằm trong repo. Đã xảy ra thật ở P0.2.
     cmds:
       - task: sqlc
-      - git diff --exit-code -- apps/api/internal/catalog/adapter/pgstore/gen apps/api/internal/outbox/gen
+      - git diff --exit-code -- apps/api/internal/repository/pgstore/gen apps/api/internal/repository/outbox/gen
 
   check:
     desc: Chạy tất cả kiểm tra tĩnh — chạy trước mỗi lần commit
@@ -116,6 +116,19 @@ tasks:
     desc: Chạy API server trên máy (vòng lặp sửa–chạy nhanh nhất)
     dir: apps/api
     cmd: go run ./cmd/api
+
+  # Hot-reload bằng air: sửa file .go là tự build lại và khởi động lại tiến
+  # trình. Cài một lần: go install github.com/air-verse/air@latest
+  # Cần biến môi trường như `task run`: set -a && . ./.env && set +a
+  dev:
+    desc: Chạy API với hot-reload (air)
+    dir: apps/api
+    cmd: air -c .air.api.toml
+
+  dev-worker:
+    desc: Chạy worker với hot-reload (air)
+    dir: apps/api
+    cmd: air -c .air.worker.toml
 
   docker-build:
     desc: 'Build image API. Ví dụ: task docker-build -- worker'

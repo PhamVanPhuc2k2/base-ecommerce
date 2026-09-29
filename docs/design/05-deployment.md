@@ -120,7 +120,7 @@ Nhưng ở sơ đồ trên, API nằm sau **hai** lớp (Cloudflare rồi Caddy)
 sẽ luôn là IP của Caddy. Mọi request trông như đến từ cùng một IP → log vô dụng và
 rate limit theo IP chặn nhầm toàn bộ khách cùng lúc.
 
-Trước khi mở cho khách thật, đổi trong `internal/server/router.go`:
+Trước khi mở cho khách thật, đổi trong `internal/delivery/httpapi/router.go`:
 
 ```go
 r.Use(middleware.ClientIPFromXFFTrustedProxies(2))   // Cloudflare + Caddy
@@ -296,7 +296,7 @@ tra bằng `SELECT indexrelid::regclass FROM pg_index WHERE NOT indisvalid;`
 **Chạy migration:**
 
 ```bash
-docker compose run --rm migrate goose -dir db/migrations postgres "$DSN" up
+docker compose run --rm migrate goose -dir migrations postgres "$DSN" up
 ```
 
 Container một lần, chạy **trước** khi deploy app. Goose tự dùng bảng
@@ -326,7 +326,7 @@ phút. Không đụng database — nhờ mục 5 nên bản cũ vẫn chạy đ�
 ## 7. Cấu hình & bí mật
 
 - Toàn bộ qua biến môi trường, `.env.example` là danh sách đầy đủ và luôn cập nhật
-- `platform/config` **validate lúc khởi động**, thiếu biến thì thoát ngay với thông
+- `pkg/config` **validate lúc khởi động**, thiếu biến thì thoát ngay với thông
   báo rõ ràng — không để lỗi lộ ra lúc 3 giờ sáng khi có request đầu tiên chạm tới
 - Bí mật production: **SOPS** mã hóa bằng `age`, file `.env.enc` commit được vào
   git, giải mã trên máy chủ lúc deploy

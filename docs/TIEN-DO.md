@@ -36,7 +36,7 @@ của dự án (không có unit test):
 | Bước | Bắt được gì |
 |---|---|
 | `build`, `vet`, `lint` | Lỗi biên dịch, phân tích tĩnh Go, golangci-lint |
-| `arch` | Sai chiều phụ thuộc hexagonal, hạ tầng biết tới module nghiệp vụ |
+| `arch` | 6 luật phụ thuộc của Clean Architecture (xem README mục 3.1) |
 | `api-codes` | Mã lỗi Go ↔ enum trong `openapi.yaml` |
 | `error-messages` | Enum trong `openapi.yaml` ↔ thông điệp tiếng Việt ở frontend |
 | `tree` | Cây thư mục ở README mục 4 ↔ đĩa thật |
@@ -47,9 +47,45 @@ dự án không chấp nhận một dấu xanh chưa từng thấy đỏ.
 
 ---
 
+## Kiến trúc backend — Clean Architecture + go-chi ✅
+
+Nhánh `refactor/clean-architecture` (29/09/2026) chuyển backend từ bố cục
+"module trước, tầng sau" (`internal/catalog/{domain,app,adapter}`) sang bố cục
+**phân theo tầng** của Clean Architecture. Chỉ đổi vị trí và tên package —
+**không đổi hành vi**; code sqlc sinh lại giống hệt từng byte.
+
+```
+apps/api/
+├── cmd/                 # composition root — cmd/api/wire.go ráp các tầng
+├── internal/
+│   ├── domain/          # Entities
+│   ├── usecase/         # Use Cases + interface (ports.go)
+│   ├── repository/      # pgstore, rediscache, outboxpub, outbox
+│   └── delivery/        # httpapi: router go-chi + handler
+├── pkg/                 # config, errs, httpx, postgres, redis, rabbitmq...
+├── migrations/
+└── .air.api.toml, .air.worker.toml
+```
+
+- **Router:** go-chi (`chi/v5`), dựng ở `internal/delivery/httpapi/router.go`.
+- **Không viết unit test** — vẫn giữ nguyên quyết định cũ; `task check` là lưới an toàn.
+- `check-arch.sh` viết lại thành **6 luật**, thêm luật mới: `delivery` và
+  `repository` không được import lẫn nhau. Cả 6 luật đã được chứng minh báo đỏ
+  bằng cách cài vi phạm thật rồi gỡ ra.
+- Thêm `task dev` / `task dev-worker` chạy hot-reload bằng air (cần
+  `go install github.com/air-verse/air@latest`). **Chưa chạy thử** vì máy dev
+  chưa cài air.
+
+**Đánh đổi đã chấp nhận:** `domain/` và `usecase/` giờ là một package phẳng cho
+mọi nghiệp vụ. Tới khi có 3–4 nghiệp vụ (P2–P4) mà package quá đông, tách thành
+`internal/domain/<nghiep-vu>/` — luật trong `check-arch.sh` đã khớp cả thư mục
+con nên không phải sửa.
+
+---
+
 ## P0.1 — Nền móng backend ✅
 
-`platform/`: `config` (validate lúc khởi động), `httpx` (RFC 7807
+`pkg/`: `config` (validate lúc khởi động), `httpx` (RFC 7807
 `application/problem+json`), `postgres` (pgxpool, `DBTX`, `TxManager` truyền
 `pgx.Tx` qua context), `redis`, `health` (`/healthz` vs `/readyz`),
 `observability` (slog JSON + request ID). Graceful shutdown. CI GitHub Actions.
@@ -58,7 +94,7 @@ dự án không chấp nhận một dấu xanh chưa từng thấy đỏ.
 
 ## P0.2 — Module `catalog` ✅
 
-Hexagon hoàn chỉnh: `domain` ← `app` ← `adapter`. Sản phẩm, danh mục (cây),
+Lát cắt dọc qua đủ các tầng: `domain` ← `usecase` ← `repository`/`delivery`. Sản phẩm, danh mục (cây),
 thương hiệu. sqlc cho query tĩnh, squirrel cho query động. Cache-aside Redis với
 singleflight và TTL jitter. Hợp đồng OpenAPI 3.1 + type TypeScript sinh tự động.
 

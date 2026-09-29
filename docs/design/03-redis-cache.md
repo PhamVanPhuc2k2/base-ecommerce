@@ -46,7 +46,7 @@ dev không chạm tới, nhưng đừng nhầm là đã cấu hình đúng.
 2. Đổi `redis-cache` (6380) sang `allkeys-lru` + tắt persistence. Cổng 6380 vì thế
    **đổi ngữ nghĩa**: từ chỗ dữ liệu sống được sang chỗ dữ liệu bị xóa bất cứ lúc
    nào. Đừng để giỏ hàng nằm lại trên cổng đó.
-3. Biến `REDIS_ADDR` hiện có trong `.env.example` và `platform/config` không diễn
+3. Biến `REDIS_ADDR` hiện có trong `.env.example` và `pkg/config` không diễn
    tả được hai instance, phải tách thành `REDIS_CACHE_ADDR` và `REDIS_DATA_ADDR`.
 4. Bộ đếm rate limit đi vào `redis-cache` — mất bộ đếm chỉ làm nới hạn mức tạm
    thời, không mất gì của khách.
@@ -111,7 +111,7 @@ Chỉ một pattern duy nhất trong toàn dự án: đọc thì thử cache tr�
 DB rồi ghi lại cache. **Không** dùng write-through, không dùng write-behind.
 
 ```go
-// internal/platform/redis/cache.go
+// pkg/redis/cache.go
 func GetOrLoad[T any](
     ctx context.Context, c *Cache, key string, ttl time.Duration,
     load func(context.Context) (T, error),
@@ -333,7 +333,7 @@ tcp-keepalive 60
 
 ## 11. Việc cần làm
 
-- [ ] `platform/redis`: client, hai kết nối (`cache`/`data`), timeout, health check
+- [ ] `pkg/redis`: client, hai kết nối (`cache`/`data`), timeout, health check
 - [ ] `GetOrLoad[T]` với singleflight + jitter TTL
 - [ ] Helper key: `keyProductID`, `keyProductSlug`, `keyCategoryTree`... tập trung một file
 - [ ] Nuốt lỗi Redis, luôn rơi xuống Postgres, có metric đếm số lần rơi

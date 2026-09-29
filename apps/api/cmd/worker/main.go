@@ -27,11 +27,11 @@ import (
 	"syscall"
 	"time"
 
-	"base-ecommerce/api/internal/outbox"
-	"base-ecommerce/api/internal/platform/config"
-	"base-ecommerce/api/internal/platform/observability"
-	"base-ecommerce/api/internal/platform/postgres"
-	"base-ecommerce/api/internal/platform/rabbitmq"
+	"base-ecommerce/api/internal/repository/outbox"
+	"base-ecommerce/api/pkg/config"
+	"base-ecommerce/api/pkg/observability"
+	"base-ecommerce/api/pkg/postgres"
+	"base-ecommerce/api/pkg/rabbitmq"
 
 	"github.com/google/uuid"
 )
