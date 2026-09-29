@@ -12,31 +12,45 @@
 
 name: base-ecommerce
 
+# Biến môi trường chung của ba binary Go, tách thành anchor RIÊNG.
+#
+# ⚠️ Merge key `<<` của YAML chỉ gộp NÔNG. Service nào viết `<<: *api-common`
+# rồi khai `environment:` của riêng mình thì mất SẠCH biến chung — không lỗi,
+# chỉ là tiến trình khởi động với DATABASE_URL rỗng. Nên worker/outboxrelay gộp
+# `<<: *go-env` vào BÊN TRONG environment của chúng.
+x-go-env: &go-env
+  APP_ENV: production
+  APP_VERSION: ${GIT_SHA}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  DATABASE_URL: ${DATABASE_URL}
+  REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
+  # Không có dòng này thì config lấy mặc định amqp://...@localhost:5672/ — trong
+  # container localhost là chính nó, relay và worker không bao giờ nối được
+  # broker. Tên service `rabbitmq`, cổng TRONG container.
+  RABBITMQ_URL: ${RABBITMQ_URL}
+  ADMIN_API_KEY: ${ADMIN_API_KEY}
+  HTTP_HANDLER_TIMEOUT: ${HTTP_HANDLER_TIMEOUT:-30s}
+  # PHẢI lớn hơn HTTP_HANDLER_TIMEOUT — config từ chối khởi động nếu sai.
+  HTTP_WRITE_TIMEOUT: ${HTTP_WRITE_TIMEOUT:-35s}
+  HTTP_SHUTDOWN_TIMEOUT: ${HTTP_SHUTDOWN_TIMEOUT:-30s}
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "5" }
+
 x-api-common: &api-common
   # KHÔNG BAO GIỜ dùng tag `latest`. Không truy được đang chạy code nào, và
   # `docker compose pull` có thể lấy về image khác với cái vừa test.
   image: ${REGISTRY}/base-ecommerce-api:${GIT_SHA}
   restart: unless-stopped
-  environment:
-    APP_ENV: production
-    APP_VERSION: ${GIT_SHA}
-    LOG_LEVEL: ${LOG_LEVEL:-info}
-    DATABASE_URL: ${DATABASE_URL}
-    REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
-    ADMIN_API_KEY: ${ADMIN_API_KEY}
-    HTTP_HANDLER_TIMEOUT: ${HTTP_HANDLER_TIMEOUT:-30s}
-    # PHẢI lớn hơn HTTP_HANDLER_TIMEOUT — config từ chối khởi động nếu sai.
-    HTTP_WRITE_TIMEOUT: ${HTTP_WRITE_TIMEOUT:-35s}
-    HTTP_SHUTDOWN_TIMEOUT: ${HTTP_SHUTDOWN_TIMEOUT:-30s}
+  environment: *go-env
   depends_on:
     postgres: { condition: service_healthy }
     redis: { condition: service_healthy }
   # Dài hơn HTTP_SHUTDOWN_TIMEOUT. Để mặc định 10s thì Docker SIGKILL giữa lúc
   # đang rút êm, và mọi request đang xử lý bị cắt ngang.
   stop_grace_period: 45s
-  logging:
-    driver: json-file
-    options: { max-size: "10m", max-file: "5" }
+  logging: *logging
 
 services:
   api:
@@ -55,16 +69,80 @@ services:
       resources:
         limits: { cpus: "1.0", memory: 512M }
 
-  # P0.3 mở hai service dưới đây. Cùng image, khác BINARY lúc build.
+  # outboxrelay và worker: cùng Dockerfile với api, khác --build-arg BINARY, nên
+  # mỗi cái một image riêng. Lý do chi tiết của từng giá trị dưới đây nằm ở
+  # compose.dev.yml — hai file phải giữ khớp nhau.
   #
-  # worker:
-  #   <<: *api-common
-  #   image: ${REGISTRY}/base-ecommerce-worker:${GIT_SHA}
-  #   healthcheck: ... (worker không mở cổng HTTP — dùng liveness file hoặc bỏ)
-  #
-  # outboxrelay:
-  #   <<: *api-common
-  #   image: ${REGISTRY}/base-ecommerce-outboxrelay:${GIT_SHA}
+  # ⚠️ outboxrelay: ĐÚNG MỘT BẢN. Không đặt deploy.replicas — SKIP LOCKED làm hai
+  # bản "nhảy cóc" qua nhau và phá thứ tự sự kiện (xem compose.dev.yml).
+  outboxrelay:
+    <<: *api-common
+    image: ${REGISTRY}/base-ecommerce-outboxrelay:${GIT_SHA}
+    environment:
+      <<: *go-env
+      DB_MAX_CONNS: "3"
+      DB_MIN_CONNS: "1"
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    # Không healthcheck: relay không mở cổng HTTP. Dấu hiệu sống là log và cột
+    # published_at. PHẢI lớn hơn roundTimeout (60s) của relay.
+    stop_grace_period: 70s
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 128M }
+
+  # worker chạy được nhiều bản: processed_events chặn xử lý trùng.
+  worker:
+    <<: *api-common
+    image: ${REGISTRY}/base-ecommerce-worker:${GIT_SHA}
+    environment:
+      <<: *go-env
+      DB_MAX_CONNS: "3"
+      DB_MIN_CONNS: "1"
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    # Không healthcheck: worker không mở cổng HTTP. PHẢI lớn hơn handleTimeout
+    # (30s) của consumer cộng thời gian xử lý nốt message đã prefetch.
+    stop_grace_period: 45s
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 128M }
+
+  # Storefront Next.js. Image riêng build từ apps/web/Dockerfile.
+  web:
+    image: ${REGISTRY}/base-ecommerce-web:${GIT_SHA}
+    restart: unless-stopped
+    environment:
+      # Tên service, KHÔNG phải localhost — gọi thẳng api trong mạng nội bộ, không
+      # vòng ra reverse proxy.
+      API_URL: http://api:8080/api/v1
+      # BẮT BUỘC, và PHẢI là tên miền thật (https://...). Đây là gốc của canonical,
+      # sitemap.xml và JSON-LD. Để lọt localhost lên production thì Google gộp mọi
+      # tín hiệu xếp hạng về localhost và trang thật biến mất khỏi kết quả tìm
+      # kiếm — không lỗi nào báo. `:?` làm compose TỪ CHỐI chạy khi thiếu biến.
+      SITE_URL: ${SITE_URL:?SITE_URL phải là tên miền thật, ví dụ https://example.vn}
+    # Chỉ loopback, giống api: reverse proxy trên cùng máy mới chạm tới.
+    ports: ["127.0.0.1:3000:3000"]
+    depends_on:
+      # service_started, không phải healthy: Next.js không gọi API lúc khởi động,
+      # và API chết thì trang tự hiện <ErrorState> tiếng Việt.
+      api: { condition: service_started }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    # Next.js nhận SIGTERM thì server.close() — chờ request đang dở xong rồi mới
+    # thoát (exit 143 là CỐ Ý, xem apps/web/Dockerfile). Request storefront chờ
+    # backend tối đa HTTP_HANDLER_TIMEOUT, nên phải dài hơn con số đó.
+    stop_grace_period: 40s
+    logging: *logging
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 512M }
 
   postgres:
     image: postgres:17-alpine
