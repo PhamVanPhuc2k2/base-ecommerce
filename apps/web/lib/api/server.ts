@@ -21,6 +21,21 @@ import { ApiError } from './error'
  */
 const API_URL = process.env.API_URL ?? 'http://localhost:8080/api/v1'
 
+/**
+ * Trần thời gian cho MỘT lời gọi API.
+ *
+ * Không có nó thì `fetch` của Node chờ header tới 300 giây (mặc định của
+ * undici). Backend CHẾT thì không sao — kết nối bị từ chối ngay, ra lỗi ngay.
+ * Backend TREO mới là ca nguy hiểm: mỗi request storefront giữ một kết nối năm
+ * phút, request dồn ứ, và khách nhìn trang trắng quay vòng thay vì thông điệp
+ * lỗi. Hết giờ thì `fetch` ném, rơi đúng vào ĐƯỜNG LỖI 3 bên dưới → NETWORK_ERROR
+ * → <ErrorState> tiếng Việt như mọi hỏng hóc kết nối khác.
+ *
+ * 10 giây: trang danh mục và chi tiết gọi API bình thường mất vài chục mili-giây,
+ * nên chạm trần này nghĩa là backend đã hỏng, không phải "hơi chậm".
+ */
+const API_TIMEOUT_MS = 10_000
+
 /** Tùy chọn cache của Next.js cho một lời gọi. */
 type GetOptions = {
   /** Tag để `revalidateTag()` xóa cache đúng chỗ khi có event từ backend. */
@@ -45,10 +60,12 @@ export async function apiGet<T>(path: string, opts?: GetOptions): Promise<T> {
     res = await fetch(url, {
       headers: { Accept: 'application/json' },
       next: { tags: opts?.tags, revalidate: opts?.revalidate },
+      signal: AbortSignal.timeout(API_TIMEOUT_MS),
     })
   } catch (cause) {
     // ĐƯỜNG LỖI 3 — `fetch` NÉM, chưa từng có response nào.
-    // Xảy ra khi API không chạy, DNS hỏng, kết nối bị từ chối, đứt mạng. Nếu để
+    // Xảy ra khi API không chạy, DNS hỏng, kết nối bị từ chối, đứt mạng, hoặc
+    // API treo quá API_TIMEOUT_MS (AbortSignal ném TimeoutError). Nếu để
     // lỗi thô của undici bay lên thì trang chỉ thấy `TypeError: fetch failed`,
     // không có `code` để tra thông điệp, và khách nhận trang trắng. Bọc lại
     // thành ApiError để đường xử lý lỗi giống hệt hai trường hợp kia.
