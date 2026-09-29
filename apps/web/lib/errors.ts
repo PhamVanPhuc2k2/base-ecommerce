@@ -16,8 +16,18 @@
  */
 export const errorMessages: Record<string, string> = {
   ALREADY_PUBLISHED: 'Sản phẩm này đã được đăng bán trước đó rồi.',
+  BRAND_HAS_PRODUCTS:
+    'Thương hiệu này vẫn còn sản phẩm. Hãy chuyển các sản phẩm sang thương hiệu khác trước khi xóa.',
+  BRAND_NAME_INVALID: 'Vui lòng nhập tên thương hiệu, tối đa 100 ký tự.',
   BRAND_NOT_FOUND: 'Không tìm thấy thương hiệu này.',
+  CATEGORY_CYCLE: 'Không thể chuyển danh mục vào bên trong chính nó hoặc danh mục con của nó.',
+  CATEGORY_HAS_CHILDREN: 'Danh mục này vẫn còn danh mục con. Hãy chuyển hoặc xóa chúng trước.',
+  CATEGORY_HAS_PRODUCTS:
+    'Danh mục này vẫn còn sản phẩm. Hãy chuyển các sản phẩm sang danh mục khác trước khi xóa.',
+  CATEGORY_NAME_INVALID: 'Vui lòng nhập tên danh mục, tối đa 100 ký tự.',
   CATEGORY_NOT_FOUND: 'Không tìm thấy danh mục này.',
+  DUPLICATE_BRAND_SLUG: 'Đường dẫn này đã có thương hiệu khác sử dụng.',
+  DUPLICATE_CATEGORY_SLUG: 'Đường dẫn này đã có danh mục khác sử dụng.',
   DUPLICATE_SKU: 'Mã sản phẩm này đã tồn tại. Vui lòng dùng mã khác.',
   DUPLICATE_SLUG: 'Đường dẫn này đã có sản phẩm khác sử dụng. Vui lòng đổi tên sản phẩm.',
   INTERNAL_ERROR: 'Hệ thống đang gặp sự cố. Vui lòng thử lại sau ít phút.',
@@ -40,6 +50,8 @@ export const errorMessages: Record<string, string> = {
   REQUEST_TIMEOUT: 'Hệ thống xử lý quá lâu nên đã dừng lại. Vui lòng thử lại.',
   ROUTE_NOT_FOUND: 'Không tìm thấy trang bạn đang tìm.',
   UNAUTHENTICATED: 'Bạn cần đăng nhập để thực hiện thao tác này.',
+  UNKNOWN_BRAND: 'Không tìm thấy thương hiệu này.',
+  UNKNOWN_CATEGORY: 'Không tìm thấy danh mục này.',
   UNSUPPORTED_CURRENCY: 'Loại tiền tệ này chưa được hỗ trợ.',
   VALIDATION_FAILED: 'Thông tin chưa hợp lệ. Vui lòng kiểm tra lại các ô đã nhập.',
 

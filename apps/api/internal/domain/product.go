@@ -112,7 +112,8 @@ func NewProduct(sku, name, shortDesc string, categoryID, brandID uuid.UUID,
 // nên được giữ, chỉ mình `short_description` bị xóa. Không ai đoán được điều đó
 // từ hợp đồng API.
 func (p *Product) Update(name, shortDesc *string, price *Money,
-	attributes map[string]string, images []string) error {
+	attributes map[string]string, images []string,
+	categoryID, brandID *uuid.UUID) error {
 
 	if name != nil {
 		trimmed := strings.TrimSpace(*name)
@@ -140,6 +141,21 @@ func (p *Product) Update(name, shortDesc *string, price *Money,
 	}
 	if images != nil {
 		p.Images = images
+	}
+	// Danh mục/thương hiệu có tồn tại hay không do khóa ngoại quyết định lúc
+	// Save (map sang CATEGORY_NOT_FOUND / BRAND_NOT_FOUND). Ở đây chỉ chặn
+	// uuid rỗng — giá trị mà khóa ngoại sẽ báo cùng lỗi nhưng khó đọc hơn.
+	if categoryID != nil {
+		if *categoryID == uuid.Nil {
+			return ErrCategoryNotFound
+		}
+		p.CategoryID = *categoryID
+	}
+	if brandID != nil {
+		if *brandID == uuid.Nil {
+			return ErrBrandNotFound
+		}
+		p.BrandID = *brandID
 	}
 
 	// Sản phẩm đang bán phải luôn thỏa điều kiện của Publish. Không kiểm ở đây

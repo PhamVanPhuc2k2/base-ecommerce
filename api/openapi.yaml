@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: base-ecommerce API
-  version: 0.2.0
+  version: 0.3.0
   description: |
     Hợp đồng API. Đây là NGUỒN SỰ THẬT — sửa endpoint thì sửa file này trước.
 servers:
@@ -110,6 +110,157 @@ paths:
                   data:
                     type: array
                     items: { $ref: "#/components/schemas/Category" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /brands:
+    get:
+      operationId: listBrands
+      security: []
+      summary: Toàn bộ thương hiệu, sắp theo tên
+      description: >-
+        Danh sách ngắn (vài trăm), không phân trang. Frontend dùng để hiện tên
+        thương hiệu từ `Product.brand_id`.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Brand" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /admin/categories:
+    post:
+      operationId: createCategory
+      summary: Tạo danh mục
+      security: [{ adminKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateCategoryRequest" }
+      responses:
+        "201":
+          description: Đã tạo
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CategoryNode" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /admin/categories/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    patch:
+      operationId: updateCategory
+      summary: Sửa, đổi tên, chuyển danh mục
+      security: [{ adminKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateCategoryRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CategoryNode" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteCategory
+      summary: Xóa danh mục rỗng
+      description: >-
+        Chỉ xóa được danh mục không còn danh mục con (409 CATEGORY_HAS_CHILDREN)
+        và không còn sản phẩm nào, KỂ CẢ sản phẩm đã xóa mềm (409
+        CATEGORY_HAS_PRODUCTS).
+      security: [{ adminKey: [] }]
+      responses:
+        "204": { description: Đã xóa }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /admin/brands:
+    post:
+      operationId: createBrand
+      summary: Tạo thương hiệu
+      security: [{ adminKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateBrandRequest" }
+      responses:
+        "201":
+          description: Đã tạo
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Brand" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /admin/brands/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    patch:
+      operationId: updateBrand
+      summary: Sửa thương hiệu
+      security: [{ adminKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateBrandRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Brand" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteBrand
+      summary: Xóa thương hiệu không còn sản phẩm
+      security: [{ adminKey: [] }]
+      responses:
+        "204": { description: Đã xóa }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
@@ -238,12 +389,24 @@ components:
             - INVALID_STATUS
             - CATEGORY_NOT_FOUND
             - BRAND_NOT_FOUND
+            - CATEGORY_NAME_INVALID
+            - BRAND_NAME_INVALID
+            - CATEGORY_CYCLE
             # catalog/domain — xung đột (409)
             - ALREADY_PUBLISHED
             - DUPLICATE_SKU
             - DUPLICATE_SLUG
-            # catalog/domain — không tìm thấy (404)
+            - DUPLICATE_CATEGORY_SLUG
+            - DUPLICATE_BRAND_SLUG
+            - CATEGORY_HAS_CHILDREN
+            - CATEGORY_HAS_PRODUCTS
+            - BRAND_HAS_PRODUCTS
+            # catalog/domain — không tìm thấy (404). UNKNOWN_* là tài nguyên
+            # trên đường dẫn; khác CATEGORY_NOT_FOUND/BRAND_NOT_FOUND (422) là
+            # dữ liệu gửi lên tham chiếu thứ không tồn tại.
             - PRODUCT_NOT_FOUND
+            - UNKNOWN_CATEGORY
+            - UNKNOWN_BRAND
             # catalog/domain — tham số không hợp lệ (400)
             - INVALID_SORT
             - PAGE_TOO_DEEP
@@ -335,6 +498,71 @@ components:
           type: array
           items: { $ref: "#/components/schemas/Category" }
 
+    Brand:
+      type: object
+      required: [id, slug, name]
+      properties:
+        id:   { type: string, format: uuid }
+        slug: { type: string }
+        name: { type: string }
+
+    CategoryNode:
+      type: object
+      description: Một danh mục đứng riêng, không kèm cây con — trả về từ API quản trị.
+      required: [id, parent_id, slug, name, position]
+      properties:
+        id:        { type: string, format: uuid }
+        parent_id: { type: ["string", "null"], format: uuid, description: "null nghĩa là danh mục gốc." }
+        slug:      { type: string }
+        name:      { type: string }
+        position:  { type: integer }
+
+    CreateCategoryRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:      { type: string, maxLength: 100 }
+        slug:
+          type: string
+          description: "Bỏ trống thì sinh từ tên. Có thì vẫn được chuẩn hóa (bỏ dấu, chữ thường)."
+        parent_id: { type: ["string", "null"], format: uuid, description: "Bỏ trống hoặc null là danh mục gốc." }
+        position:  { type: integer, default: 0 }
+
+    UpdateCategoryRequest:
+      type: object
+      additionalProperties: false
+      description: >-
+        Sửa TỪNG PHẦN, trường vắng mặt giữ nguyên. Đổi `name` KHÔNG đổi `slug`
+        (slug nằm trong URL đã được index) — muốn đổi slug thì gửi `slug`.
+      properties:
+        name:      { type: string, maxLength: 100 }
+        slug:      { type: string }
+        parent_id:
+          type: ["string", "null"]
+          format: uuid
+          description: >-
+            BA trạng thái: vắng mặt = giữ nguyên chỗ; null = lên làm danh mục
+            gốc; uuid = chuyển vào dưới danh mục đó. Chuyển vào chính nó hoặc
+            con cháu của nó trả 422 CATEGORY_CYCLE.
+        position:  { type: integer }
+
+    CreateBrandRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, maxLength: 100 }
+        slug: { type: string, description: "Bỏ trống thì sinh từ tên." }
+
+    UpdateBrandRequest:
+      type: object
+      additionalProperties: false
+      description: "Sửa từng phần. Đổi `name` KHÔNG đổi `slug`."
+      properties:
+        name: { type: string, maxLength: 100 }
+        slug: { type: string }
+
     CreateProductRequest:
       type: object
       # Server dùng DisallowUnknownFields: trường lạ trả 400 MALFORMED_REQUEST.
@@ -384,3 +612,11 @@ components:
           description: "Chỉ có ý nghĩa khi gửi kèm `price`; gửi một mình thì bị bỏ qua."
         attributes:        { type: object, additionalProperties: { type: string } }
         images:            { type: array, items: { type: string } }
+        category_id:
+          type: string
+          format: uuid
+          description: "Chuyển sang danh mục khác. Không tồn tại trả 422 CATEGORY_NOT_FOUND."
+        brand_id:
+          type: string
+          format: uuid
+          description: "Đổi thương hiệu. Không tồn tại trả 422 BRAND_NOT_FOUND."
