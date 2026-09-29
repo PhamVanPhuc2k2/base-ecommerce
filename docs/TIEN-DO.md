@@ -14,7 +14,7 @@
 | **P0.2** | Module `catalog` (lát cắt dọc) | ✅ xong, đã merge |
 | **P0.3** | Outbox + relay + worker | ✅ xong, đã merge |
 | **P0.4** | Storefront Next.js | ✅ xong, đã merge |
-| P1 | Catalog & PIM đầy đủ | chưa bắt đầu |
+| **P1** | Catalog & PIM | 🟡 **P1.1 xong** (quản trị danh mục, thương hiệu) — còn P1.2 → P1.5, xem [tổng quan](superpowers/specs/2026-09-29-p1-tong-quan.md) |
 
 ---
 
@@ -230,13 +230,47 @@ chối chạy.
 
 ---
 
+## P1.1 — Quản trị danh mục, thương hiệu ✅
+
+API quản trị danh mục (tạo, sửa, chuyển, xóa) và thương hiệu, `GET /brands`,
+`PATCH` sản phẩm đổi được danh mục/thương hiệu, cache số đếm, storefront hiện
+tên thương hiệu. Không có migration. Chi tiết:
+[đặc tả](superpowers/specs/2026-09-29-p1-1-quan-tri-danh-muc-thuong-hieu.md).
+
+| # | Kiểm (trên stack Docker) | Kết quả |
+|---|---|---|
+| 2 | Tạo A > B > C | Cây mới hiện **ngay** (trước đây phải chờ TTL 6 giờ) |
+| 3 | Chuyển A vào dưới C / dưới chính A | 422 `CATEGORY_CYCLE`, cây không đổi |
+| 4 | **20 lượt hai PATCH chéo nhau đồng thời** (X→dưới Y ‖ Y→dưới X) | 20/20 lượt: đúng một bên 200, bên kia `CATEGORY_CYCLE`; **0 vòng lặp** |
+| 5 | `PATCH {"name"}` không có `parent_id` | Ở nguyên chỗ, slug giữ nguyên |
+| 6 | `PATCH {"parent_id": null}` | Lên làm gốc |
+| 7 | Xóa còn con / còn sản phẩm / id lạ | 409 `CATEGORY_HAS_CHILDREN` / 409 `CATEGORY_HAS_PRODUCTS` / 404 `UNKNOWN_CATEGORY` |
+| 8 | CRUD thương hiệu | `/brands` thấy ngay tên mới; trùng slug 409; không khóa 401 |
+| 9 | `PATCH` sản phẩm đổi danh mục + thương hiệu | Có mặt trong `?category=` mới (cả danh mục cha) và `?brand=` mới |
+| 10 | Cache số đếm | Log Postgres: `count(*)` chạy ở lần gọi 1, **không chạy** ở lần 2 và 3 |
+| 11 | Bơm `null` / `[null]` vào cache đếm, cây, thương hiệu | Cả ba bị từ chối kèm WARN, API trả đúng, không panic |
+| 12 | Trang chi tiết | Tên hãng + link `?brand=` + JSON-LD `brand` |
+
+**Hai lỗ tìm ra khi thiết kế, đều im lặng nếu để lọt:**
+
+- `[null]` trong cache cây danh mục làm `NewTree` **panic** — có từ P0.2.
+  `GetOrLoad` chỉ từ chối `null` ở cấp ngoài cùng. Sửa bằng kiểu
+  `domain.Categories`/`Brands` có `Validate()` kiểm từng phần tử.
+- Cache số đếm kiểu `int`: `json.Unmarshal("null")` để nguyên 0 **không báo
+  lỗi** → `has_next: false`, phân trang biến mất. Phải là `*int`.
+
+**Đo khóa chống vòng lặp:** kiểm "cha mới không nằm trong cây con" là chưa đủ —
+hai request đồng thời đều qua được phép kiểm. `LOCK TABLE categories IN SHARE
+ROW EXCLUSIVE MODE` trước khi đọc cây xếp hàng mọi lần ghi danh mục mà không
+chặn SELECT lẫn khóa FK khi ghi sản phẩm.
+
+---
+
 ## Giới hạn đã biết, chấp nhận có ý thức
 
 | | |
 |---|---|
 | **Không có test tự động** | Quyết định của chủ dự án. Rủi ro đã ghi rõ ở [thiết kế 04](design/04-kiem-chung.md) mục 4 |
-| **Thiếu `GET /brands`** | `Product` chỉ có `brand_id`, nên storefront **không hiện được tên thương hiệu**. Thiếu sót của hợp đồng API, P1 phải thêm |
-| **`PATCH` không đổi được `category_id`** | DTO không có trường đó. Chuyển danh mục là thao tác admin rất thường gặp — P1 |
 | **Sitemap trần 20.000 sản phẩm** | `max_page 200 × limit 100`. P1 làm sitemap phân mảnh |
 | **Một bản `outboxrelay`** | `FOR UPDATE SKIP LOCKED` cho phép nhiều bản nhưng **phá vỡ thứ tự event** |
 | **At-least-once, không exactly-once** | Consumer bắt buộc idempotent. Không có cách nào bỏ yêu cầu này |
@@ -244,6 +278,8 @@ chối chạy.
 | **Trang lỗi trả HTTP 200** | API chết thì `/danh-muc` hiện `<ErrorState>` với status 200 — App Router không cho Server Component đặt 503. Crawler có thể index trang lỗi nếu API chết đúng lúc nó ghé |
 | **Dữ liệu mẫu dùng ảnh bịa** | `https://vi.du/anh.jpg` làm `/_next/image` trả 500. Kèm theo: `remotePatterns` đang cho `hostname: '**'` — lỗ hổng lạm dụng băng thông/SSRF, P1 phải siết về CDN thật (đã có TODO trong `next.config.ts`) |
 | **Ký hiệu ₫ không có trong Geist** | Hiện bằng font dự phòng — y như bản Google Fonts trước đây |
+| **Số đếm lệch tối đa 60 giây** | Cache số đếm không vô hiệu hóa khi ghi — trang cuối có thể thiếu/thừa sản phẩm vừa đăng trong một phút (P1.1) |
+| **Chưa phát sự kiện `category.*`/`brand.*`** | Chưa consumer nào cần; phát mà thiếu binding thì relay thử lại mãi. P7 thêm cả hai cùng lúc |
 | **Tách hai instance Redis** | Hoãn tới P4 khi có giỏ hàng — P0 chỉ dùng vai trò cache |
 
 ---

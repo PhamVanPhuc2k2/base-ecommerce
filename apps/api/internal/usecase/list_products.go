@@ -31,12 +31,13 @@ type ListProductsResult struct {
 }
 
 type ListProducts struct {
-	repo ProductRepository
-	tree *GetCategoryTree
+	repo  ProductRepository
+	tree  *GetCategoryTree
+	cache Cache
 }
 
-func NewListProducts(repo ProductRepository, tree *GetCategoryTree) *ListProducts {
-	return &ListProducts{repo: repo, tree: tree}
+func NewListProducts(repo ProductRepository, tree *GetCategoryTree, cache Cache) *ListProducts {
+	return &ListProducts{repo: repo, tree: tree, cache: cache}
 }
 
 func (uc *ListProducts) Execute(ctx context.Context, in ListProductsInput) (*ListProductsResult, error) {
@@ -105,9 +106,20 @@ func (uc *ListProducts) Execute(ctx context.Context, in ListProductsInput) (*Lis
 		f.PriceMax = &d
 	}
 
-	items, total, err := uc.repo.List(ctx, f)
+	items, err := uc.repo.List(ctx, f)
 	if err != nil {
 		return nil, err
+	}
+
+	// Bỏ hẳn bước đếm khi trang 1 chưa đầy: số sản phẩm trên trang CHÍNH LÀ số
+	// đếm. Trường hợp phổ biến nhất (lọc hẹp) nhờ vậy không tốn câu đếm nào.
+	total := len(items)
+	if page > 1 || len(items) == limit {
+		total, err = uc.cache.ProductCount(ctx, KeyProductCount(f), TTLProductCount,
+			func(ctx context.Context) (int, error) { return uc.repo.Count(ctx, f) })
+		if err != nil {
+			return nil, err
+		}
 	}
 	return &ListProductsResult{Items: items, Total: total, Page: page, Limit: limit}, nil
 }

@@ -66,19 +66,15 @@ func (r *ProductRepository) BySlug(ctx context.Context, slug string) (*domain.Pr
 	return toDomain(row.Product)
 }
 
-// List dùng squirrel chứ không dùng sqlc: bộ lọc có nhiều điều kiện tùy chọn,
-// đúng giới hạn của sqlc. Squirrel tự tham số hóa nên không có nguy cơ injection
-// — TUYỆT ĐỐI không nối chuỗi SQL bằng fmt.Sprintf.
-func (r *ProductRepository) List(ctx context.Context, f usecase.ListFilter) ([]*domain.Product, int, error) {
-	// ListFilter không hứa Page >= 1. Không kẹp ở đây thì Page = 0 làm
-	// (Page-1)*Limit tràn uint64 và Postgres trả bigint out of range.
-	if f.Page < 1 {
-		f.Page = 1
-	}
-	if f.Limit < 1 {
-		f.Limit = 1
-	}
-
+// filtered dựng phần FROM + WHERE dùng chung cho List và Count.
+//
+// Dùng squirrel chứ không dùng sqlc: bộ lọc có nhiều điều kiện tùy chọn, đúng
+// giới hạn của sqlc. Squirrel tự tham số hóa nên không có nguy cơ injection —
+// TUYỆT ĐỐI không nối chuỗi SQL bằng fmt.Sprintf.
+//
+// List và Count PHẢI đi qua cùng một hàm: hai bản WHERE viết tay sẽ lệch nhau
+// vào một ngày nào đó, và total báo 40 trong khi lật hết trang chỉ thấy 38.
+func filtered(f usecase.ListFilter) (sq.SelectBuilder, error) {
 	// .Select() rỗng trước rồi thêm cột sau: StatementBuilderType không có
 	// phương thức From, chỉ SelectBuilder mới có.
 	base := sq.StatementBuilder.PlaceholderFormat(sq.Dollar).
@@ -114,9 +110,25 @@ func (r *ProductRepository) List(ctx context.Context, f usecase.ListFilter) ([]*
 	for _, k := range keys {
 		b, err := json.Marshal(map[string]string{k: f.Attributes[k]})
 		if err != nil {
-			return nil, 0, err
+			return base, err
 		}
 		base = base.Where("attributes @> ?::jsonb", string(b))
+	}
+	return base, nil
+}
+
+func (r *ProductRepository) List(ctx context.Context, f usecase.ListFilter) ([]*domain.Product, error) {
+	// ListFilter không hứa Page >= 1. Không kẹp ở đây thì Page = 0 làm
+	// (Page-1)*Limit tràn uint64 và Postgres trả bigint out of range.
+	if f.Page < 1 {
+		f.Page = 1
+	}
+	if f.Limit < 1 {
+		f.Limit = 1
+	}
+	base, err := filtered(f)
+	if err != nil {
+		return nil, err
 	}
 
 	q := base.Columns(
@@ -139,12 +151,12 @@ func (r *ProductRepository) List(ctx context.Context, f usecase.ListFilter) ([]*
 
 	listSQL, listArgs, err := q.ToSql()
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
 	rows, err := r.db.DB(ctx).Query(ctx, listSQL, listArgs...)
 	if err != nil {
-		return nil, 0, mapErr(err)
+		return nil, mapErr(err)
 	}
 	defer rows.Close()
 
@@ -156,35 +168,39 @@ func (r *ProductRepository) List(ctx context.Context, f usecase.ListFilter) ([]*
 			&g.BrandID, &g.Price, &g.Currency, &g.Status, &g.Attributes, &g.Images,
 			&g.CreatedAt, &g.UpdatedAt,
 		); err != nil {
-			return nil, 0, mapErr(err)
+			return nil, mapErr(err)
 		}
 		p, err := toDomain(g)
 		if err != nil {
-			return nil, 0, err
+			return nil, err
 		}
 		out = append(out, p)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, 0, fmt.Errorf("duyệt kết quả: %w", mapErr(err))
+		return nil, fmt.Errorf("duyệt kết quả: %w", mapErr(err))
 	}
 
-	// Đếm sau, và bỏ hẳn bước đếm khi trang đầu đã chứa hết kết quả: count(*)
-	// không lọc là 16,8 ms / 5057 buffer ở 200k dòng, trong khi câu lấy trang
-	// chỉ 0,049 ms / 4 buffer — tức là 99,7% chi phí nằm ở phép đếm.
-	//
-	// KHÔNG dùng count(*) OVER (): window aggregate phải dựng toàn bộ kết quả
-	// trước LIMIT, phá mất Index Only Scan.
-	total := len(out)
-	if f.Page > 1 || len(out) == f.Limit {
-		// còn trang nữa, hoặc đang ở trang sau — phải đếm thật
-		countSQL, countArgs, err := base.Column("count(*)").ToSql()
-		if err != nil {
-			return nil, 0, err
-		}
-		if err := r.db.DB(ctx).QueryRow(ctx, countSQL, countArgs...).Scan(&total); err != nil {
-			return nil, 0, mapErr(err)
-		}
-	}
+	return out, nil
+}
 
-	return out, total, nil
+// Count đếm toàn bộ kết quả của bộ lọc — câu đắt nhất của trang danh sách.
+// Use case gọi nó qua cache (usecase.KeyProductCount) và bỏ qua hẳn khi trang
+// đầu đã chứa hết kết quả.
+//
+// KHÔNG dùng count(*) OVER () gộp vào List: window aggregate phải dựng toàn bộ
+// kết quả trước LIMIT, phá mất Index Only Scan.
+func (r *ProductRepository) Count(ctx context.Context, f usecase.ListFilter) (int, error) {
+	base, err := filtered(f)
+	if err != nil {
+		return 0, err
+	}
+	countSQL, countArgs, err := base.Column("count(*)").ToSql()
+	if err != nil {
+		return 0, err
+	}
+	var total int
+	if err := r.db.DB(ctx).QueryRow(ctx, countSQL, countArgs...).Scan(&total); err != nil {
+		return 0, mapErr(err)
+	}
+	return total, nil
 }

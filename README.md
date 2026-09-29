@@ -247,8 +247,8 @@ base-ecommerce/
 │   │   ├── internal/
 │   │   │   ├── domain/                       # ENTITIES — chỉ stdlib + danh sách trắng
 │   │   │   │   ├── product.go                # entity + quy tắc nghiệp vụ + Validate()
-│   │   │   │   ├── category.go               # cây danh mục, DescendantIDs
-│   │   │   │   ├── brand.go
+│   │   │   │   ├── category.go               # cây danh mục, DescendantIDs, CheckMove chống vòng lặp
+│   │   │   │   ├── brand.go                  # thương hiệu; slug KHÔNG đổi theo tên
 │   │   │   │   ├── money.go                  # value object (bọc NUMERIC)
 │   │   │   │   ├── slug.go                   # chuẩn hóa tiếng Việt, xử lý cả NFD
 │   │   │   │   ├── events.go                 # ProductCreated/Updated/Published
@@ -260,14 +260,19 @@ base-ecommerce/
 │   │   │   │   ├── publish_product.go
 │   │   │   │   ├── get_product.go
 │   │   │   │   ├── get_category_tree.go
-│   │   │   │   └── list_products.go
+│   │   │   │   ├── list_products.go          # số đếm đi qua cache 60s
+│   │   │   │   ├── create_category.go        # ghi danh mục: LOCK TABLE → đọc cây → kiểm → ghi
+│   │   │   │   ├── update_category.go        # ParentChange ba trạng thái
+│   │   │   │   ├── delete_category.go
+│   │   │   │   └── brand.go                  # List/Create/Update/DeleteBrand
 │   │   │   ├── repository/                   # cài đặt interface của usecase (đi RA ngoài)
 │   │   │   │   ├── pgstore/                  # Postgres: sqlc + squirrel + mapping → domain
 │   │   │   │   │   ├── queries/              # *.sql cho sqlc
 │   │   │   │   │   ├── gen/                  # sqlc sinh ra — KHÔNG sửa tay
 │   │   │   │   │   ├── mapping.go            # row → domain, và mapErr cho lỗi Postgres
-│   │   │   │   │   ├── product_repo.go
-│   │   │   │   │   └── category_repo.go
+│   │   │   │   │   ├── product_repo.go       # List và Count dùng chung filtered()
+│   │   │   │   │   ├── category_repo.go      # LockForWrite; lỗi FK map theo thao tác
+│   │   │   │   │   └── brand_repo.go
 │   │   │   │   ├── rediscache/               # cache-aside cho sản phẩm và cây danh mục
 │   │   │   │   ├── outboxpub/                # domain.Event → outbox.Record, cùng transaction
 │   │   │   │   └── outbox/                   # outbox + khử trùng lặp, dùng chung, KHÔNG biết domain

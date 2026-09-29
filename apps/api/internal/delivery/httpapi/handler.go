@@ -13,25 +13,36 @@ import (
 	"github.com/google/uuid"
 )
 
-type Handler struct {
-	adminKey string
-	create   *usecase.CreateProduct
-	update   *usecase.UpdateProduct
-	publish  *usecase.PublishProduct
-	get      *usecase.GetProduct
-	list     *usecase.ListProducts
-	tree     *usecase.GetCategoryTree
+// Usecases gom mọi use case mà handler gọi. Struct có tên trường thay cho một
+// hàm dựng nhận 13 tham số cùng kiểu con trỏ — đổi chỗ hai tham số cùng kiểu
+// thì trình biên dịch không bắt được, còn đổi chỗ hai trường có tên thì có.
+type Usecases struct {
+	CreateProduct  *usecase.CreateProduct
+	UpdateProduct  *usecase.UpdateProduct
+	PublishProduct *usecase.PublishProduct
+	GetProduct     *usecase.GetProduct
+	ListProducts   *usecase.ListProducts
+	CategoryTree   *usecase.GetCategoryTree
+	CreateCategory *usecase.CreateCategory
+	UpdateCategory *usecase.UpdateCategory
+	DeleteCategory *usecase.DeleteCategory
+	ListBrands     *usecase.ListBrands
+	CreateBrand    *usecase.CreateBrand
+	UpdateBrand    *usecase.UpdateBrand
+	DeleteBrand    *usecase.DeleteBrand
 }
 
-func NewHandler(adminKey string, create *usecase.CreateProduct, update *usecase.UpdateProduct,
-	publish *usecase.PublishProduct, get *usecase.GetProduct,
-	list *usecase.ListProducts, tree *usecase.GetCategoryTree) *Handler {
-	return &Handler{adminKey: adminKey, create: create, update: update, publish: publish,
-		get: get, list: list, tree: tree}
+type Handler struct {
+	adminKey string
+	uc       Usecases
+}
+
+func NewHandler(adminKey string, uc Usecases) *Handler {
+	return &Handler{adminKey: adminKey, uc: uc}
 }
 
 func (h *Handler) GetProduct(w http.ResponseWriter, r *http.Request) error {
-	p, err := h.get.BySlug(r.Context(), chi.URLParam(r, "slug"))
+	p, err := h.uc.GetProduct.BySlug(r.Context(), chi.URLParam(r, "slug"))
 	if err != nil {
 		return err
 	}
@@ -77,7 +88,7 @@ func (h *Handler) ListProducts(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	res, err := h.list.Execute(r.Context(), in)
+	res, err := h.uc.ListProducts.Execute(r.Context(), in)
 	if err != nil {
 		return err
 	}
@@ -109,7 +120,7 @@ func (h *Handler) ListProducts(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (h *Handler) GetCategories(w http.ResponseWriter, r *http.Request) error {
-	t, err := h.tree.Tree(r.Context())
+	t, err := h.uc.CategoryTree.Tree(r.Context())
 	if err != nil {
 		return err
 	}
@@ -131,7 +142,7 @@ func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	p, err := h.create.Execute(r.Context(), usecase.CreateProductInput{
+	p, err := h.uc.CreateProduct.Execute(r.Context(), usecase.CreateProductInput{
 		SKU: req.SKU, Name: req.Name, ShortDescription: req.ShortDescription,
 		CategoryID: req.CategoryID, BrandID: req.BrandID, Price: price,
 		Attributes: req.Attributes, Images: req.Images,
@@ -169,9 +180,10 @@ func (h *Handler) UpdateProduct(w http.ResponseWriter, r *http.Request) error {
 		price = &m
 	}
 
-	p, err := h.update.Execute(r.Context(), usecase.UpdateProductInput{
+	p, err := h.uc.UpdateProduct.Execute(r.Context(), usecase.UpdateProductInput{
 		ID: id, Name: req.Name, ShortDescription: req.ShortDescription,
 		Price: price, Attributes: req.Attributes, Images: req.Images,
+		CategoryID: req.CategoryID, BrandID: req.BrandID,
 	})
 	if err != nil {
 		return err
@@ -184,7 +196,7 @@ func (h *Handler) PublishProduct(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return domain.ErrProductNotFound
 	}
-	p, err := h.publish.Execute(r.Context(), id)
+	p, err := h.uc.PublishProduct.Execute(r.Context(), id)
 	if err != nil {
 		return err
 	}

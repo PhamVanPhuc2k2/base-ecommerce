@@ -8,6 +8,10 @@ package usecase
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"sort"
 	"time"
 
 	"base-ecommerce/api/internal/domain"
@@ -41,11 +45,30 @@ type ProductRepository interface {
 	Save(ctx context.Context, p *domain.Product) error
 	ByID(ctx context.Context, id uuid.UUID) (*domain.Product, error)
 	BySlug(ctx context.Context, slug string) (*domain.Product, error)
-	List(ctx context.Context, f ListFilter) (items []*domain.Product, total int, err error)
+	// List chỉ lấy một trang. Số đếm tách ra Count để use case cache được nó —
+	// count(*) là 99,7% chi phí của trang danh sách (đo ở P0.2, 200k dòng).
+	List(ctx context.Context, f ListFilter) ([]*domain.Product, error)
+	Count(ctx context.Context, f ListFilter) (int, error)
 }
 
 type CategoryRepository interface {
-	All(ctx context.Context) ([]*domain.Category, error)
+	All(ctx context.Context) (domain.Categories, error)
+	// LockForWrite xếp hàng mọi lần ghi danh mục cho tới hết transaction. Phải
+	// gọi TRƯỚC khi đọc cây để kiểm vòng lặp — xem đặc tả P1.1 mục 2.1.
+	LockForWrite(ctx context.Context) error
+	ByID(ctx context.Context, id uuid.UUID) (*domain.Category, error)
+	Insert(ctx context.Context, c *domain.Category) error
+	Update(ctx context.Context, c *domain.Category) error
+	Delete(ctx context.Context, id uuid.UUID) error
+}
+
+type BrandRepository interface {
+	All(ctx context.Context) (domain.Brands, error)
+	// ByID khóa dòng (FOR UPDATE) — chỉ dùng trong use case ghi.
+	ByID(ctx context.Context, id uuid.UUID) (*domain.Brand, error)
+	Insert(ctx context.Context, b *domain.Brand) error
+	Update(ctx context.Context, b *domain.Brand) error
+	Delete(ctx context.Context, id uuid.UUID) error
 }
 
 // Cache là cổng ra cache. Cài đặt phải NUỐT mọi lỗi hạ tầng: cache hỏng thì
@@ -54,7 +77,11 @@ type Cache interface {
 	ProductBySlug(ctx context.Context, slug string, ttl time.Duration,
 		load func(context.Context) (*domain.Product, error)) (*domain.Product, error)
 	CategoryTree(ctx context.Context, ttl time.Duration,
-		load func(context.Context) ([]*domain.Category, error)) ([]*domain.Category, error)
+		load func(context.Context) (domain.Categories, error)) (domain.Categories, error)
+	Brands(ctx context.Context, ttl time.Duration,
+		load func(context.Context) (domain.Brands, error)) (domain.Brands, error)
+	ProductCount(ctx context.Context, key string, ttl time.Duration,
+		load func(context.Context) (int, error)) (int, error)
 	Invalidate(ctx context.Context, keys ...string)
 }
 
@@ -73,8 +100,42 @@ type TxManager interface {
 // Khóa cache — tập trung một chỗ để use case và adapter không lệch nhau.
 func KeyProductSlug(slug string) string { return "product:slug:" + slug }
 func KeyCategoryTree() string           { return "category:tree" }
+func KeyBrands() string                 { return "brand:all" }
+
+// KeyProductCount băm bộ lọc ĐÃ CHUẨN HÓA thành khóa cache số đếm.
+//
+// Chỉ gồm những gì đổi số đếm: page, limit, sort không có mặt — trang 1 và
+// trang 7 của cùng bộ lọc dùng chung một số đếm. Mọi tập hợp đều được sắp xếp
+// trước khi băm, vì map trong Go duyệt ngẫu nhiên: không sắp thì cùng một bộ
+// lọc ra khóa khác nhau mỗi lần và tỉ lệ trúng cache về 0 mà không ai hay.
+func KeyProductCount(f ListFilter) string {
+	ids := make([]string, len(f.CategoryIDs))
+	for i, id := range f.CategoryIDs {
+		ids[i] = id.String()
+	}
+	sort.Strings(ids)
+	attrs := make([]string, 0, len(f.Attributes))
+	for k, v := range f.Attributes {
+		attrs = append(attrs, k+"="+v)
+	}
+	sort.Strings(attrs)
+	dec := func(d *decimal.Decimal) string {
+		if d == nil {
+			return ""
+		}
+		return d.String()
+	}
+	norm, _ := json.Marshal([]any{ids, f.BrandSlug, dec(f.PriceMin), dec(f.PriceMax), attrs})
+	sum := sha256.Sum256(norm)
+	return "product:count:" + hex.EncodeToString(sum[:16])
+}
 
 const (
 	TTLProduct      = 30 * time.Minute
 	TTLCategoryTree = 6 * time.Hour
+	TTLBrands       = 6 * time.Hour
+	// TTLProductCount ngắn và KHÔNG vô hiệu hóa khi ghi: lệch tối đa một phút
+	// chỉ làm trang cuối thiếu/thừa sản phẩm vừa đăng. Theo dõi mọi bộ lọc mà
+	// một lần ghi ảnh hưởng tới thì đắt hơn nhiều. Xem đặc tả P1.1 mục 2.5.
+	TTLProductCount = 60 * time.Second
 )

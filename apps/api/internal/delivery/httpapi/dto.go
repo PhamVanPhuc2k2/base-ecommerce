@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"time"
 
 	"base-ecommerce/api/internal/domain"
@@ -103,4 +104,88 @@ type updateProductRequest struct {
 	Currency         *string           `json:"currency"`
 	Attributes       map[string]string `json:"attributes"`
 	Images           []string          `json:"images"`
+	// Con trỏ: vắng mặt = giữ nguyên. Không có "null = xóa" — sản phẩm luôn
+	// phải thuộc một danh mục và một thương hiệu (cột NOT NULL).
+	CategoryID *uuid.UUID `json:"category_id"`
+	BrandID    *uuid.UUID `json:"brand_id"`
+}
+
+type brandDTO struct {
+	ID   uuid.UUID `json:"id"`
+	Slug string    `json:"slug"`
+	Name string    `json:"name"`
+}
+
+func toBrandDTO(b *domain.Brand) brandDTO {
+	return brandDTO{ID: b.ID, Slug: b.Slug, Name: b.Name}
+}
+
+// categoryNodeDTO là MỘT danh mục đứng riêng, không kèm cây con — trả về từ API
+// quản trị. Khác categoryDTO (cây) của GET /categories: trả cả cây sau mỗi lần
+// sửa một nút là tốn và che mất nút vừa sửa nằm ở đâu.
+type categoryNodeDTO struct {
+	ID       uuid.UUID  `json:"id"`
+	ParentID *uuid.UUID `json:"parent_id"` // null = gốc; không omitempty — hợp đồng hứa luôn có khóa
+	Slug     string     `json:"slug"`
+	Name     string     `json:"name"`
+	Position int        `json:"position"`
+}
+
+func toCategoryNodeDTO(c *domain.Category) categoryNodeDTO {
+	return categoryNodeDTO{ID: c.ID, ParentID: c.ParentID, Slug: c.Slug, Name: c.Name, Position: c.Position}
+}
+
+type createCategoryRequest struct {
+	Name     string     `json:"name"`
+	Slug     string     `json:"slug"`
+	ParentID *uuid.UUID `json:"parent_id"` // tạo mới: vắng mặt và null cùng nghĩa "gốc"
+	Position int        `json:"position"`
+}
+
+type updateCategoryRequest struct {
+	Name     *string      `json:"name"`
+	Slug     *string      `json:"slug"`
+	ParentID optionalUUID `json:"parent_id"`
+	Position *int         `json:"position"`
+}
+
+type createBrandRequest struct {
+	Name string `json:"name"`
+	Slug string `json:"slug"`
+}
+
+type updateBrandRequest struct {
+	Name *string `json:"name"`
+	Slug *string `json:"slug"`
+}
+
+// optionalUUID phân biệt BA trạng thái của một trường JSON có thể null:
+//
+//	khóa vắng mặt       → Set=false
+//	"parent_id": null   → Set=true, Value=nil
+//	"parent_id": "…"    → Set=true, Value=&id
+//
+// Mấu chốt: encoding/json CHỈ gọi UnmarshalJSON khi khóa có mặt trong JSON.
+// Nên chỉ cần đặt Set=true bên trong nó — vắng mặt thì hàm không bao giờ chạy
+// và Set giữ zero value false.
+//
+// Vì sao không dùng *uuid.UUID: nó chỉ có hai trạng thái, "vắng mặt" và "null"
+// cùng thành nil, và PATCH chỉ đổi tên sẽ âm thầm kéo danh mục lên làm gốc.
+type optionalUUID struct {
+	Set   bool
+	Value *uuid.UUID
+}
+
+func (o *optionalUUID) UnmarshalJSON(b []byte) error {
+	o.Set = true
+	if string(b) == "null" {
+		o.Value = nil
+		return nil
+	}
+	var id uuid.UUID
+	if err := json.Unmarshal(b, &id); err != nil {
+		return err
+	}
+	o.Value = &id
+	return nil
 }

@@ -40,6 +40,33 @@ var (
 	ErrBrandNotFound = errs.New(errs.KindValidation, "BRAND_NOT_FOUND",
 		"Thương hiệu không tồn tại")
 
+	// Danh mục và thương hiệu (P1.1).
+	ErrCategoryNameInvalid = errs.New(errs.KindValidation, "CATEGORY_NAME_INVALID",
+		"Tên danh mục là bắt buộc và tối đa 100 ký tự")
+	ErrBrandNameInvalid = errs.New(errs.KindValidation, "BRAND_NAME_INVALID",
+		"Tên thương hiệu là bắt buộc và tối đa 100 ký tự")
+	ErrCategoryCycle = errs.New(errs.KindValidation, "CATEGORY_CYCLE",
+		"Không thể chuyển danh mục vào bên trong chính nó hoặc danh mục con của nó")
+	ErrDuplicateCategorySlug = errs.New(errs.KindConflict, "DUPLICATE_CATEGORY_SLUG",
+		"Đường dẫn này đã được dùng cho danh mục khác")
+	ErrDuplicateBrandSlug = errs.New(errs.KindConflict, "DUPLICATE_BRAND_SLUG",
+		"Đường dẫn này đã được dùng cho thương hiệu khác")
+	ErrCategoryHasChildren = errs.New(errs.KindConflict, "CATEGORY_HAS_CHILDREN",
+		"Danh mục còn danh mục con, hãy chuyển hoặc xóa chúng trước")
+	ErrCategoryHasProducts = errs.New(errs.KindConflict, "CATEGORY_HAS_PRODUCTS",
+		"Danh mục còn sản phẩm (kể cả sản phẩm đã xóa), hãy chuyển chúng sang danh mục khác trước")
+	ErrBrandHasProducts = errs.New(errs.KindConflict, "BRAND_HAS_PRODUCTS",
+		"Thương hiệu còn sản phẩm (kể cả sản phẩm đã xóa), hãy chuyển chúng sang thương hiệu khác trước")
+
+	// UNKNOWN_* là 404 cho tài nguyên nằm TRÊN ĐƯỜNG DẪN. Khác CATEGORY_NOT_FOUND /
+	// BRAND_NOT_FOUND ở trên: hai mã đó là 422 và nghĩa là "dữ liệu gửi lên tham
+	// chiếu một thứ không tồn tại" — frontend đang dựa vào nghĩa đó. Dùng lại
+	// chúng cho đường dẫn sẽ trả 422 cho một URL sai, và đổi nghĩa là phá hợp đồng.
+	ErrUnknownCategory = errs.New(errs.KindNotFound, "UNKNOWN_CATEGORY",
+		"Không tìm thấy danh mục")
+	ErrUnknownBrand = errs.New(errs.KindNotFound, "UNKNOWN_BRAND",
+		"Không tìm thấy thương hiệu")
+
 	ErrInvalidPagination = errs.New(errs.KindInvalid, "INVALID_PAGINATION",
 		"Tham số phân trang không hợp lệ")
 

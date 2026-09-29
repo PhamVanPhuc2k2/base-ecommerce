@@ -20,7 +20,7 @@ func NewGetCategoryTree(repo CategoryRepository, cache Cache) *GetCategoryTree {
 // việc serialize cả cây có con trỏ.
 func (uc *GetCategoryTree) Tree(ctx context.Context) (*domain.Tree, error) {
 	cats, err := uc.cache.CategoryTree(ctx, TTLCategoryTree,
-		func(ctx context.Context) ([]*domain.Category, error) {
+		func(ctx context.Context) (domain.Categories, error) {
 			return uc.repo.All(ctx)
 		})
 	if err != nil {

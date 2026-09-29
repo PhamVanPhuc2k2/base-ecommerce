@@ -68,6 +68,103 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/brands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Toàn bộ thương hiệu, sắp theo tên
+         * @description Danh sách ngắn (vài trăm), không phân trang. Frontend dùng để hiện tên thương hiệu từ `Product.brand_id`.
+         */
+        get: operations["listBrands"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Tạo danh mục */
+        post: operations["createCategory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/categories/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Xóa danh mục rỗng
+         * @description Chỉ xóa được danh mục không còn danh mục con (409 CATEGORY_HAS_CHILDREN) và không còn sản phẩm nào, KỂ CẢ sản phẩm đã xóa mềm (409 CATEGORY_HAS_PRODUCTS).
+         */
+        delete: operations["deleteCategory"];
+        options?: never;
+        head?: never;
+        /** Sửa, đổi tên, chuyển danh mục */
+        patch: operations["updateCategory"];
+        trace?: never;
+    };
+    "/admin/brands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Tạo thương hiệu */
+        post: operations["createBrand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/brands/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Xóa thương hiệu không còn sản phẩm */
+        delete: operations["deleteBrand"];
+        options?: never;
+        head?: never;
+        /** Sửa thương hiệu */
+        patch: operations["updateBrand"];
+        trace?: never;
+    };
     "/admin/products": {
         parameters: {
             query?: never;
@@ -131,7 +228,7 @@ export interface components {
              * @description Mã ổn định để frontend map sang thông điệp tiếng Việt.
              * @enum {string}
              */
-            code: "INTERNAL_ERROR" | "INVALID_PAGINATION" | "MALFORMED_REQUEST" | "METHOD_NOT_ALLOWED" | "PAYLOAD_TOO_LARGE" | "REQUEST_CANCELED" | "REQUEST_TIMEOUT" | "ROUTE_NOT_FOUND" | "UNAUTHENTICATED" | "VALIDATION_FAILED" | "INVALID_SKU" | "NAME_REQUIRED" | "NAME_TOO_LONG" | "INVALID_PRICE" | "UNSUPPORTED_CURRENCY" | "INVALID_SLUG" | "NO_IMAGE" | "PRICE_REQUIRED" | "INVALID_STATUS" | "CATEGORY_NOT_FOUND" | "BRAND_NOT_FOUND" | "ALREADY_PUBLISHED" | "DUPLICATE_SKU" | "DUPLICATE_SLUG" | "PRODUCT_NOT_FOUND" | "INVALID_SORT" | "PAGE_TOO_DEEP";
+            code: "INTERNAL_ERROR" | "INVALID_PAGINATION" | "MALFORMED_REQUEST" | "METHOD_NOT_ALLOWED" | "PAYLOAD_TOO_LARGE" | "REQUEST_CANCELED" | "REQUEST_TIMEOUT" | "ROUTE_NOT_FOUND" | "UNAUTHENTICATED" | "VALIDATION_FAILED" | "INVALID_SKU" | "NAME_REQUIRED" | "NAME_TOO_LONG" | "INVALID_PRICE" | "UNSUPPORTED_CURRENCY" | "INVALID_SLUG" | "NO_IMAGE" | "PRICE_REQUIRED" | "INVALID_STATUS" | "CATEGORY_NOT_FOUND" | "BRAND_NOT_FOUND" | "CATEGORY_NAME_INVALID" | "BRAND_NAME_INVALID" | "CATEGORY_CYCLE" | "ALREADY_PUBLISHED" | "DUPLICATE_SKU" | "DUPLICATE_SLUG" | "DUPLICATE_CATEGORY_SLUG" | "DUPLICATE_BRAND_SLUG" | "CATEGORY_HAS_CHILDREN" | "CATEGORY_HAS_PRODUCTS" | "BRAND_HAS_PRODUCTS" | "PRODUCT_NOT_FOUND" | "UNKNOWN_CATEGORY" | "UNKNOWN_BRAND" | "INVALID_SORT" | "PAGE_TOO_DEEP";
             /**
              * @description Luôn có mặt trong response (không bao giờ bị lược bỏ), nhưng có
              *     thể là chuỗi rỗng nếu middleware RequestID chưa gán được giá trị.
@@ -206,6 +303,58 @@ export interface components {
             position: number;
             children: components["schemas"]["Category"][];
         };
+        Brand: {
+            /** Format: uuid */
+            id: string;
+            slug: string;
+            name: string;
+        };
+        /** @description Một danh mục đứng riêng, không kèm cây con — trả về từ API quản trị. */
+        CategoryNode: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: uuid
+             * @description null nghĩa là danh mục gốc.
+             */
+            parent_id: string | null;
+            slug: string;
+            name: string;
+            position: number;
+        };
+        CreateCategoryRequest: {
+            name: string;
+            /** @description Bỏ trống thì sinh từ tên. Có thì vẫn được chuẩn hóa (bỏ dấu, chữ thường). */
+            slug?: string;
+            /**
+             * Format: uuid
+             * @description Bỏ trống hoặc null là danh mục gốc.
+             */
+            parent_id?: string | null;
+            /** @default 0 */
+            position: number;
+        };
+        /** @description Sửa TỪNG PHẦN, trường vắng mặt giữ nguyên. Đổi `name` KHÔNG đổi `slug` (slug nằm trong URL đã được index) — muốn đổi slug thì gửi `slug`. */
+        UpdateCategoryRequest: {
+            name?: string;
+            slug?: string;
+            /**
+             * Format: uuid
+             * @description BA trạng thái: vắng mặt = giữ nguyên chỗ; null = lên làm danh mục gốc; uuid = chuyển vào dưới danh mục đó. Chuyển vào chính nó hoặc con cháu của nó trả 422 CATEGORY_CYCLE.
+             */
+            parent_id?: string | null;
+            position?: number;
+        };
+        CreateBrandRequest: {
+            name: string;
+            /** @description Bỏ trống thì sinh từ tên. */
+            slug?: string;
+        };
+        /** @description Sửa từng phần. Đổi `name` KHÔNG đổi `slug`. */
+        UpdateBrandRequest: {
+            name?: string;
+            slug?: string;
+        };
         CreateProductRequest: {
             sku: string;
             name: string;
@@ -243,6 +392,16 @@ export interface components {
                 [key: string]: string;
             };
             images?: string[];
+            /**
+             * Format: uuid
+             * @description Chuyển sang danh mục khác. Không tồn tại trả 422 CATEGORY_NOT_FOUND.
+             */
+            category_id?: string;
+            /**
+             * Format: uuid
+             * @description Đổi thương hiệu. Không tồn tại trả 422 BRAND_NOT_FOUND.
+             */
+            brand_id?: string;
         };
     };
     responses: {
@@ -347,6 +506,210 @@ export interface operations {
                     };
                 };
             };
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listBrands: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Brand"][];
+                    };
+                };
+            };
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCategoryRequest"];
+            };
+        };
+        responses: {
+            /** @description Đã tạo */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryNode"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    deleteCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Đã xóa */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCategoryRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryNode"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createBrand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateBrandRequest"];
+            };
+        };
+        responses: {
+            /** @description Đã tạo */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Brand"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    deleteBrand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Đã xóa */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateBrand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateBrandRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Brand"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
             500: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };

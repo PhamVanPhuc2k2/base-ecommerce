@@ -19,6 +19,7 @@ import (
 func newCatalogHandler(db *postgres.Manager, cache *platformredis.Cache, adminKey string) *httpapi.Handler {
 	productRepo := pgstore.NewProductRepository(db)
 	categoryRepo := pgstore.NewCategoryRepository(db)
+	brandRepo := pgstore.NewBrandRepository(db)
 	c := rediscache.New(cache)
 	// Sự kiện đi vào bảng outbox trong CÙNG transaction với dữ liệu nghiệp vụ,
 	// thay cho logpublisher của P0.2 (ghi log, mất khi tiến trình chết). Cả
@@ -27,13 +28,19 @@ func newCatalogHandler(db *postgres.Manager, cache *platformredis.Cache, adminKe
 
 	treeUC := usecase.NewGetCategoryTree(categoryRepo, c)
 
-	return httpapi.NewHandler(
-		adminKey,
-		usecase.NewCreateProduct(db, productRepo, events, c),
-		usecase.NewUpdateProduct(db, productRepo, events, c),
-		usecase.NewPublishProduct(db, productRepo, events, c),
-		usecase.NewGetProduct(productRepo, c),
-		usecase.NewListProducts(productRepo, treeUC),
-		treeUC,
-	)
+	return httpapi.NewHandler(adminKey, httpapi.Usecases{
+		CreateProduct:  usecase.NewCreateProduct(db, productRepo, events, c),
+		UpdateProduct:  usecase.NewUpdateProduct(db, productRepo, events, c),
+		PublishProduct: usecase.NewPublishProduct(db, productRepo, events, c),
+		GetProduct:     usecase.NewGetProduct(productRepo, c),
+		ListProducts:   usecase.NewListProducts(productRepo, treeUC, c),
+		CategoryTree:   treeUC,
+		CreateCategory: usecase.NewCreateCategory(db, categoryRepo, c),
+		UpdateCategory: usecase.NewUpdateCategory(db, categoryRepo, c),
+		DeleteCategory: usecase.NewDeleteCategory(db, categoryRepo, c),
+		ListBrands:     usecase.NewListBrands(brandRepo, c),
+		CreateBrand:    usecase.NewCreateBrand(db, brandRepo, c),
+		UpdateBrand:    usecase.NewUpdateBrand(db, brandRepo, c),
+		DeleteBrand:    usecase.NewDeleteBrand(db, brandRepo, c),
+	})
 }
