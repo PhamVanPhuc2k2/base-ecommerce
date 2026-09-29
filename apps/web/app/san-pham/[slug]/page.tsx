@@ -13,6 +13,7 @@ import { absoluteUrl } from '@/lib/site'
 
 type Product = components['schemas']['Product']
 type Category = components['schemas']['Category']
+type Brand = components['schemas']['Brand']
 
 /**
  * ISR 60 giây (README mục 7.2).
@@ -34,6 +35,9 @@ const CATEGORY_PATH = '/danh-muc'
 
 /** Số giây ISR cho cây danh mục — dữ liệu này gần như không đổi. */
 const CATEGORY_REVALIDATE = 300
+
+/** Số giây ISR cho danh sách thương hiệu — còn ít đổi hơn cả danh mục. */
+const BRAND_REVALIDATE = 3600
 
 /**
  * Kết quả tải sản phẩm, ở dạng GIÁ TRỊ chứ không phải ngoại lệ.
@@ -110,6 +114,28 @@ const loadCategoryTree = cache(async (): Promise<Category[]> => {
     const body = await apiGet<{ data: Category[] }>('/categories', {
       tags: ['categories'],
       revalidate: CATEGORY_REVALIDATE,
+    })
+    return body.data
+  } catch {
+    return []
+  }
+})
+
+/**
+ * Toàn bộ thương hiệu, để đổi `brand_id` của sản phẩm ra tên.
+ *
+ * `Product` chỉ mang `brand_id` (hợp đồng API giữ sản phẩm mỏng), nên tên phải
+ * tra từ `GET /brands`. Danh sách vài trăm dòng, cache ISR một giờ, dùng chung
+ * mọi trang chi tiết — một lời gọi cho cả nghìn lượt xem.
+ *
+ * Hỏng thì trả mảng rỗng, như cây danh mục: thiếu tên thương hiệu thì trang
+ * vẫn bán được hàng, còn ném lỗi thì cả trang chết theo một dữ liệu phụ.
+ */
+const loadBrands = cache(async (): Promise<Brand[]> => {
+  try {
+    const body = await apiGet<{ data: Brand[] }>('/brands', {
+      tags: ['brands'],
+      revalidate: BRAND_REVALIDATE,
     })
     return body.data
   } catch {
@@ -228,7 +254,11 @@ export default async function Page({ params }: PageProps<'/san-pham/[slug]'>) {
     phát sinh request mới — `generateMetadata` đã gọi nó trong cùng request nên
     kết quả lấy từ bộ nhớ đệm của `cache()`.
   */
-  const [loaded, tree] = await Promise.all([loadProduct(slug), loadCategoryTree()])
+  const [loaded, tree, brands] = await Promise.all([
+    loadProduct(slug),
+    loadCategoryTree(),
+    loadBrands(),
+  ])
 
   /*
     ======================================================================
@@ -293,6 +323,7 @@ export default async function Page({ params }: PageProps<'/san-pham/[slug]'>) {
   }
 
   const product = loaded.product
+  const brand = brands.find((b) => b.id === product.brand_id)
   const path = categoryPath(tree, product.category_id)
   const crumbs: Crumb[] = [
     { label: 'Trang chủ', href: '/' },
@@ -308,7 +339,7 @@ export default async function Page({ params }: PageProps<'/san-pham/[slug]'>) {
 
   return (
     <div>
-      <ProductJsonLd product={product} />
+      <ProductJsonLd product={product} brand={brand} />
       <Breadcrumb items={crumbs} />
 
       {/* items-start: không có nó, cột ảnh bị kéo cao bằng cột thông tin. */}
@@ -385,6 +416,24 @@ export default async function Page({ params }: PageProps<'/san-pham/[slug]'>) {
           <h1 className="text-2xl font-semibold text-gray-900">{product.name}</h1>
 
           <p className="mt-2 text-sm text-gray-500">
+            {/*
+              Thương hiệu là link lọc sang trang danh mục — khách hay muốn xem
+              "còn gì khác của hãng này". Không tra được tên (API /brands hỏng)
+              thì bỏ hẳn dòng này, KHÔNG hiện brand_id: một chuỗi uuid trên
+              trang bán hàng còn tệ hơn không có gì.
+            */}
+            {brand !== undefined ? (
+              <>
+                Thương hiệu:{' '}
+                <Link
+                  href={`${CATEGORY_PATH}?brand=${brand.slug}`}
+                  className="font-medium text-gray-700 hover:text-brand"
+                >
+                  {brand.name}
+                </Link>
+                <span className="mx-2 text-gray-300">|</span>
+              </>
+            ) : null}
             Mã sản phẩm: <span className="font-mono text-gray-700">{product.sku}</span>
           </p>
 
@@ -459,7 +508,7 @@ export default async function Page({ params }: PageProps<'/san-pham/[slug]'>) {
  * giá thật. Tuyệt đối không bịa `aggregateRating` — Google phạt nặng dữ liệu
  * có cấu trúc không khớp với nội dung nhìn thấy trên trang.
  */
-function ProductJsonLd({ product }: { product: Product }) {
+function ProductJsonLd({ product, brand }: { product: Product; brand: Brand | undefined }) {
   const url = absoluteUrl(`${PRODUCT_PATH}/${product.slug}`)
 
   const data = {
@@ -469,6 +518,9 @@ function ProductJsonLd({ product }: { product: Product }) {
     sku: product.sku,
     description: product.short_description,
     image: product.images,
+    // Chỉ khai khi tra được tên thật. `brand` rỗng hay mang uuid là dữ liệu có
+    // cấu trúc không khớp nội dung trang — đúng thứ Google phạt.
+    ...(brand !== undefined ? { brand: { '@type': 'Brand', name: brand.name } } : {}),
     offers: {
       '@type': 'Offer',
       /*
