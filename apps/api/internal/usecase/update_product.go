@@ -17,6 +17,8 @@ type UpdateProductInput struct {
 	Price            *domain.Money
 	Attributes       map[string]string
 	Images           []string
+	CategoryID       *uuid.UUID
+	BrandID          *uuid.UUID
 }
 
 type UpdateProduct struct {
@@ -47,7 +49,7 @@ func (uc *UpdateProduct) Execute(ctx context.Context, in UpdateProductInput) (*d
 		}
 		oldSlug = p.Slug
 
-		if err := p.Update(in.Name, in.ShortDescription, in.Price, in.Attributes, in.Images); err != nil {
+		if err := p.Update(in.Name, in.ShortDescription, in.Price, in.Attributes, in.Images, in.CategoryID, in.BrandID); err != nil {
 			return err
 		}
 		if err := uc.repo.Save(ctx, p); err != nil {
