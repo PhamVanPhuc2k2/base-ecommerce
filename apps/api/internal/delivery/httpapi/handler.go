@@ -31,6 +31,7 @@ type Usecases struct {
 	ListAttributes *usecase.ListAttributes
 	CategoryAttrs  *usecase.CategoryAttributes
 	AttributeAdmin *usecase.AttributeAdmin
+	Media          *usecase.MediaUploads
 	UpdateVariant  *usecase.UpdateVariant
 	ListBrands     *usecase.ListBrands
 	CreateBrand    *usecase.CreateBrand

@@ -152,6 +152,14 @@ services:
       # broker đều hỏng. cmd/api chịu được (event chỉ ghi xuống outbox), nên lỗi
       # này im lặng cho tới lúc có ai đó thêm một chỗ publish trực tiếp.
       RABBITMQ_URL: amqp://app:app@rabbitmq:5672/
+      # Object storage (P1.4). Endpoint nội bộ để API đọc/xóa file; endpoint
+      # CÔNG KHAI để ký URL upload — người upload ở ngoài container, và chữ ký S3
+      # gồm cả host (đặc tả P1.4 mục 2.3).
+      S3_ENDPOINT: minio:9000
+      S3_PUBLIC_ENDPOINT: localhost:9000
+      S3_ACCESS_KEY: app
+      S3_SECRET_KEY: app-secret-dev
+      S3_BUCKET: catalog
       ADMIN_API_KEY: ${ADMIN_API_KEY:-dev-khoa-chi-dung-cho-may-local}
     ports: ["127.0.0.1:8080:8080"]
     depends_on:
@@ -303,6 +311,9 @@ services:
       # về chính tiến trình Next.js — gọi API kiểu đó luôn bị từ chối kết nối.
       # Và là cổng TRONG container: api nghe 8080.
       API_URL: http://api:8080/api/v1
+      # imgproxy trong mạng compose. Route Handler /img/* đọc biến này LÚC CHẠY —
+      # không phải NEXT_PUBLIC_*, nên một image dùng được cho mọi môi trường.
+      IMGPROXY_URL: http://imgproxy:8080
       # Gốc của mọi URL tuyệt đối: <link rel="canonical">, sitemap.xml, JSON-LD.
       # Ở dev thì đúng là localhost:3000. Trên production PHẢI đổi thành tên
       # miền thật — xem chú thích ở .env.example, đặt sai thì Google gộp mọi

@@ -148,6 +148,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cấp chỗ và URL upload cho một ảnh
+         * @description Trả `upload.url` + `upload.fields`. Client gửi multipart POST tới `upload.url` với MỌI cặp trong `fields` rồi mới tới trường `file` (thứ tự bắt buộc của S3). Storage tự từ chối file sai loại hoặc quá 10 MB. URL hết hạn sau 15 phút. Upload xong phải gọi `/complete`.
+         */
+        post: operations["createMedia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/media/{id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Xác nhận file đã upload và là ảnh thật
+         * @description Đọc 16 byte đầu để dò định dạng THẬT — không tin Content-Type đã khai. Không phải JPEG/PNG/WebP → object bị xóa, 422 INVALID_IMAGE. Gọi lại cho media đã ready thì trả về luôn (an toàn khi thử lại).
+         */
+        post: operations["completeMedia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/attributes": {
         parameters: {
             query?: never;
@@ -385,7 +425,7 @@ export interface components {
              * @description Mã ổn định để frontend map sang thông điệp tiếng Việt.
              * @enum {string}
              */
-            code: "INTERNAL_ERROR" | "INVALID_PAGINATION" | "MALFORMED_REQUEST" | "METHOD_NOT_ALLOWED" | "PAYLOAD_TOO_LARGE" | "REQUEST_CANCELED" | "REQUEST_TIMEOUT" | "ROUTE_NOT_FOUND" | "UNAUTHENTICATED" | "VALIDATION_FAILED" | "INVALID_SKU" | "NAME_REQUIRED" | "NAME_TOO_LONG" | "INVALID_PRICE" | "UNSUPPORTED_CURRENCY" | "INVALID_SLUG" | "NO_IMAGE" | "PRICE_REQUIRED" | "INVALID_STATUS" | "CATEGORY_NOT_FOUND" | "BRAND_NOT_FOUND" | "CATEGORY_NAME_INVALID" | "BRAND_NAME_INVALID" | "CATEGORY_CYCLE" | "VARIANT_REQUIRED" | "INVALID_VARIANT_OPTIONS" | "INVALID_VARIANT_STATUS" | "NO_ACTIVE_VARIANT" | "INVALID_ATTRIBUTE_CODE" | "ATTRIBUTE_NAME_INVALID" | "INVALID_ATTRIBUTE_TYPE" | "INVALID_ATTRIBUTE_OPTIONS" | "ATTRIBUTE_NOT_FOUND" | "DUPLICATE_ATTRIBUTE_ASSIGNMENT" | "ALREADY_PUBLISHED" | "DUPLICATE_SKU" | "DUPLICATE_SLUG" | "DUPLICATE_CATEGORY_SLUG" | "DUPLICATE_BRAND_SLUG" | "CATEGORY_HAS_CHILDREN" | "CATEGORY_HAS_PRODUCTS" | "BRAND_HAS_PRODUCTS" | "DUPLICATE_VARIANT_OPTIONS" | "DUPLICATE_ATTRIBUTE_CODE" | "ATTRIBUTE_IN_USE" | "PRODUCT_NOT_FOUND" | "UNKNOWN_CATEGORY" | "UNKNOWN_BRAND" | "UNKNOWN_VARIANT" | "UNKNOWN_ATTRIBUTE" | "INVALID_SORT" | "PAGE_TOO_DEEP";
+            code: "INTERNAL_ERROR" | "IMAGE_TOO_LARGE" | "INVALID_PAGINATION" | "MALFORMED_REQUEST" | "METHOD_NOT_ALLOWED" | "PAYLOAD_TOO_LARGE" | "REQUEST_CANCELED" | "REQUEST_TIMEOUT" | "ROUTE_NOT_FOUND" | "UNAUTHENTICATED" | "VALIDATION_FAILED" | "INVALID_SKU" | "NAME_REQUIRED" | "NAME_TOO_LONG" | "INVALID_PRICE" | "UNSUPPORTED_CURRENCY" | "INVALID_SLUG" | "NO_IMAGE" | "PRICE_REQUIRED" | "INVALID_STATUS" | "CATEGORY_NOT_FOUND" | "BRAND_NOT_FOUND" | "CATEGORY_NAME_INVALID" | "BRAND_NAME_INVALID" | "CATEGORY_CYCLE" | "VARIANT_REQUIRED" | "INVALID_VARIANT_OPTIONS" | "INVALID_VARIANT_STATUS" | "NO_ACTIVE_VARIANT" | "INVALID_ATTRIBUTE_CODE" | "UNSUPPORTED_IMAGE_TYPE" | "INVALID_IMAGE" | "UPLOAD_NOT_FOUND" | "ATTRIBUTE_NAME_INVALID" | "INVALID_ATTRIBUTE_TYPE" | "INVALID_ATTRIBUTE_OPTIONS" | "ATTRIBUTE_NOT_FOUND" | "DUPLICATE_ATTRIBUTE_ASSIGNMENT" | "ALREADY_PUBLISHED" | "DUPLICATE_SKU" | "DUPLICATE_SLUG" | "DUPLICATE_CATEGORY_SLUG" | "DUPLICATE_BRAND_SLUG" | "CATEGORY_HAS_CHILDREN" | "CATEGORY_HAS_PRODUCTS" | "BRAND_HAS_PRODUCTS" | "DUPLICATE_VARIANT_OPTIONS" | "DUPLICATE_ATTRIBUTE_CODE" | "ATTRIBUTE_IN_USE" | "PRODUCT_NOT_FOUND" | "UNKNOWN_CATEGORY" | "UNKNOWN_BRAND" | "UNKNOWN_VARIANT" | "UNKNOWN_ATTRIBUTE" | "UNKNOWN_MEDIA" | "INVALID_SORT" | "PAGE_TOO_DEEP";
             /**
              * @description Luôn có mặt trong response (không bao giờ bị lược bỏ), nhưng có
              *     thể là chuỗi rỗng nếu middleware RequestID chưa gán được giá trị.
@@ -394,7 +434,7 @@ export interface components {
             errors?: {
                 /** @description Đường dẫn tới trường, ví dụ "attributes.ram" hay "variants[1].options.mau". */
                 field: string;
-                /** @description Mã lỗi CẤP TRƯỜNG (khác Problem.code). Với thuộc tính theo danh mục: UNKNOWN_ATTRIBUTE_KEY, INVALID_ATTRIBUTE_VALUE, ATTRIBUTE_REQUIRED, VARIANT_ATTRIBUTE_ON_PRODUCT, PRODUCT_ATTRIBUTE_ON_VARIANT. */
+                /** @description Mã lỗi CẤP TRƯỜNG (khác Problem.code). Với thuộc tính theo danh mục: UNKNOWN_ATTRIBUTE_KEY, INVALID_ATTRIBUTE_VALUE, ATTRIBUTE_REQUIRED, VARIANT_ATTRIBUTE_ON_PRODUCT, PRODUCT_ATTRIBUTE_ON_VARIANT. Với ảnh: UNKNOWN_IMAGE (trường "images[i]") — key chưa upload hoặc chưa /complete. */
                 code: string;
                 message: string;
             }[];
@@ -430,6 +470,7 @@ export interface components {
             attributes: {
                 [key: string]: string;
             };
+            /** @description KHÓA media (`Media.key`, ví dụ "products/0190….jpg"), KHÔNG phải URL — từ 0.6.0. Hiển thị qua imgproxy của storefront. Ghi sản phẩm với key chưa ready trả 422, trường images[i] mã UNKNOWN_IMAGE. */
             images: string[];
             /** @description Sắp theo `position` rồi `id`. Endpoint công khai chỉ trả phiên bản `active`; response của các lệnh quản trị trả đủ, kể cả `inactive`. */
             variants: components["schemas"]["Variant"][];
@@ -509,6 +550,34 @@ export interface components {
             /** @enum {string} */
             status?: "active" | "inactive";
             position?: number;
+        };
+        Media: {
+            /** Format: uuid */
+            id: string;
+            /** @description Đặt giá trị này vào Product.images. */
+            key: string;
+            /**
+             * @description Sau /complete: loại THẬT dò từ nội dung file.
+             * @enum {string}
+             */
+            content_type: "image/jpeg" | "image/png" | "image/webp";
+            /** @description Byte. Sau /complete: kích thước thật trên storage. */
+            size: number;
+            /** @enum {string} */
+            status: "pending" | "ready";
+            /** Format: date-time */
+            created_at: string;
+        };
+        MediaUpload: {
+            url: string;
+            fields: {
+                [key: string]: string;
+            };
+        };
+        CreateMediaRequest: {
+            /** @enum {string} */
+            content_type: "image/jpeg" | "image/png" | "image/webp";
+            size: number;
         };
         Attribute: {
             /** Format: uuid */
@@ -643,6 +712,7 @@ export interface components {
             attributes?: {
                 [key: string]: string;
             };
+            /** @description KHÓA media (`Media.key`, ví dụ "products/0190….jpg"), KHÔNG phải URL — từ 0.6.0. Hiển thị qua imgproxy của storefront. Ghi sản phẩm với key chưa ready trả 422, trường images[i] mã UNKNOWN_IMAGE. */
             images?: string[];
         };
         /**
@@ -659,6 +729,7 @@ export interface components {
             attributes?: {
                 [key: string]: string;
             };
+            /** @description KHÓA media (`Media.key`, ví dụ "products/0190….jpg"), KHÔNG phải URL — từ 0.6.0. Hiển thị qua imgproxy của storefront. Ghi sản phẩm với key chưa ready trả 422, trường images[i] mã UNKNOWN_IMAGE. */
             images?: string[];
             /**
              * Format: uuid
@@ -880,6 +951,67 @@ export interface operations {
                 };
             };
             404: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateMediaRequest"];
+            };
+        };
+        responses: {
+            /** @description Đã cấp */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        media: components["schemas"]["Media"];
+                        upload: components["schemas"]["MediaUpload"];
+                    };
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    completeMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Media"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
             500: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };

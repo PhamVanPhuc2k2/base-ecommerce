@@ -7,6 +7,7 @@ import (
 	"base-ecommerce/api/internal/repository/pgstore"
 	"base-ecommerce/api/internal/repository/rediscache"
 	"base-ecommerce/api/internal/usecase"
+	"base-ecommerce/api/pkg/objectstore"
 	"base-ecommerce/api/pkg/postgres"
 	platformredis "base-ecommerce/api/pkg/redis"
 )
@@ -16,7 +17,8 @@ import (
 //
 // Đặt ở cmd/api chứ không ở internal/: ráp nối là việc của chương trình chạy,
 // không phải của một tầng nào trong Clean Architecture.
-func newCatalogHandler(db *postgres.Manager, cache *platformredis.Cache, adminKey string) *httpapi.Handler {
+func newCatalogHandler(db *postgres.Manager, cache *platformredis.Cache, store *objectstore.Client,
+	adminKey string) *httpapi.Handler {
 	productRepo := pgstore.NewProductRepository(db)
 	categoryRepo := pgstore.NewCategoryRepository(db)
 	brandRepo := pgstore.NewBrandRepository(db)
@@ -27,22 +29,25 @@ func newCatalogHandler(db *postgres.Manager, cache *platformredis.Cache, adminKe
 	events := outboxpub.New(outbox.NewRepository(db))
 
 	attributeRepo := pgstore.NewAttributeRepository(db)
+	mediaRepo := pgstore.NewMediaRepository(db)
 
 	treeUC := usecase.NewGetCategoryTree(categoryRepo, c)
 	schemas := usecase.NewAttributeSchemas(attributeRepo, c, treeUC)
+	rules := usecase.NewProductRules(schemas, mediaRepo)
 
 	return httpapi.NewHandler(adminKey, httpapi.Usecases{
-		CreateProduct:  usecase.NewCreateProduct(db, productRepo, events, c, schemas),
-		UpdateProduct:  usecase.NewUpdateProduct(db, productRepo, events, c, schemas),
-		PublishProduct: usecase.NewPublishProduct(db, productRepo, events, c, schemas),
+		CreateProduct:  usecase.NewCreateProduct(db, productRepo, events, c, rules),
+		UpdateProduct:  usecase.NewUpdateProduct(db, productRepo, events, c, rules),
+		PublishProduct: usecase.NewPublishProduct(db, productRepo, events, c, rules),
 		GetProduct:     usecase.NewGetProduct(productRepo, c),
 		ListProducts:   usecase.NewListProducts(productRepo, treeUC, c, schemas),
 		CategoryTree:   treeUC,
 		CreateCategory: usecase.NewCreateCategory(db, categoryRepo, c),
 		UpdateCategory: usecase.NewUpdateCategory(db, categoryRepo, c),
 		DeleteCategory: usecase.NewDeleteCategory(db, categoryRepo, c),
-		AddVariant:     usecase.NewAddVariant(db, productRepo, events, c, schemas),
-		UpdateVariant:  usecase.NewUpdateVariant(db, productRepo, events, c, schemas),
+		AddVariant:     usecase.NewAddVariant(db, productRepo, events, c, rules),
+		UpdateVariant:  usecase.NewUpdateVariant(db, productRepo, events, c, rules),
+		Media:          usecase.NewMediaUploads(db, mediaRepo, store),
 		ListFacets:     usecase.NewListFacets(productRepo, treeUC, c, schemas),
 		ListAttributes: usecase.NewListAttributes(schemas),
 		CategoryAttrs:  usecase.NewCategoryAttributes(schemas),

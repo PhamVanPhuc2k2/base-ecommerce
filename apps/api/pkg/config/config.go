@@ -22,6 +22,7 @@ type Config struct {
 	DB       DB
 	Redis    Redis
 	RabbitMQ RabbitMQ
+	S3       S3
 }
 
 type HTTP struct {
@@ -47,6 +48,22 @@ type Redis struct {
 	PoolSize int
 }
 
+// S3 là object storage giữ ảnh gốc (MinIO khi dev, S3/R2 khi production).
+type S3 struct {
+	// Endpoint là địa chỉ API dùng để nói chuyện với storage (mạng nội bộ:
+	// minio:9000 trong compose).
+	Endpoint string
+	// PublicEndpoint là địa chỉ NGƯỜI UPLOAD thấy (localhost:9000 khi dev).
+	// Chữ ký S3 gồm cả host, nên URL upload phải ký bằng địa chỉ này — ký bằng
+	// Endpoint nội bộ thì trình duyệt không mở được, đổi host thì chữ ký sai.
+	PublicEndpoint string
+	AccessKey      string
+	SecretKey      string
+	Bucket         string
+	Region         string
+	UseSSL         bool
+}
+
 type RabbitMQ struct {
 	// URL là AMQP URI đầy đủ, KÈM mật khẩu. Mọi chỗ in nó ra phải đi qua
 	// redactDSN — xem Config.String.
@@ -59,9 +76,10 @@ func (c *Config) IsProduction() bool { return c.Env == "production" }
 func (c *Config) String() string {
 	return fmt.Sprintf(
 		"Config{Env:%s Version:%s HTTP.Addr:%s DB.DSN:%s DB.MaxConns:%d Redis.Addr:%s "+
-			"RabbitMQ.URL:%s AdminKey:%s}",
+			"RabbitMQ.URL:%s AdminKey:%s S3.Endpoint:%s S3.PublicEndpoint:%s S3.Bucket:%s S3.SecretKey:%s}",
 		c.Env, c.Version, c.HTTP.Addr, redactDSN(c.DB.DSN), c.DB.MaxConns,
 		c.Redis.Addr, redactDSN(c.RabbitMQ.URL), redactSecret(c.AdminKey),
+		c.S3.Endpoint, c.S3.PublicEndpoint, c.S3.Bucket, redactSecret(c.S3.SecretKey),
 	)
 }
 
@@ -87,6 +105,8 @@ func redactSecret(s string) string {
 	}
 	return fmt.Sprintf("(đã đặt, %d ký tự)", len(s))
 }
+
+const devS3Secret = "app-secret-dev"
 
 func Load() (*Config, error) {
 	l := &loader{}
@@ -123,7 +143,18 @@ func Load() (*Config, error) {
 			// Dấu "/" cuối là vhost mặc định, bỏ đi là URI không hợp lệ.
 			URL: l.str("RABBITMQ_URL", "amqp://app:app@localhost:5672/"),
 		},
+		// Mặc định khớp MinIO trong compose.dev.yml để `task run` trên máy chạy
+		// được ngay. Production bị chặn dùng mật khẩu dev — xem bên dưới.
+		S3: S3{
+			Endpoint:  l.str("S3_ENDPOINT", "localhost:9000"),
+			AccessKey: l.str("S3_ACCESS_KEY", "app"),
+			SecretKey: l.str("S3_SECRET_KEY", devS3Secret),
+			Bucket:    l.str("S3_BUCKET", "catalog"),
+			Region:    l.str("S3_REGION", "us-east-1"),
+			UseSSL:    l.str("S3_USE_SSL", "false") == "true",
+		},
 	}
+	c.S3.PublicEndpoint = l.str("S3_PUBLIC_ENDPOINT", c.S3.Endpoint)
 
 	// WriteTimeout phải lớn hơn HandlerTimeout, nếu không response lỗi không
 	// bao giờ tới được client.
@@ -132,6 +163,13 @@ func Load() (*Config, error) {
 	// problem+json — nhưng write deadline của net/http hết đúng khoảnh khắc đó
 	// nên kết nối bị đóng trước khi flush. Client nhận "Empty reply from
 	// server" thay vì mã lỗi, đúng lúc hệ thống quá tải và cần chẩn đoán nhất.
+	// Mật khẩu mặc định chỉ dành cho MinIO trên máy dev (compose.dev.yml).
+	// Lọt lên production thì ai đọc repo cũng vào được kho ảnh — chặn ngay lúc
+	// khởi động thay vì tin rằng người deploy nhớ đặt biến.
+	if c.IsProduction() && c.S3.SecretKey == devS3Secret {
+		l.errs = append(l.errs, errors.New("S3_SECRET_KEY đang là mật khẩu dev mặc định — production phải đặt giá trị thật"))
+	}
+
 	if c.HTTP.WriteTimeout <= c.HTTP.HandlerTimeout {
 		l.errs = append(l.errs, fmt.Errorf(
 			"HTTP_WRITE_TIMEOUT (%s) phải lớn hơn HTTP_HANDLER_TIMEOUT (%s), "+

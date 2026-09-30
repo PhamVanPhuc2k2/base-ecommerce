@@ -11,8 +11,8 @@ import (
 // AttributeSchemas trả tập thuộc tính hiệu lực của một danh mục: catalog định
 // nghĩa (cache một khóa) + cây danh mục (cache sẵn từ P0.2) → Schema.
 //
-// Mọi use case ghi sản phẩm/variant đi qua đây để validate — một chỗ duy nhất
-// quyết định "danh mục này chặt hay tự do".
+// Mọi use case ghi sản phẩm/variant validate qua đây (gián tiếp, qua
+// ProductRules) — một chỗ duy nhất quyết định "danh mục này chặt hay tự do".
 type AttributeSchemas struct {
 	repo  AttributeRepository
 	cache Cache
@@ -37,16 +37,6 @@ func (s *AttributeSchemas) For(ctx context.Context, categoryID uuid.UUID) (*doma
 		return nil, err
 	}
 	return catalog.SchemaFor(tree, categoryID), nil
-}
-
-// check validate sản phẩm theo danh mục HIỆN TẠI của nó — gọi SAU khi sửa, để
-// lệnh PATCH chuyển danh mục được kiểm theo danh mục mới.
-func (s *AttributeSchemas) check(ctx context.Context, p *domain.Product) error {
-	schema, err := s.For(ctx, p.CategoryID)
-	if err != nil {
-		return err
-	}
-	return schema.CheckProduct(p)
 }
 
 // CategoryAttributes là tập hiệu lực công khai của một danh mục theo slug.

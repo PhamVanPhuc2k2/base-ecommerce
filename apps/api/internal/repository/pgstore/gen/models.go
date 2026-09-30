@@ -50,6 +50,16 @@ type CategoryAttribute struct {
 	Position    int32
 }
 
+type Medium struct {
+	ID          uuid.UUID
+	ObjectKey   string
+	ContentType string
+	SizeBytes   int64
+	Status      string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
 type Outbox struct {
 	ID            uuid.UUID
 	AggregateType string

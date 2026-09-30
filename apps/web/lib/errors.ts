@@ -70,6 +70,11 @@ export const errorMessages: Record<string, string> = {
   INVALID_ATTRIBUTE_OPTIONS: 'Danh sách giá trị của thuộc tính chưa hợp lệ.',
   INVALID_ATTRIBUTE_TYPE: 'Kiểu thuộc tính không được hỗ trợ.',
   UNKNOWN_ATTRIBUTE: 'Không tìm thấy thuộc tính này.',
+  IMAGE_TOO_LARGE: 'Ảnh quá lớn. Vui lòng chọn ảnh không quá 10 MB.',
+  INVALID_IMAGE: 'File tải lên không phải ảnh hợp lệ. Vui lòng chọn ảnh JPEG, PNG hoặc WebP.',
+  UNKNOWN_MEDIA: 'Không tìm thấy ảnh này.',
+  UNSUPPORTED_IMAGE_TYPE: 'Chỉ nhận ảnh JPEG, PNG hoặc WebP.',
+  UPLOAD_NOT_FOUND: 'Chưa thấy ảnh được tải lên. Vui lòng tải ảnh lên trước.',
 
   UNKNOWN: 'Đã có lỗi xảy ra. Vui lòng thử lại.',
   NETWORK_ERROR: 'Không kết nối được tới máy chủ. Vui lòng kiểm tra mạng rồi thử lại.',
