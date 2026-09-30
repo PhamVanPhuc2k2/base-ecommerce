@@ -33,6 +33,9 @@ func (h *Handler) Mount(r chi.Router) {
 		r.Delete("/categories/{id}", httpx.Wrap(h.DeleteCategory))
 		r.Put("/categories/{id}/attributes", httpx.Wrap(h.SetCategoryAttributes))
 
+		r.Post("/media", httpx.Wrap(h.CreateMedia))
+		r.Post("/media/{id}/complete", httpx.Wrap(h.CompleteMedia))
+
 		r.Post("/attributes", httpx.Wrap(h.CreateAttribute))
 		r.Patch("/attributes/{id}", httpx.Wrap(h.UpdateAttribute))
 		r.Delete("/attributes/{id}", httpx.Wrap(h.DeleteAttribute))

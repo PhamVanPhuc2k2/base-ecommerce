@@ -103,6 +103,18 @@ var (
 	ErrUnknownAttribute = errs.New(errs.KindNotFound, "UNKNOWN_ATTRIBUTE",
 		"Không tìm thấy thuộc tính")
 
+	// Media (P1.4).
+	ErrUnsupportedImageType = errs.New(errs.KindValidation, "UNSUPPORTED_IMAGE_TYPE",
+		"Chỉ nhận ảnh JPEG, PNG hoặc WebP")
+	ErrImageTooLarge = errs.New(errs.KindTooLarge, "IMAGE_TOO_LARGE",
+		"Ảnh phải lớn hơn 0 và không quá 10 MB")
+	ErrInvalidImage = errs.New(errs.KindValidation, "INVALID_IMAGE",
+		"File tải lên không phải ảnh JPEG, PNG hay WebP hợp lệ")
+	ErrUploadNotFound = errs.New(errs.KindValidation, "UPLOAD_NOT_FOUND",
+		"Chưa thấy file trên kho lưu trữ — hãy tải file lên trước khi xác nhận")
+	ErrUnknownMedia = errs.New(errs.KindNotFound, "UNKNOWN_MEDIA",
+		"Không tìm thấy ảnh")
+
 	ErrInvalidPagination = errs.New(errs.KindInvalid, "INVALID_PAGINATION",
 		"Tham số phân trang không hợp lệ")
 

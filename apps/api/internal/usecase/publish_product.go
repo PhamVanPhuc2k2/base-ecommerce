@@ -9,16 +9,16 @@ import (
 )
 
 type PublishProduct struct {
-	tx      TxManager
-	repo    ProductRepository
-	events  EventPublisher
-	cache   Cache
-	schemas *AttributeSchemas
+	tx     TxManager
+	repo   ProductRepository
+	events EventPublisher
+	cache  Cache
+	rules  *ProductRules
 }
 
 func NewPublishProduct(tx TxManager, repo ProductRepository, events EventPublisher, cache Cache,
-	schemas *AttributeSchemas) *PublishProduct {
-	return &PublishProduct{tx: tx, repo: repo, events: events, cache: cache, schemas: schemas}
+	rules *ProductRules) *PublishProduct {
+	return &PublishProduct{tx: tx, repo: repo, events: events, cache: cache, rules: rules}
 }
 
 func (uc *PublishProduct) Execute(ctx context.Context, id uuid.UUID) (*domain.Product, error) {
@@ -38,7 +38,7 @@ func (uc *PublishProduct) Execute(ctx context.Context, id uuid.UUID) (*domain.Pr
 			return err
 		}
 		// SAU Publish: status đã là live nên thuộc tính required được kiểm.
-		if err := uc.schemas.check(ctx, p); err != nil {
+		if err := uc.rules.check(ctx, p, true); err != nil {
 			return err
 		}
 		if err := uc.repo.Save(ctx, p); err != nil {

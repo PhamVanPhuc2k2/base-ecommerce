@@ -35,3 +35,15 @@ export function siteUrl(): string {
 export function absoluteUrl(path: string): string {
   return `${siteUrl()}${path.startsWith('/') ? path : `/${path}`}`
 }
+
+/**
+ * URL TUYỆT ĐỐI của một ảnh sản phẩm, cho og:image và JSON-LD.
+ *
+ * `Product.images` chứa KHÓA media ("products/<id>.jpg"), không phải URL (P1.4).
+ * next/image tự đổi khóa qua loader, nhưng Facebook, Zalo và Google đọc thẳng
+ * thẻ meta — chúng cần một địa chỉ đầy đủ, tải được từ ngoài. w1080 là bậc đủ
+ * nét cho ảnh chia sẻ (Facebook khuyên tối thiểu 1080px chiều rộng).
+ */
+export function absoluteImageUrl(key: string): string {
+  return absoluteUrl(`/img/w1080/${key}`)
+}

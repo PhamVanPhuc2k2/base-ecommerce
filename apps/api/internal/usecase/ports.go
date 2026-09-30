@@ -55,6 +55,23 @@ type ProductRepository interface {
 	Facets(ctx context.Context, f ListFilter, productCodes, variantCodes []string) (domain.FacetCounts, error)
 }
 
+type MediaRepository interface {
+	Insert(ctx context.Context, m *domain.Media) error
+	// ByID khóa dòng (FOR UPDATE) — chỉ dùng trong use case ghi.
+	ByID(ctx context.Context, id uuid.UUID) (*domain.Media, error)
+	Update(ctx context.Context, m *domain.Media) error
+	ReadyKeys(ctx context.Context, keys []string) (map[string]bool, error)
+}
+
+// ObjectStorage là kho file (MinIO/S3). Chỉ kiểu stdlib trong chữ ký: use
+// case không được biết SDK nào đứng sau.
+type ObjectStorage interface {
+	PresignPost(ctx context.Context, key, contentType string, maxBytes int64, ttl time.Duration) (string, map[string]string, error)
+	Stat(ctx context.Context, key string) (exists bool, size int64, err error)
+	ReadHead(ctx context.Context, key string, n int64) ([]byte, error)
+	Remove(ctx context.Context, key string) error
+}
+
 type AttributeRepository interface {
 	Catalog(ctx context.Context) (*domain.AttributeCatalog, error)
 	// ByID khóa dòng (FOR UPDATE) — chỉ dùng trong use case ghi.

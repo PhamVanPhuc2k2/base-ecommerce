@@ -15,6 +15,7 @@ import (
 	"base-ecommerce/api/internal/delivery/httpapi"
 	"base-ecommerce/api/pkg/config"
 	"base-ecommerce/api/pkg/health"
+	"base-ecommerce/api/pkg/objectstore"
 	"base-ecommerce/api/pkg/observability"
 	"base-ecommerce/api/pkg/postgres"
 	platformredis "base-ecommerce/api/pkg/redis"
@@ -76,11 +77,20 @@ func run() error {
 
 	txManager := postgres.NewManager(pool)
 	cache := platformredis.NewCache(rdb, log)
-	catalogHandler := newCatalogHandler(txManager, cache, cfg.AdminKey)
+	// Tạo client KHÔNG gọi mạng (minio.New chỉ dựng cấu hình), nên storage
+	// chết lúc khởi động không chặn API: trang bán hàng không cần nó, chỉ upload
+	// ảnh cần. Tình trạng thật hiện ở /readyz qua HealthChecker (Optional).
+	store, err := objectstore.New(cfg.S3)
+	if err != nil {
+		return fmt.Errorf("cấu hình object storage: %w", err)
+	}
+
+	catalogHandler := newCatalogHandler(txManager, cache, store, cfg.AdminKey)
 
 	h := health.New(cfg.Version,
 		postgres.NewHealthChecker(pool),
 		platformredis.NewHealthChecker(rdb),
+		objectstore.NewHealthChecker(store),
 	)
 
 	srv := &http.Server{

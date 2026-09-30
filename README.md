@@ -250,6 +250,7 @@ base-ecommerce/
 │   │   │   │   ├── variant.go                # phiên bản: SKU, giá, options; chỉ sinh ra QUA Product
 │   │   │   │   ├── attribute.go              # định nghĩa thuộc tính, tập hiệu lực kế thừa, CheckProduct
 │   │   │   │   ├── facet.go                  # số sản phẩm theo giá trị thuộc tính
+│   │   │   │   ├── media.go                  # ảnh đã upload; dò định dạng bằng chữ ký byte
 │   │   │   │   ├── category.go               # cây danh mục, DescendantIDs, CheckMove chống vòng lặp
 │   │   │   │   ├── brand.go                  # thương hiệu; slug KHÔNG đổi theo tên
 │   │   │   │   ├── money.go                  # value object (bọc NUMERIC)
@@ -269,7 +270,8 @@ base-ecommerce/
 │   │   │   │   ├── delete_category.go
 │   │   │   │   ├── brand.go                  # List/Create/Update/DeleteBrand
 │   │   │   │   ├── variant.go                # AddVariant/UpdateVariant — không có xóa, chỉ inactive
-│   │   │   │   └── attribute.go              # AttributeSchemas (validate mọi đường ghi), quản trị thuộc tính
+│   │   │   │   ├── attribute.go              # AttributeSchemas, quản trị thuộc tính
+│   │   │   │   └── media.go                  # upload (presigned POST) + ProductRules gộp lỗi thuộc tính và ảnh
 │   │   │   ├── repository/                   # cài đặt interface của usecase (đi RA ngoài)
 │   │   │   │   ├── pgstore/                  # Postgres: sqlc + squirrel + mapping → domain
 │   │   │   │   │   ├── queries/              # *.sql cho sqlc
@@ -278,7 +280,8 @@ base-ecommerce/
 │   │   │   │   │   ├── product_repo.go       # List và Count dùng chung filtered()
 │   │   │   │   │   ├── category_repo.go      # LockForWrite; lỗi FK map theo thao tác
 │   │   │   │   │   ├── brand_repo.go
-│   │   │   │   │   └── attribute_repo.go     # định nghĩa + phép gán; ReplaceAssignments trong transaction
+│   │   │   │   │   ├── attribute_repo.go     # định nghĩa + phép gán; ReplaceAssignments trong transaction
+│   │   │   │   │   └── media_repo.go
 │   │   │   │   ├── rediscache/               # cache-aside cho sản phẩm và cây danh mục
 │   │   │   │   ├── outboxpub/                # domain.Event → outbox.Record, cùng transaction
 │   │   │   │   └── outbox/                   # outbox + khử trùng lặp, dùng chung, KHÔNG biết domain
@@ -294,7 +297,8 @@ base-ecommerce/
 │   │   │   ├── observability/                # slog JSON, request ID
 │   │   │   ├── postgres/                     # pgxpool, DBTX, txmanager
 │   │   │   ├── redis/                        # client + cache-aside, singleflight, jitter
-│   │   │   └── rabbitmq/                     # topology + publisher có confirm + consumer manual ack
+│   │   │   ├── rabbitmq/                     # topology + publisher có confirm + consumer manual ack
+│   │   │   └── objectstore/                  # S3/MinIO: presigned POST, stat, đọc byte đầu
 │   │   ├── migrations/                       # goose
 │   │   ├── .air.api.toml                     # hot-reload cho cmd/api (task dev)
 │   │   ├── .air.worker.toml                  # hot-reload cho cmd/worker (task dev-worker)
@@ -311,8 +315,10 @@ base-ecommerce/
 │       │   ├── errors.ts                     # mã lỗi → thông điệp tiếng Việt, một chỗ duy nhất
 │       │   ├── format.ts                     # formatVND (nhận chuỗi decimal), formatDate
 │       │   ├── search-params.ts              # dựng link lọc: giữ tham số khác, luôn reset page
-│       │   └── site.ts                       # SITE_URL đọc lúc chạy → canonical, sitemap, JSON-LD
+│       │   ├── site.ts                       # SITE_URL đọc lúc chạy → canonical, sitemap, JSON-LD
+│       │   └── image-loader.ts               # next/image → /img/<preset>/<khóa>, không NEXT_PUBLIC_*
 │       ├── app/                              # App Router
+│       │   ├── img/[preset]/[...key]/route.ts # proxy ảnh tới imgproxy; chặn preset/khóa lạ
 │       │   ├── fonts/                        # Geist .woff2 tự host + OFL.txt — build không cần Google Fonts
 │       │   ├── layout.tsx                    # <html lang="vi">, header, footer, metadata mặc định
 │       │   ├── page.tsx                      # trang chủ tối giản, dẫn sang /danh-muc

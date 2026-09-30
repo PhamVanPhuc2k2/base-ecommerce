@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: base-ecommerce API
-  version: 0.5.0
+  version: 0.6.0
   description: |
     Hợp đồng API. Đây là NGUỒN SỰ THẬT — sửa endpoint thì sửa file này trước.
 servers:
@@ -212,6 +212,63 @@ paths:
                     type: array
                     items: { $ref: "#/components/schemas/CategoryAttribute" }
         "404": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /admin/media:
+    post:
+      operationId: createMedia
+      summary: Cấp chỗ và URL upload cho một ảnh
+      description: >-
+        Trả `upload.url` + `upload.fields`. Client gửi multipart POST tới
+        `upload.url` với MỌI cặp trong `fields` rồi mới tới trường `file` (thứ
+        tự bắt buộc của S3). Storage tự từ chối file sai loại hoặc quá 10 MB.
+        URL hết hạn sau 15 phút. Upload xong phải gọi `/complete`.
+      security: [{ adminKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateMediaRequest" }
+      responses:
+        "201":
+          description: Đã cấp
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [media, upload]
+                properties:
+                  media:  { $ref: "#/components/schemas/Media" }
+                  upload: { $ref: "#/components/schemas/MediaUpload" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /admin/media/{id}/complete:
+    post:
+      operationId: completeMedia
+      summary: Xác nhận file đã upload và là ảnh thật
+      description: >-
+        Đọc 16 byte đầu để dò định dạng THẬT — không tin Content-Type đã khai.
+        Không phải JPEG/PNG/WebP → object bị xóa, 422 INVALID_IMAGE. Gọi lại cho
+        media đã ready thì trả về luôn (an toàn khi thử lại).
+      security: [{ adminKey: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Media" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
@@ -593,6 +650,8 @@ components:
           enum:
             # platform/httpx — có thể xảy ra ở bất kỳ endpoint nào
             - INTERNAL_ERROR
+            # 413 riêng của ảnh (P1.4)
+            - IMAGE_TOO_LARGE
             - INVALID_PAGINATION
             - MALFORMED_REQUEST
             - METHOD_NOT_ALLOWED
@@ -622,6 +681,9 @@ components:
             - INVALID_VARIANT_STATUS
             - NO_ACTIVE_VARIANT
             - INVALID_ATTRIBUTE_CODE
+            - UNSUPPORTED_IMAGE_TYPE
+            - INVALID_IMAGE
+            - UPLOAD_NOT_FOUND
             - ATTRIBUTE_NAME_INVALID
             - INVALID_ATTRIBUTE_TYPE
             - INVALID_ATTRIBUTE_OPTIONS
@@ -647,6 +709,7 @@ components:
             - UNKNOWN_BRAND
             - UNKNOWN_VARIANT
             - UNKNOWN_ATTRIBUTE
+            - UNKNOWN_MEDIA
             # catalog/domain — tham số không hợp lệ (400)
             - INVALID_SORT
             - PAGE_TOO_DEEP
@@ -670,7 +733,8 @@ components:
                   Mã lỗi CẤP TRƯỜNG (khác Problem.code). Với thuộc tính theo danh
                   mục: UNKNOWN_ATTRIBUTE_KEY, INVALID_ATTRIBUTE_VALUE,
                   ATTRIBUTE_REQUIRED, VARIANT_ATTRIBUTE_ON_PRODUCT,
-                  PRODUCT_ATTRIBUTE_ON_VARIANT.
+                  PRODUCT_ATTRIBUTE_ON_VARIANT. Với ảnh: UNKNOWN_IMAGE (trường
+                  "images[i]") — key chưa upload hoặc chưa /complete.
               message: { type: string }
 
     Product:
@@ -701,7 +765,13 @@ components:
           examples: ["VND"]
         status:     { type: string, enum: [draft, live, archived] }
         attributes: { type: object, additionalProperties: { type: string } }
-        images:     { type: array, items: { type: string } }
+        images:
+          type: array
+          items: { type: string }
+          description: >-
+            KHÓA media (`Media.key`, ví dụ "products/0190….jpg"), KHÔNG phải URL
+            — từ 0.6.0. Hiển thị qua imgproxy của storefront. Ghi sản phẩm với
+            key chưa ready trả 422, trường images[i] mã UNKNOWN_IMAGE.
         variants:
           type: array
           description: >-
@@ -796,6 +866,32 @@ components:
         options:  { type: object, additionalProperties: { type: string } }
         status:   { type: string, enum: [active, inactive] }
         position: { type: integer }
+
+    Media:
+      type: object
+      required: [id, key, content_type, size, status, created_at]
+      properties:
+        id:           { type: string, format: uuid }
+        key:          { type: string, description: "Đặt giá trị này vào Product.images." }
+        content_type: { type: string, enum: [image/jpeg, image/png, image/webp], description: "Sau /complete: loại THẬT dò từ nội dung file." }
+        size:         { type: integer, description: "Byte. Sau /complete: kích thước thật trên storage." }
+        status:       { type: string, enum: [pending, ready] }
+        created_at:   { type: string, format: date-time }
+
+    MediaUpload:
+      type: object
+      required: [url, fields]
+      properties:
+        url:    { type: string }
+        fields: { type: object, additionalProperties: { type: string } }
+
+    CreateMediaRequest:
+      type: object
+      additionalProperties: false
+      required: [content_type, size]
+      properties:
+        content_type: { type: string, enum: [image/jpeg, image/png, image/webp] }
+        size:         { type: integer, minimum: 1, maximum: 10485760 }
 
     Attribute:
       type: object
@@ -975,7 +1071,13 @@ components:
             `price` nằm ở đây, không còn ở cấp sản phẩm.
           items: { $ref: "#/components/schemas/CreateVariantRequest" }
         attributes:        { type: object, additionalProperties: { type: string } }
-        images:            { type: array, items: { type: string } }
+        images:
+          type: array
+          items: { type: string }
+          description: >-
+            KHÓA media (`Media.key`, ví dụ "products/0190….jpg"), KHÔNG phải URL
+            — từ 0.6.0. Hiển thị qua imgproxy của storefront. Ghi sản phẩm với
+            key chưa ready trả 422, trường images[i] mã UNKNOWN_IMAGE.
 
     UpdateProductRequest:
       type: object
@@ -999,7 +1101,13 @@ components:
           description: "Đổi tên sẽ sinh lại slug; trùng slug sản phẩm khác trả 409 DUPLICATE_SLUG."
         short_description: { type: string }
         attributes:        { type: object, additionalProperties: { type: string } }
-        images:            { type: array, items: { type: string } }
+        images:
+          type: array
+          items: { type: string }
+          description: >-
+            KHÓA media (`Media.key`, ví dụ "products/0190….jpg"), KHÔNG phải URL
+            — từ 0.6.0. Hiển thị qua imgproxy của storefront. Ghi sản phẩm với
+            key chưa ready trả 422, trường images[i] mã UNKNOWN_IMAGE.
         category_id:
           type: string
           format: uuid

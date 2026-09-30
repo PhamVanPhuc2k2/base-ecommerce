@@ -10,7 +10,7 @@ import type { components } from '@/lib/api/generated/schema'
 import { apiGet } from '@/lib/api/server'
 import { byPosition, formatAttrValue, indexAttributes } from '@/lib/attributes'
 import { formatDate, formatVND } from '@/lib/format'
-import { absoluteUrl } from '@/lib/site'
+import { absoluteImageUrl, absoluteUrl } from '@/lib/site'
 import { hasPriceRange, optionsLabel, priceRange } from '@/lib/variants'
 
 type Product = components['schemas']['Product']
@@ -274,7 +274,7 @@ export async function generateMetadata({
       description,
       // URL ảnh phải tuyệt đối — Facebook/Zalo lấy ảnh từ máy chủ của họ, ở đó
       // đường dẫn tương đối chẳng trỏ tới đâu cả.
-      images: p.images,
+      images: p.images.map(absoluteImageUrl),
       url: absoluteUrl(`${PRODUCT_PATH}/${p.slug}`),
       type: 'website',
       siteName: 'Base E-commerce',
@@ -616,7 +616,7 @@ function ProductJsonLd({ product, brand }: { product: Product; brand: Brand | un
     // không có SKU nào đại diện được cho cả sản phẩm.
     ...(variants.length === 1 && variants[0] !== undefined ? { sku: variants[0].sku } : {}),
     description: product.short_description,
-    image: product.images,
+    image: product.images.map(absoluteImageUrl),
     // Chỉ khai khi tra được tên thật. `brand` rỗng hay mang uuid là dữ liệu có
     // cấu trúc không khớp nội dung trang — đúng thứ Google phạt.
     ...(brand !== undefined ? { brand: { '@type': 'Brand', name: brand.name } } : {}),
