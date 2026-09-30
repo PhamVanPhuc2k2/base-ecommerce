@@ -34,6 +34,7 @@ type Usecases struct {
 	Media          *usecase.MediaUploads
 	Sitemap        *usecase.SitemapProducts
 	Auth           *usecase.Auth
+	Verification   *usecase.Verification
 	Authorizer     *usecase.Authorizer
 	RoleAdmin      *usecase.RoleAdmin
 	UpdateVariant  *usecase.UpdateVariant

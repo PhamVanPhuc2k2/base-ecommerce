@@ -159,6 +159,14 @@ var (
 	ErrUnknownUser = errs.New(errs.KindNotFound, "UNKNOWN_USER",
 		"Không tìm thấy người dùng")
 
+	// OTP qua email (P2.3). INVALID_OTP dùng CHUNG cho mã sai, hết hạn, đã
+	// dùng, đã sai quá 5 lần, và email không tồn tại khi đặt lại mật khẩu —
+	// tách ra thì kẻ dò biết được email nào có tài khoản.
+	ErrInvalidOTP = errs.New(errs.KindValidation, "INVALID_OTP",
+		"Mã xác nhận không đúng hoặc đã hết hạn")
+	ErrEmailAlreadyVerified = errs.New(errs.KindConflict, "EMAIL_ALREADY_VERIFIED",
+		"Email đã được xác minh")
+
 	ErrInvalidPagination = errs.New(errs.KindInvalid, "INVALID_PAGINATION",
 		"Tham số phân trang không hợp lệ")
 

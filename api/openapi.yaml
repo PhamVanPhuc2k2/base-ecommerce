@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: base-ecommerce API
-  version: 0.9.0
+  version: 0.10.0
   description: |
     Hợp đồng API. Đây là NGUỒN SỰ THẬT — sửa endpoint thì sửa file này trước.
 servers:
@@ -325,6 +325,111 @@ paths:
         "204": { description: Đã đăng xuất }
         "400": { $ref: "#/components/responses/Problem" }
         "413": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /auth/email/verification:
+    post:
+      operationId: requestEmailVerification
+      summary: Gửi (lại) mã xác minh email
+      description: >-
+        Mã 6 số, sống 10 phút, sai 5 lần là chết; xin mã mới giết mã cũ. Hai
+        lần xin cách nhau tối thiểu 60 giây — sớm hơn thì 429 kèm Retry-After.
+        Đăng ký đã tự gửi một mã.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "202": { description: Đã xếp thư vào hàng đợi }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /auth/email/verify:
+    post:
+      operationId: verifyEmail
+      summary: Xác minh email bằng mã trong thư
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [code]
+              properties:
+                code: { type: string, pattern: "^[0-9]{6}$" }
+      responses:
+        "200":
+          description: Đã xác minh
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /auth/password/forgot:
+    post:
+      operationId: forgotPassword
+      summary: Gửi mã đặt lại mật khẩu
+      description: >-
+        LUÔN 202 với email đúng cú pháp — có tài khoản hay không, bị khóa hay
+        không, đang trong 60 giây chờ hay không. Khác đi là tiết lộ email nào
+        đã đăng ký.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email]
+              properties:
+                email: { type: string }
+      responses:
+        "202": { description: Nếu email có tài khoản thì thư đang trên đường tới }
+        "400": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /auth/password/reset:
+    post:
+      operationId: resetPassword
+      summary: Đặt mật khẩu mới bằng mã trong thư
+      description: >-
+        Thành công thì MỌI phiên đăng nhập (refresh token) của tài khoản bị thu
+        hồi, và email được coi là đã xác minh. Email không tồn tại trả đúng
+        422 INVALID_OTP như mã sai.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, code, new_password]
+              properties:
+                email:        { type: string }
+                code:         { type: string, pattern: "^[0-9]{6}$" }
+                new_password: { type: string, minLength: 8, maxLength: 128 }
+      responses:
+        "204": { description: Đã đổi mật khẩu }
+        "400": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
@@ -1017,6 +1122,9 @@ components:
             - INVALID_CREDENTIALS
             - INVALID_REFRESH_TOKEN
             - ACCOUNT_DISABLED
+            # OTP qua email (P2.3)
+            - INVALID_OTP
+            - EMAIL_ALREADY_VERIFIED
             # phân quyền (P2.2)
             - FORBIDDEN
             - RATE_LIMITED

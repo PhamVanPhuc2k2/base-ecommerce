@@ -23,6 +23,7 @@ type Config struct {
 	RabbitMQ RabbitMQ
 	S3       S3
 	Auth     Auth
+	Mail     Mail
 }
 
 type HTTP struct {
@@ -57,6 +58,28 @@ type Auth struct {
 	RefreshTTL time.Duration
 }
 
+// Mail là SMTP để worker gửi thư (P2.3). Mặc định trỏ Mailpit trên máy dev.
+type Mail struct {
+	Host     string
+	Port     int
+	Username string
+	Password string
+	From     string
+	// HostSet: SMTP_HOST có được đặt tường minh không. Chỉ worker gửi thư,
+	// nên chỉ worker đòi cái này ở production (ValidateForSending) — bắt api
+	// và relay khai SMTP là bắt chúng biết thứ chúng không dùng.
+	HostSet bool
+}
+
+// ValidateForSending chặn worker production khởi động với SMTP mặc định dev:
+// thư "gửi thành công" tới localhost:1025 không tồn tại là thư mất im lặng.
+func (m Mail) ValidateForSending(production bool) error {
+	if production && (!m.HostSet || m.From == devMailFrom) {
+		return errors.New("production phải đặt SMTP_HOST và MAIL_FROM — mặc định dev gửi vào Mailpit trên máy lập trình viên")
+	}
+	return nil
+}
+
 // S3 là object storage giữ ảnh gốc (MinIO khi dev, S3/R2 khi production).
 type S3 struct {
 	// Endpoint là địa chỉ API dùng để nói chuyện với storage (mạng nội bộ:
@@ -85,10 +108,12 @@ func (c *Config) IsProduction() bool { return c.Env == "production" }
 func (c *Config) String() string {
 	return fmt.Sprintf(
 		"Config{Env:%s Version:%s HTTP.Addr:%s DB.DSN:%s DB.MaxConns:%d Redis.Addr:%s "+
-			"RabbitMQ.URL:%s S3.Endpoint:%s S3.PublicEndpoint:%s S3.Bucket:%s S3.SecretKey:%s JWTSecret:%s}",
+			"RabbitMQ.URL:%s S3.Endpoint:%s S3.PublicEndpoint:%s S3.Bucket:%s S3.SecretKey:%s JWTSecret:%s "+
+			"SMTP:%s:%d SMTP.User:%s SMTP.Password:%s MailFrom:%s}",
 		c.Env, c.Version, c.HTTP.Addr, redactDSN(c.DB.DSN), c.DB.MaxConns,
 		c.Redis.Addr, redactDSN(c.RabbitMQ.URL),
 		c.S3.Endpoint, c.S3.PublicEndpoint, c.S3.Bucket, redactSecret(c.S3.SecretKey), redactSecret(c.Auth.JWTSecret),
+		c.Mail.Host, c.Mail.Port, c.Mail.Username, redactSecret(c.Mail.Password), c.Mail.From,
 	)
 }
 
@@ -117,6 +142,7 @@ func redactSecret(s string) string {
 
 const (
 	devS3Secret  = "app-secret-dev"
+	devMailFrom  = "Base Ecommerce <no-reply@base-ecommerce.local>"
 	devJWTSecret = "dev-jwt-secret-chi-dung-tren-may-local-0123456789"
 )
 
@@ -169,6 +195,15 @@ func Load() (*Config, error) {
 		JWTSecret:  l.str("JWT_SECRET", devJWTSecret),
 		AccessTTL:  l.dur("JWT_ACCESS_TTL", 15*time.Minute),
 		RefreshTTL: l.dur("JWT_REFRESH_TTL", 30*24*time.Hour),
+	}
+	_, hostSet := os.LookupEnv("SMTP_HOST")
+	c.Mail = Mail{
+		Host:     l.str("SMTP_HOST", "localhost"),
+		Port:     l.num("SMTP_PORT", 1025),
+		Username: l.str("SMTP_USERNAME", ""),
+		Password: l.str("SMTP_PASSWORD", ""),
+		From:     l.str("MAIL_FROM", devMailFrom),
+		HostSet:  hostSet,
 	}
 
 	// WriteTimeout phải lớn hơn HandlerTimeout, nếu không response lỗi không

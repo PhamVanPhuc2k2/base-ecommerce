@@ -23,16 +23,8 @@ const (
 	// QueueCatalogIndexer là queue chính của worker đánh chỉ mục sản phẩm.
 	QueueCatalogIndexer = "catalog.indexer"
 
-	// QueueCatalogIndexerRetry giữ message chờ thử lại. KHÔNG AI CONSUME queue
-	// này — xem giải thích ở Declare.
-	QueueCatalogIndexerRetry = "catalog.indexer.retry"
-
-	// QueueCatalogIndexerDLQ là điểm cuối của message đã thử lại đủ số lần.
-	// Có message ở đây nghĩa là cần người vào xem, nên hãy gắn cảnh báo.
-	QueueCatalogIndexerDLQ = "catalog.indexer.dlq"
-
-	// bindingCatalogIndexer: worker đánh chỉ mục quan tâm mọi sự kiện sản phẩm.
-	bindingCatalogIndexer = "product.*"
+	// QueueMailer: worker gửi thư trong hàng đợi outbound_emails (P2.3).
+	QueueMailer = "mailer"
 
 	// retryTTLMillis là thời gian message nằm trong queue retry trước khi tự
 	// quay về queue chính. 30 giây: đủ lâu để một sự cố chớp nhoáng (Postgres
@@ -49,11 +41,11 @@ const (
 //
 // # Cơ chế retry: queue retry KHÔNG có consumer
 //
-// Đây là điểm dễ hiểu nhầm nhất. catalog.indexer.retry không phải queue để ai
+// Đây là điểm dễ hiểu nhầm nhất. <queue>.retry không phải queue để ai
 // đó đọc. Worker xử lý thất bại sẽ publish message sang đây; message nằm im
 // cho tới khi hết x-message-ttl, rồi RabbitMQ TỰ đẩy nó đi theo
 // x-dead-letter-exchange ("" = default exchange) với routing key
-// x-dead-letter-routing-key ("catalog.indexer" = tên queue chính). Nghĩa là
+// x-dead-letter-routing-key (= tên queue chính). Nghĩa là
 // message tự quay về queue chính sau 30 giây mà không cần bất kỳ đoạn code nào
 // hẹn giờ. Thấy queue này có message tồn đọng là BÌNH THƯỜNG, không phải dấu
 // hiệu worker chết.
@@ -77,34 +69,59 @@ func Declare(ch *amqp.Channel) error {
 	if err := ch.ExchangeDeclare(ExchangeEvents, amqp.ExchangeTopic, true, false, false, false, nil); err != nil {
 		return fmt.Errorf("khai báo exchange %q: %w", ExchangeEvents, hintPreconditionFailed(err))
 	}
+	for _, q := range consumerQueues {
+		if err := declareConsumerQueue(ch, q.name, q.binding); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
+// consumerQueues: mỗi consumer một bộ ba queue chính / retry / DLQ.
+//
+// ⚠️ Sự kiện mới PHẢI có binding ở đây trước khi được phát (bài học P1): relay
+// publish với mandatory, message không queue nào nhận là lỗi, và relay thử lại
+// dòng outbox đó mãi.
+var consumerQueues = []struct{ name, binding string }{
+	{QueueCatalogIndexer, "product.*"}, // đánh chỉ mục: mọi sự kiện sản phẩm
+	{QueueMailer, "email.*"},           // gửi thư: email.queued
+}
+
+// RetryQueue giữ message chờ thử lại. KHÔNG AI CONSUME queue này — xem giải
+// thích ở Declare.
+func RetryQueue(queue string) string { return queue + ".retry" }
+
+// DeadLetterQueue là điểm cuối của message đã thử lại đủ số lần. Có message ở
+// đây nghĩa là cần người vào xem, nên hãy gắn cảnh báo.
+func DeadLetterQueue(queue string) string { return queue + ".dlq" }
+
+func declareConsumerQueue(ch *amqp.Channel, queue, binding string) error {
 	// Queue chính. durable: true để queue (và message persistent trong đó)
 	// sống sót qua restart broker.
-	if _, err := ch.QueueDeclare(QueueCatalogIndexer, true, false, false, false, nil); err != nil {
-		return fmt.Errorf("khai báo queue %q: %w", QueueCatalogIndexer, hintPreconditionFailed(err))
+	if _, err := ch.QueueDeclare(queue, true, false, false, false, nil); err != nil {
+		return fmt.Errorf("khai báo queue %q: %w", queue, hintPreconditionFailed(err))
 	}
-	if err := ch.QueueBind(QueueCatalogIndexer, bindingCatalogIndexer, ExchangeEvents, false, nil); err != nil {
-		return fmt.Errorf("bind %q vào %q với khóa %q: %w",
-			QueueCatalogIndexer, ExchangeEvents, bindingCatalogIndexer, hintPreconditionFailed(err))
+	if err := ch.QueueBind(queue, binding, ExchangeEvents, false, nil); err != nil {
+		return fmt.Errorf("bind %q vào %q với khóa %q: %w", queue, ExchangeEvents, binding, hintPreconditionFailed(err))
 	}
 
 	// Queue retry: hết TTL thì message tự chết và được đẩy về queue chính.
 	// x-dead-letter-exchange rỗng là default exchange — nó định tuyến thẳng
 	// tới queue trùng tên với routing key, nên không cần binding nào cả.
-	if _, err := ch.QueueDeclare(QueueCatalogIndexerRetry, true, false, false, false, amqp.Table{
+	retry := RetryQueue(queue)
+	if _, err := ch.QueueDeclare(retry, true, false, false, false, amqp.Table{
 		"x-message-ttl":             int32(retryTTLMillis),
 		"x-dead-letter-exchange":    "",
-		"x-dead-letter-routing-key": QueueCatalogIndexer,
+		"x-dead-letter-routing-key": queue,
 	}); err != nil {
-		return fmt.Errorf("khai báo queue %q: %w", QueueCatalogIndexerRetry, hintPreconditionFailed(err))
+		return fmt.Errorf("khai báo queue %q: %w", retry, hintPreconditionFailed(err))
 	}
 
 	// DLQ: không TTL, không dead-letter. Message vào đây là nằm lại cho người
 	// xem — mất dữ liệu vì hết hạn ở bước cuối cùng thì còn tệ hơn là tồn đọng.
-	if _, err := ch.QueueDeclare(QueueCatalogIndexerDLQ, true, false, false, false, nil); err != nil {
-		return fmt.Errorf("khai báo queue %q: %w", QueueCatalogIndexerDLQ, hintPreconditionFailed(err))
+	if _, err := ch.QueueDeclare(DeadLetterQueue(queue), true, false, false, false, nil); err != nil {
+		return fmt.Errorf("khai báo queue %q: %w", DeadLetterQueue(queue), hintPreconditionFailed(err))
 	}
-
 	return nil
 }
 

@@ -110,6 +110,13 @@ services:
     image: ${REGISTRY}/base-ecommerce-worker:${GIT_SHA}
     environment:
       <<: *go-env
+      # Chỉ worker gửi thư (P2.3). Thiếu thì compose từ chối chạy; worker còn tự
+      # chặn MAIL_FROM mặc định dev lúc khởi động.
+      SMTP_HOST: ${SMTP_HOST:?SMTP_HOST phải được đặt}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:?MAIL_FROM phải được đặt}
       DB_MAX_CONNS: "3"
       DB_MIN_CONNS: "1"
     depends_on:

@@ -56,6 +56,25 @@ func (r *UserRepository) ByID(ctx context.Context, id uuid.UUID) (*domain.User, 
 	return userToDomain(row), nil
 }
 
+func (r *UserRepository) ByIDForUpdate(ctx context.Context, id uuid.UUID) (*domain.User, error) {
+	row, err := gen.New(r.db.DB(ctx)).UserByIDForUpdate(ctx, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	return userToDomain(row), nil
+}
+
+func (r *UserRepository) MarkEmailVerified(ctx context.Context, id uuid.UUID, at time.Time) error {
+	return mapErr(gen.New(r.db.DB(ctx)).MarkEmailVerified(ctx, gen.MarkEmailVerifiedParams{ID: id, UpdatedAt: at}))
+}
+
+func (r *UserRepository) UpdatePassword(ctx context.Context, id uuid.UUID, hash string, at time.Time) error {
+	return mapErr(gen.New(r.db.DB(ctx)).UpdatePassword(ctx, gen.UpdatePasswordParams{ID: id, PasswordHash: hash, UpdatedAt: at}))
+}
+
 func userToDomain(r gen.User) *domain.User {
 	u := &domain.User{
 		ID: r.ID, Email: r.Email, PasswordHash: r.PasswordHash, FullName: r.FullName,
@@ -104,4 +123,8 @@ func (r *RefreshTokenRepository) MarkUsed(ctx context.Context, id uuid.UUID, at 
 
 func (r *RefreshTokenRepository) RevokeFamily(ctx context.Context, familyID uuid.UUID, at time.Time) error {
 	return mapErr(gen.New(r.db.DB(ctx)).RevokeRefreshFamily(ctx, gen.RevokeRefreshFamilyParams{FamilyID: familyID, RevokedAt: &at}))
+}
+
+func (r *RefreshTokenRepository) RevokeAllForUser(ctx context.Context, userID uuid.UUID, at time.Time) error {
+	return mapErr(gen.New(r.db.DB(ctx)).RevokeUserRefreshTokens(ctx, gen.RevokeUserRefreshTokensParams{UserID: userID, RevokedAt: &at}))
 }

@@ -243,7 +243,7 @@ base-ecommerce/
 │   │   │   ├── healthcheck/                  # binary tĩnh cho HEALTHCHECK (distroless không có curl)
 │   │   │   ├── checkcodes/                   # go/ast: liệt kê mã lỗi cho check-openapi-codes.sh
 │   │   │   ├── admintool/                    # grant-role <email> <vai trò> — cấp super admin đầu tiên
-│   │   │   ├── worker/                       # consumer catalog.indexer: khử trùng lặp, retry, DLQ
+│   │   │   ├── worker/                       # consumer catalog.indexer + mailer (gửi thư), retry, DLQ
 │   │   │   └── outboxrelay/                  # poll outbox → publish RabbitMQ → đánh dấu đã gửi
 │   │   ├── internal/
 │   │   │   ├── domain/                       # ENTITIES — chỉ stdlib + danh sách trắng
@@ -254,6 +254,8 @@ base-ecommerce/
 │   │   │   │   ├── media.go                  # ảnh đã upload; dò định dạng bằng chữ ký byte
 │   │   │   │   ├── user.go                   # tài khoản; chuẩn hóa email, độ dài mật khẩu
 │   │   │   │   ├── permission.go             # quyền cố định trong code, Role, PermissionSet
+│   │   │   │   ├── otp.go                    # mã OTP: mục đích, 10 phút, 5 lần sai, chờ 60 giây
+│   │   │   │   ├── email.go                  # thư trong hàng đợi + sự kiện email.queued (chỉ mang id)
 │   │   │   │   ├── category.go               # cây danh mục, DescendantIDs, CheckMove chống vòng lặp
 │   │   │   │   ├── brand.go                  # thương hiệu; slug KHÔNG đổi theo tên
 │   │   │   │   ├── money.go                  # value object (bọc NUMERIC)
@@ -276,7 +278,8 @@ base-ecommerce/
 │   │   │   │   ├── attribute.go              # AttributeSchemas, quản trị thuộc tính
 │   │   │   │   ├── media.go                  # upload (presigned POST) + ProductRules gộp lỗi thuộc tính và ảnh
 │   │   │   │   ├── auth.go                   # đăng ký/đăng nhập/refresh xoay vòng/đăng xuất, rate limit
-│   │   │   │   └── rbac.go                   # Authorizer (quyền qua cache 5') + quản trị vai trò, xóa cache khi đổi
+│   │   │   │   ├── rbac.go                   # Authorizer (quyền qua cache 5') + quản trị vai trò, xóa cache khi đổi
+│   │   │   │   └── otp.go                    # xác minh email, quên/đặt lại mật khẩu (HMAC), Mailing gửi thư
 │   │   │   ├── repository/                   # cài đặt interface của usecase (đi RA ngoài)
 │   │   │   │   ├── pgstore/                  # Postgres: sqlc + squirrel + mapping → domain
 │   │   │   │   │   ├── queries/              # *.sql cho sqlc
@@ -288,7 +291,8 @@ base-ecommerce/
 │   │   │   │   │   ├── attribute_repo.go     # định nghĩa + phép gán; ReplaceAssignments trong transaction
 │   │   │   │   │   ├── media_repo.go
 │   │   │   │   │   ├── user_repo.go          # users + refresh_tokens (FOR UPDATE khi refresh)
-│   │   │   │   │   └── role_repo.go          # roles, role_permissions, user_roles; lỗi FK → mã lỗi
+│   │   │   │   │   ├── role_repo.go          # roles, role_permissions, user_roles; lỗi FK → mã lỗi
+│   │   │   │   │   └── otp_repo.go           # otp_codes + outbound_emails; lần sai commit không chờ đĩa
 │   │   │   │   ├── rediscache/               # cache-aside cho sản phẩm và cây danh mục
 │   │   │   │   ├── outboxpub/                # domain.Event → outbox.Record, cùng transaction
 │   │   │   │   └── outbox/                   # outbox + khử trùng lặp, dùng chung, KHÔNG biết domain
@@ -307,6 +311,7 @@ base-ecommerce/
 │   │   │   ├── rabbitmq/                     # topology + publisher có confirm + consumer manual ack
 │   │   │   ├── objectstore/                  # S3/MinIO: presigned POST, stat, đọc byte đầu
 │   │   │   ├── password/                     # argon2id, chuỗi PHC
+│   │   │   ├── mailer/                       # SMTP + STARTTLS, thư chữ thuần UTF-8 (quoted-printable)
 │   │   │   └── authtoken/                    # JWT HS256 — chốt đúng một thuật toán
 │   │   ├── migrations/                       # goose
 │   │   ├── .air.api.toml                     # hot-reload cho cmd/api (task dev)

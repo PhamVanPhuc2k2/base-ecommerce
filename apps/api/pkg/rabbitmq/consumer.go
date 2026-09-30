@@ -288,7 +288,7 @@ func (c *Consumer) handle(ctx context.Context, pub *republisher, h Handler, d am
 		c.log.Error("message đã thử quá số lần cho phép, đẩy sang DLQ",
 			"queue", c.queue, "message_id", d.MessageId, "trace_id", traceID,
 			"routing_key", d.RoutingKey, "attempts", attempts, "max_attempts", maxAttempts)
-		return pub.republish(ctx, d, QueueCatalogIndexerDLQ, attempts)
+		return pub.republish(ctx, d, DeadLetterQueue(c.queue), attempts)
 	}
 
 	err := h(ctx, Delivery{
@@ -310,14 +310,14 @@ func (c *Consumer) handle(ctx context.Context, pub *republisher, h Handler, d am
 		c.log.Error("message hỏng vĩnh viễn, đẩy thẳng sang DLQ — KHÔNG thử lại",
 			"queue", c.queue, "message_id", d.MessageId, "trace_id", traceID,
 			"routing_key", d.RoutingKey, "err", err)
-		return pub.republish(ctx, d, QueueCatalogIndexerDLQ, attempts)
+		return pub.republish(ctx, d, DeadLetterQueue(c.queue), attempts)
 
 	default:
 		c.log.Warn("xử lý message thất bại, đẩy sang queue retry",
 			"queue", c.queue, "message_id", d.MessageId, "trace_id", traceID,
 			"routing_key", d.RoutingKey, "attempts", attempts, "err", err)
 		// attempts+1: đây là lần thử thứ mấy khi message quay lại.
-		return pub.republish(ctx, d, QueueCatalogIndexerRetry, attempts+1)
+		return pub.republish(ctx, d, RetryQueue(c.queue), attempts+1)
 	}
 }
 

@@ -26,7 +26,14 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Post("/auth/login", httpx.Wrap(h.Login))
 	r.Post("/auth/refresh", httpx.Wrap(h.Refresh))
 	r.Post("/auth/logout", httpx.Wrap(h.Logout))
-	r.With(h.RequireAuth).Get("/me", httpx.Wrap(h.Me))
+	r.Post("/auth/password/forgot", httpx.Wrap(h.ForgotPassword))
+	r.Post("/auth/password/reset", httpx.Wrap(h.ResetPassword))
+	r.Group(func(r chi.Router) {
+		r.Use(h.RequireAuth)
+		r.Get("/me", httpx.Wrap(h.Me))
+		r.Post("/auth/email/verification", httpx.Wrap(h.RequestEmailVerification))
+		r.Post("/auth/email/verify", httpx.Wrap(h.VerifyEmail))
+	})
 
 	/*
 		/admin/*: Bearer token (RequireAuth) RỒI MỚI tới quyền (RequirePermission).
