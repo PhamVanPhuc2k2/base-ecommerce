@@ -81,6 +81,28 @@ var (
 	ErrUnknownVariant = errs.New(errs.KindNotFound, "UNKNOWN_VARIANT",
 		"Không tìm thấy phiên bản này của sản phẩm")
 
+	// Thuộc tính động (P1.3). Lỗi validate GIÁ TRỊ thuộc tính của sản phẩm
+	// không nằm ở đây mà là VALIDATION_FAILED kèm errors[] theo trường — xem
+	// Field* trong attribute.go.
+	ErrInvalidAttributeCode = errs.New(errs.KindValidation, "INVALID_ATTRIBUTE_CODE",
+		"Mã thuộc tính chỉ gồm chữ thường không dấu, số và dấu gạch dưới")
+	ErrAttributeNameInvalid = errs.New(errs.KindValidation, "ATTRIBUTE_NAME_INVALID",
+		"Tên thuộc tính là bắt buộc và tối đa 100 ký tự")
+	ErrInvalidAttributeType = errs.New(errs.KindValidation, "INVALID_ATTRIBUTE_TYPE",
+		"Kiểu thuộc tính chỉ có thể là text, number, boolean hoặc enum")
+	ErrInvalidAttributeOptions = errs.New(errs.KindValidation, "INVALID_ATTRIBUTE_OPTIONS",
+		"Danh sách giá trị không hợp lệ: kiểu enum cần ít nhất một giá trị không trùng, kiểu khác không được có")
+	ErrAttributeNotFound = errs.New(errs.KindValidation, "ATTRIBUTE_NOT_FOUND",
+		"Thuộc tính không tồn tại")
+	ErrDuplicateAttributeAssignment = errs.New(errs.KindValidation, "DUPLICATE_ATTRIBUTE_ASSIGNMENT",
+		"Một thuộc tính chỉ được gán một lần cho mỗi danh mục")
+	ErrDuplicateAttributeCode = errs.New(errs.KindConflict, "DUPLICATE_ATTRIBUTE_CODE",
+		"Mã thuộc tính này đã tồn tại")
+	ErrAttributeInUse = errs.New(errs.KindConflict, "ATTRIBUTE_IN_USE",
+		"Thuộc tính đang được gán cho danh mục, hãy gỡ khỏi các danh mục trước khi xóa")
+	ErrUnknownAttribute = errs.New(errs.KindNotFound, "UNKNOWN_ATTRIBUTE",
+		"Không tìm thấy thuộc tính")
+
 	ErrInvalidPagination = errs.New(errs.KindInvalid, "INVALID_PAGINATION",
 		"Tham số phân trang không hợp lệ")
 

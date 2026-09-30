@@ -8,6 +8,7 @@ import { ErrorState } from '@/components/error-state'
 import { ApiError } from '@/lib/api/error'
 import type { components } from '@/lib/api/generated/schema'
 import { apiGet } from '@/lib/api/server'
+import { byPosition, formatAttrValue, indexAttributes } from '@/lib/attributes'
 import { formatDate, formatVND } from '@/lib/format'
 import { absoluteUrl } from '@/lib/site'
 import { hasPriceRange, optionsLabel, priceRange } from '@/lib/variants'
@@ -15,6 +16,8 @@ import { hasPriceRange, optionsLabel, priceRange } from '@/lib/variants'
 type Product = components['schemas']['Product']
 type Category = components['schemas']['Category']
 type Brand = components['schemas']['Brand']
+type Attribute = components['schemas']['Attribute']
+type CategoryAttribute = components['schemas']['CategoryAttribute']
 
 /**
  * ISR 60 giây (README mục 7.2).
@@ -145,6 +148,40 @@ const loadBrands = cache(async (): Promise<Brand[]> => {
 })
 
 /**
+ * Mọi định nghĩa thuộc tính, để đổi mã (`ram`) ra tên và đơn vị ("RAM: 16 GB")
+ * trong bảng thông số. Cùng khuôn loadBrands: ISR một giờ, hỏng thì mảng rỗng
+ * và bảng hiện nguyên mã — vẫn đọc được, chỉ kém đẹp.
+ */
+const loadAttributes = cache(async (): Promise<Attribute[]> => {
+  try {
+    const body = await apiGet<{ data: Attribute[] }>('/attributes', {
+      tags: ['attributes'],
+      revalidate: BRAND_REVALIDATE,
+    })
+    return body.data
+  } catch {
+    return []
+  }
+})
+
+/**
+ * Thứ tự thuộc tính quản trị đặt cho danh mục của sản phẩm (kể cả thừa kế), để
+ * bảng thông số và bảng phiên bản hiện "RAM" trước "Màu" đúng như cấu hình.
+ * Danh mục ở chế độ tự do thì rỗng — bảng giữ thứ tự bảng chữ cái.
+ */
+const loadCategoryAttributes = cache(async (slug: string): Promise<CategoryAttribute[]> => {
+  try {
+    const body = await apiGet<{ data: CategoryAttribute[] }>(
+      `/categories/${encodeURIComponent(slug)}/attributes`,
+      { tags: ['attributes', `category:${slug}`], revalidate: BRAND_REVALIDATE },
+    )
+    return body.data
+  } catch {
+    return []
+  }
+})
+
+/**
  * Đường đi từ gốc tới danh mục có `id` cho trước, ví dụ
  * [Máy tính, Laptop, Laptop Gaming].
  *
@@ -255,11 +292,13 @@ export default async function Page({ params }: PageProps<'/san-pham/[slug]'>) {
     phát sinh request mới — `generateMetadata` đã gọi nó trong cùng request nên
     kết quả lấy từ bộ nhớ đệm của `cache()`.
   */
-  const [loaded, tree, brands] = await Promise.all([
+  const [loaded, tree, brands, attributes] = await Promise.all([
     loadProduct(slug),
     loadCategoryTree(),
     loadBrands(),
+    loadAttributes(),
   ])
+  const defs = indexAttributes(attributes)
 
   /*
     ======================================================================
@@ -326,6 +365,9 @@ export default async function Page({ params }: PageProps<'/san-pham/[slug]'>) {
   const product = loaded.product
   const brand = brands.find((b) => b.id === product.brand_id)
   const path = categoryPath(tree, product.category_id)
+  // Gọi SAU khi có cây: cần slug của danh mục lá, mà Product chỉ mang id.
+  const leaf = path.at(-1)
+  const order = leaf ? (await loadCategoryAttributes(leaf.slug)).map((a) => a.code) : []
   const crumbs: Crumb[] = [
     { label: 'Trang chủ', href: '/' },
     { label: 'Danh mục sản phẩm', href: CATEGORY_PATH },
@@ -338,7 +380,7 @@ export default async function Page({ params }: PageProps<'/san-pham/[slug]'>) {
   const single = variants.length === 1 ? variants[0] : undefined
   const cover = product.images[0]
   const rest = product.images.slice(1)
-  const specs = Object.entries(product.attributes)
+  const specs = byPosition(Object.entries(product.attributes), order)
 
   return (
     <div>
@@ -486,7 +528,9 @@ export default async function Page({ params }: PageProps<'/san-pham/[slug]'>) {
                 <tbody>
                   {variants.map((v) => (
                     <tr key={v.id} className="border-b border-gray-200 last:border-0">
-                      <td className="py-2.5 pr-4 text-gray-900">{optionsLabel(v) || '—'}</td>
+                      <td className="py-2.5 pr-4 text-gray-900">
+                        {optionsLabel(v, defs, order) || '—'}
+                      </td>
                       <td className="py-2.5 pr-4 font-mono text-gray-600">{v.sku}</td>
                       <td className="py-2.5 text-right font-medium text-gray-900">
                         {formatVND(v.price)}
@@ -522,9 +566,11 @@ export default async function Page({ params }: PageProps<'/san-pham/[slug]'>) {
                         scope="row"
                         className="w-2/5 py-2.5 pr-4 text-left font-medium text-gray-500"
                       >
-                        {key}
+                        {defs.get(key)?.name ?? key}
                       </th>
-                      <td className="py-2.5 text-gray-900">{value}</td>
+                      <td className="py-2.5 text-gray-900">
+                        {formatAttrValue(defs.get(key), value)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

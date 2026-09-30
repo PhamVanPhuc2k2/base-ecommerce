@@ -14,6 +14,19 @@ type Category = components['schemas']['Category']
  * Cây danh mục của một cửa hàng bán lẻ sâu tối đa 3–4 cấp và rộng vài trăm nút,
  * nên duyệt đệ quy là đủ; không cần lo tràn ngăn xếp.
  */
+/**
+ * Bản vá xóa mọi `attr.*` đang có. Đổi danh mục thì bộ lọc thuộc tính cũ phải
+ * đi theo: thuộc tính thuộc về danh mục (P1.3), và giữ `attr.ram=16` khi
+ * chuyển từ Laptop sang Chuột chỉ cho ra một trang rỗng khó hiểu.
+ */
+function clearAttrs(params: URLSearchParams): Record<string, undefined> {
+  const patch: Record<string, undefined> = {}
+  for (const key of params.keys()) {
+    if (key.startsWith('attr.')) patch[key] = undefined
+  }
+  return patch
+}
+
 export function findCategory(tree: Category[], slug: string): Category | undefined {
   for (const node of tree) {
     if (node.slug === slug) return node
@@ -56,7 +69,7 @@ export function CategoryFilter({
             slug không tồn tại và trả 422 CATEGORY_NOT_FOUND.
           */}
           <FilterLink
-            href={hrefWith(basePath, params, { category: undefined })}
+            href={hrefWith(basePath, params, { ...clearAttrs(params), category: undefined })}
             active={activeSlug === undefined}
           >
             Tất cả sản phẩm
@@ -91,7 +104,7 @@ function CategoryNode({
   return (
     <li>
       <FilterLink
-        href={hrefWith(basePath, params, { category: node.slug })}
+        href={hrefWith(basePath, params, { ...clearAttrs(params), category: node.slug })}
         active={node.slug === activeSlug}
       >
         {node.name}

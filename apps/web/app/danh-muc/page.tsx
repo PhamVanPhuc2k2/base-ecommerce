@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { Breadcrumb } from '@/components/breadcrumb'
 import { CategoryFilter, findCategory } from '@/components/category-filter'
 import { ErrorState } from '@/components/error-state'
+import { FacetFilter } from '@/components/facet-filter'
 import { Pagination } from '@/components/pagination'
 import { ProductCard } from '@/components/product-card'
 import { ApiError } from '@/lib/api/error'
@@ -12,6 +13,7 @@ import { hrefCurrent, hrefWith, toSearchParams } from '@/lib/search-params'
 
 type ProductList = components['schemas']['ProductList']
 type Category = components['schemas']['Category']
+type Facet = components['schemas']['Facet']
 
 const BASE_PATH = '/danh-muc'
 
@@ -112,9 +114,18 @@ export default async function Page({ searchParams }: PageProps<'/danh-muc'>) {
     mục hỏng sẽ kéo sập luôn danh sách sản phẩm dù danh sách đó lấy về hoàn toàn
     bình thường. Bộ lọc là thứ phụ; mất nó thì trang vẫn bán được hàng.
   */
-  const [listResult, treeResult] = await Promise.allSettled([
+  const [listResult, treeResult, facetResult] = await Promise.allSettled([
     apiGet<ProductList>(apiQuery === '' ? '/products' : `/products?${apiQuery}`),
     apiGet<{ data: Category[] }>('/categories'),
+    /*
+      Facet chỉ có nghĩa trong một danh mục (thuộc tính thuộc về danh mục), nên
+      không có `category` thì không gọi — đỡ một vòng mạng trả về mảng rỗng.
+      Cùng query string với danh sách: số cạnh mỗi giá trị phải khớp với số
+      sản phẩm khách sẽ thấy khi bấm vào.
+    */
+    activeCategory !== undefined
+      ? apiGet<{ data: Facet[] }>(`/products/facets?${apiQuery}`)
+      : Promise.resolve({ data: [] as Facet[] }),
   ])
 
   /*
@@ -158,6 +169,8 @@ export default async function Page({ searchParams }: PageProps<'/danh-muc'>) {
   // thứ hai: hai thông báo lỗi trên cùng một trang chỉ làm khách hoang mang,
   // trong khi danh sách sản phẩm bên phải vẫn đang hiển thị bình thường.
   const tree = treeResult.status === 'fulfilled' ? treeResult.value.data : []
+  // Facet hỏng thì bỏ hẳn khối lọc thuộc tính — cùng chính sách với cây danh mục.
+  const facets = facetResult.status === 'fulfilled' ? facetResult.value.data : []
   const currentCategory = activeCategory ? findCategory(tree, activeCategory) : undefined
 
   return (
@@ -189,6 +202,7 @@ export default async function Page({ searchParams }: PageProps<'/danh-muc'>) {
               params={params}
             />
           ) : null}
+          <FacetFilter facets={facets} basePath={BASE_PATH} params={params} />
         </aside>
 
         {/* min-w-0: không có nó, một tên sản phẩm dài sẽ kéo giãn cột flex và

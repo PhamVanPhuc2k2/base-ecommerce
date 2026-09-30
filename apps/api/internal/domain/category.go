@@ -136,6 +136,27 @@ func (t *Tree) BySlug(slug string) (*Category, bool) {
 	return c, ok
 }
 
+// Ancestors trả đường đi từ gốc xuống CHÍNH danh mục id: [gốc, ..., id].
+// Không tìm thấy id thì trả rỗng. Có tập visited để dữ liệu vòng lặp (chặn từ
+// P1.1 nhưng vẫn có thể có từ SQL tay trước đó) không làm treo tiến trình.
+func (t *Tree) Ancestors(id uuid.UUID) []uuid.UUID {
+	var rev []uuid.UUID
+	visited := map[uuid.UUID]bool{}
+	for cur, ok := t.byID[id]; ok && !visited[cur.ID]; {
+		visited[cur.ID] = true
+		rev = append(rev, cur.ID)
+		if cur.ParentID == nil {
+			break
+		}
+		cur, ok = t.byID[*cur.ParentID]
+	}
+	out := make([]uuid.UUID, len(rev))
+	for i, v := range rev {
+		out[len(rev)-1-i] = v
+	}
+	return out
+}
+
 func (t *Tree) ByID(id uuid.UUID) (*Category, bool) {
 	c, ok := t.byID[id]
 	return c, ok

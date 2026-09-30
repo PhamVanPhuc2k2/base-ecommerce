@@ -16,18 +16,20 @@ import (
 // status = inactive. Đặc tả P1.2 mục 2.2.
 
 type AddVariant struct {
-	tx     TxManager
-	repo   ProductRepository
-	events EventPublisher
-	cache  Cache
+	tx      TxManager
+	repo    ProductRepository
+	events  EventPublisher
+	cache   Cache
+	schemas *AttributeSchemas
 }
 
-func NewAddVariant(tx TxManager, repo ProductRepository, events EventPublisher, cache Cache) *AddVariant {
-	return &AddVariant{tx: tx, repo: repo, events: events, cache: cache}
+func NewAddVariant(tx TxManager, repo ProductRepository, events EventPublisher, cache Cache,
+	schemas *AttributeSchemas) *AddVariant {
+	return &AddVariant{tx: tx, repo: repo, events: events, cache: cache, schemas: schemas}
 }
 
 func (uc *AddVariant) Execute(ctx context.Context, productID uuid.UUID, in domain.VariantInput) (*domain.Product, error) {
-	return mutateProduct(ctx, uc.tx, uc.repo, uc.events, uc.cache, productID, func(p *domain.Product) error {
+	return mutateProduct(ctx, uc.tx, uc.repo, uc.events, uc.cache, uc.schemas, productID, func(p *domain.Product) error {
 		_, err := p.AddVariant(in)
 		return err
 	})
@@ -43,18 +45,20 @@ type UpdateVariantInput struct {
 }
 
 type UpdateVariant struct {
-	tx     TxManager
-	repo   ProductRepository
-	events EventPublisher
-	cache  Cache
+	tx      TxManager
+	repo    ProductRepository
+	events  EventPublisher
+	cache   Cache
+	schemas *AttributeSchemas
 }
 
-func NewUpdateVariant(tx TxManager, repo ProductRepository, events EventPublisher, cache Cache) *UpdateVariant {
-	return &UpdateVariant{tx: tx, repo: repo, events: events, cache: cache}
+func NewUpdateVariant(tx TxManager, repo ProductRepository, events EventPublisher, cache Cache,
+	schemas *AttributeSchemas) *UpdateVariant {
+	return &UpdateVariant{tx: tx, repo: repo, events: events, cache: cache, schemas: schemas}
 }
 
 func (uc *UpdateVariant) Execute(ctx context.Context, in UpdateVariantInput) (*domain.Product, error) {
-	return mutateProduct(ctx, uc.tx, uc.repo, uc.events, uc.cache, in.ProductID, func(p *domain.Product) error {
+	return mutateProduct(ctx, uc.tx, uc.repo, uc.events, uc.cache, uc.schemas, in.ProductID, func(p *domain.Product) error {
 		// Variant không thuộc sản phẩm này thì domain trả UNKNOWN_VARIANT —
 		// không có đường nào sửa variant của sản phẩm A qua URL của sản phẩm B.
 		return p.UpdateVariant(in.VariantID, in.Price, in.Options, in.Status, in.Position)
@@ -67,7 +71,8 @@ func (uc *UpdateVariant) Execute(ctx context.Context, in UpdateVariantInput) (*d
 // tự hóa, và lần chạy lại phải sửa trên dữ liệu mới, phát lại sự kiện của
 // chính lần đó.
 func mutateProduct(ctx context.Context, tx TxManager, repo ProductRepository,
-	events EventPublisher, cache Cache, id uuid.UUID, mutate func(*domain.Product) error) (*domain.Product, error) {
+	events EventPublisher, cache Cache, schemas *AttributeSchemas, id uuid.UUID,
+	mutate func(*domain.Product) error) (*domain.Product, error) {
 
 	var updated *domain.Product
 	if err := tx.Run(ctx, func(ctx context.Context) error {
@@ -76,6 +81,10 @@ func mutateProduct(ctx context.Context, tx TxManager, repo ProductRepository,
 			return err
 		}
 		if err := mutate(p); err != nil {
+			return err
+		}
+		// options của variant phải là thuộc tính biến thể của danh mục (P1.3).
+		if err := schemas.check(ctx, p); err != nil {
 			return err
 		}
 		if err := repo.Save(ctx, p); err != nil {

@@ -35,10 +35,13 @@ type ListFilter struct {
 	BrandSlug   string
 	PriceMin    *decimal.Decimal
 	PriceMax    *decimal.Decimal
-	Attributes  map[string]string
-	Sort        SortOption
-	Page        int
-	Limit       int
+	// Attributes lọc products.attributes; VariantOptions lọc options của
+	// variant active. Use case chia attr.* vào hai map theo định nghĩa.
+	Attributes     map[string]string
+	VariantOptions map[string]string
+	Sort           SortOption
+	Page           int
+	Limit          int
 }
 
 type ProductRepository interface {
@@ -49,6 +52,17 @@ type ProductRepository interface {
 	// count(*) là 99,7% chi phí của trang danh sách (đo ở P0.2, 200k dòng).
 	List(ctx context.Context, f ListFilter) ([]*domain.Product, error)
 	Count(ctx context.Context, f ListFilter) (int, error)
+	Facets(ctx context.Context, f ListFilter, productCodes, variantCodes []string) (domain.FacetCounts, error)
+}
+
+type AttributeRepository interface {
+	Catalog(ctx context.Context) (*domain.AttributeCatalog, error)
+	// ByID khóa dòng (FOR UPDATE) — chỉ dùng trong use case ghi.
+	ByID(ctx context.Context, id uuid.UUID) (*domain.AttributeDefinition, error)
+	Insert(ctx context.Context, d *domain.AttributeDefinition) error
+	Update(ctx context.Context, d *domain.AttributeDefinition) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	ReplaceAssignments(ctx context.Context, categoryID uuid.UUID, assigns []domain.CategoryAttribute) error
 }
 
 type CategoryRepository interface {
@@ -82,6 +96,10 @@ type Cache interface {
 		load func(context.Context) (domain.Brands, error)) (domain.Brands, error)
 	ProductCount(ctx context.Context, key string, ttl time.Duration,
 		load func(context.Context) (int, error)) (int, error)
+	AttributeCatalog(ctx context.Context, ttl time.Duration,
+		load func(context.Context) (*domain.AttributeCatalog, error)) (*domain.AttributeCatalog, error)
+	ProductFacets(ctx context.Context, key string, ttl time.Duration,
+		load func(context.Context) (domain.FacetCounts, error)) (domain.FacetCounts, error)
 	Invalidate(ctx context.Context, keys ...string)
 }
 
@@ -101,6 +119,13 @@ type TxManager interface {
 func KeyProductSlug(slug string) string { return "product:slug:" + slug }
 func KeyCategoryTree() string           { return "category:tree" }
 func KeyBrands() string                 { return "brand:all" }
+func KeyAttributeCatalog() string       { return "attribute:catalog" }
+
+// KeyProductFacets dùng chung phần băm với số đếm: cùng bộ lọc thì cùng tập
+// kết quả, chỉ khác thứ được tính trên nó.
+func KeyProductFacets(f ListFilter) string {
+	return "product:facets:" + filterHash(f)
+}
 
 // KeyProductCount băm bộ lọc ĐÃ CHUẨN HÓA thành khóa cache số đếm.
 //
@@ -109,6 +134,10 @@ func KeyBrands() string                 { return "brand:all" }
 // trước khi băm, vì map trong Go duyệt ngẫu nhiên: không sắp thì cùng một bộ
 // lọc ra khóa khác nhau mỗi lần và tỉ lệ trúng cache về 0 mà không ai hay.
 func KeyProductCount(f ListFilter) string {
+	return "product:count:" + filterHash(f)
+}
+
+func filterHash(f ListFilter) string {
 	ids := make([]string, len(f.CategoryIDs))
 	for i, id := range f.CategoryIDs {
 		ids[i] = id.String()
@@ -119,21 +148,30 @@ func KeyProductCount(f ListFilter) string {
 		attrs = append(attrs, k+"="+v)
 	}
 	sort.Strings(attrs)
+	// Tùy chọn biến thể tách riêng: attr.ram=16 lọc ở cấp sản phẩm và ở cấp
+	// biến thể cho ra tập KHÁC nhau, không được chung khóa cache.
+	vopts := make([]string, 0, len(f.VariantOptions))
+	for k, v := range f.VariantOptions {
+		vopts = append(vopts, k+"="+v)
+	}
+	sort.Strings(vopts)
 	dec := func(d *decimal.Decimal) string {
 		if d == nil {
 			return ""
 		}
 		return d.String()
 	}
-	norm, _ := json.Marshal([]any{ids, f.BrandSlug, dec(f.PriceMin), dec(f.PriceMax), attrs})
+	norm, _ := json.Marshal([]any{ids, f.BrandSlug, dec(f.PriceMin), dec(f.PriceMax), attrs, vopts})
 	sum := sha256.Sum256(norm)
-	return "product:count:" + hex.EncodeToString(sum[:16])
+	return hex.EncodeToString(sum[:16])
 }
 
 const (
 	TTLProduct      = 30 * time.Minute
 	TTLCategoryTree = 6 * time.Hour
 	TTLBrands       = 6 * time.Hour
+	TTLAttributes   = 6 * time.Hour
+	TTLFacets       = 60 * time.Second
 	// TTLProductCount ngắn và KHÔNG vô hiệu hóa khi ghi: lệch tối đa một phút
 	// chỉ làm trang cuối thiếu/thừa sản phẩm vừa đăng. Theo dõi mọi bộ lọc mà
 	// một lần ghi ảnh hưởng tới thì đắt hơn nhiều. Xem đặc tả P1.1 mục 2.5.

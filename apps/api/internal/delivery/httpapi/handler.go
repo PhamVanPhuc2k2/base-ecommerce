@@ -27,6 +27,10 @@ type Usecases struct {
 	UpdateCategory *usecase.UpdateCategory
 	DeleteCategory *usecase.DeleteCategory
 	AddVariant     *usecase.AddVariant
+	ListFacets     *usecase.ListFacets
+	ListAttributes *usecase.ListAttributes
+	CategoryAttrs  *usecase.CategoryAttributes
+	AttributeAdmin *usecase.AttributeAdmin
 	UpdateVariant  *usecase.UpdateVariant
 	ListBrands     *usecase.ListBrands
 	CreateBrand    *usecase.CreateBrand
@@ -51,7 +55,9 @@ func (h *Handler) GetProduct(w http.ResponseWriter, r *http.Request) error {
 	return httpx.JSON(w, http.StatusOK, toProductDTO(p, publicVariants))
 }
 
-func (h *Handler) ListProducts(w http.ResponseWriter, r *http.Request) error {
+// parseListInput đọc bộ lọc từ query string — dùng chung cho /products và
+// /products/facets, để facet đếm trên ĐÚNG tập kết quả mà danh sách trả về.
+func parseListInput(r *http.Request) (usecase.ListProductsInput, error) {
 	q := r.URL.Query()
 
 	in := usecase.ListProductsInput{
@@ -72,14 +78,14 @@ func (h *Handler) ListProducts(w http.ResponseWriter, r *http.Request) error {
 	if raw := q.Get("page"); raw != "" {
 		v, convErr := strconv.Atoi(raw)
 		if convErr != nil {
-			return domain.ErrInvalidPagination
+			return in, domain.ErrInvalidPagination
 		}
 		in.Page = v
 	}
 	if raw := q.Get("limit"); raw != "" {
 		v, convErr := strconv.Atoi(raw)
 		if convErr != nil {
-			return domain.ErrInvalidPagination
+			return in, domain.ErrInvalidPagination
 		}
 		in.Limit = v
 	}
@@ -90,6 +96,14 @@ func (h *Handler) ListProducts(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
+	return in, nil
+}
+
+func (h *Handler) ListProducts(w http.ResponseWriter, r *http.Request) error {
+	in, err := parseListInput(r)
+	if err != nil {
+		return err
+	}
 	res, err := h.uc.ListProducts.Execute(r.Context(), in)
 	if err != nil {
 		return err

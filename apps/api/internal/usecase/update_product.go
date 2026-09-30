@@ -21,14 +21,16 @@ type UpdateProductInput struct {
 }
 
 type UpdateProduct struct {
-	tx     TxManager
-	repo   ProductRepository
-	events EventPublisher
-	cache  Cache
+	tx      TxManager
+	repo    ProductRepository
+	events  EventPublisher
+	cache   Cache
+	schemas *AttributeSchemas
 }
 
-func NewUpdateProduct(tx TxManager, repo ProductRepository, events EventPublisher, cache Cache) *UpdateProduct {
-	return &UpdateProduct{tx: tx, repo: repo, events: events, cache: cache}
+func NewUpdateProduct(tx TxManager, repo ProductRepository, events EventPublisher, cache Cache,
+	schemas *AttributeSchemas) *UpdateProduct {
+	return &UpdateProduct{tx: tx, repo: repo, events: events, cache: cache, schemas: schemas}
 }
 
 func (uc *UpdateProduct) Execute(ctx context.Context, in UpdateProductInput) (*domain.Product, error) {
@@ -49,6 +51,10 @@ func (uc *UpdateProduct) Execute(ctx context.Context, in UpdateProductInput) (*d
 		oldSlug = p.Slug
 
 		if err := p.Update(in.Name, in.ShortDescription, in.Attributes, in.Images, in.CategoryID, in.BrandID); err != nil {
+			return err
+		}
+		// SAU Update: đổi category_id thì phải kiểm theo danh mục MỚI.
+		if err := uc.schemas.check(ctx, p); err != nil {
 			return err
 		}
 		if err := uc.repo.Save(ctx, p); err != nil {

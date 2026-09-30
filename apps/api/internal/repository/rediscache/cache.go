@@ -53,6 +53,16 @@ func (a *Cache) ProductCount(ctx context.Context, key string, ttl time.Duration,
 	return *n, nil
 }
 
+func (a *Cache) AttributeCatalog(ctx context.Context, ttl time.Duration,
+	load func(context.Context) (*domain.AttributeCatalog, error)) (*domain.AttributeCatalog, error) {
+	return platformredis.GetOrLoad(ctx, a.c, usecase.KeyAttributeCatalog(), ttl, load)
+}
+
+func (a *Cache) ProductFacets(ctx context.Context, key string, ttl time.Duration,
+	load func(context.Context) (domain.FacetCounts, error)) (domain.FacetCounts, error) {
+	return platformredis.GetOrLoad(ctx, a.c, key, ttl, load)
+}
+
 func (a *Cache) Invalidate(ctx context.Context, keys ...string) {
 	a.c.Delete(ctx, keys...)
 }

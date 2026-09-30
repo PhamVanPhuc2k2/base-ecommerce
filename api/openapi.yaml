@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: base-ecommerce API
-  version: 0.4.0
+  version: 0.5.0
   description: |
     Hợp đồng API. Đây là NGUỒN SỰ THẬT — sửa endpoint thì sửa file này trước.
 servers:
@@ -76,6 +76,38 @@ paths:
         "500": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  /products/facets:
+    get:
+      operationId: listProductFacets
+      security: []
+      summary: Số sản phẩm theo từng giá trị của các thuộc tính lọc được
+      description: >-
+        Cùng bộ tham số với GET /products (category, brand, price_min, price_max, attr.*); page/limit/sort bị bỏ qua. Số cạnh mỗi giá trị là số sản phẩm sẽ thấy nếu bấm
+        thêm giá trị đó (đếm với MỌI bộ lọc đang áp, kể cả của chính nhóm đó).
+        Không có `category` thì `data` rỗng — thuộc tính thuộc về danh mục.
+        Cache 60 giây.
+      parameters:
+        - { name: category, in: query, schema: { type: string } }
+        - { name: brand, in: query, schema: { type: string } }
+        - { name: price_min, in: query, schema: { type: string } }
+        - { name: price_max, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Facet" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   /products/{slug}:
     get:
       operationId: getProductBySlug
@@ -133,6 +165,140 @@ paths:
                   data:
                     type: array
                     items: { $ref: "#/components/schemas/Brand" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /attributes:
+    get:
+      operationId: listAttributes
+      security: []
+      summary: Mọi định nghĩa thuộc tính
+      description: Danh sách ngắn, không phân trang. Storefront dùng để đổi mã thuộc tính ra tên và đơn vị.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Attribute" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /categories/{slug}/attributes:
+    get:
+      operationId: getCategoryAttributes
+      security: []
+      summary: Tập thuộc tính HIỆU LỰC của danh mục (kể cả thừa kế từ danh mục cha)
+      description: >-
+        Rỗng nghĩa là danh mục ở chế độ tự do: sản phẩm dùng khóa thuộc tính
+        tùy ý như trước 0.5.0. Có ít nhất một thì khóa lạ bị từ chối.
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/CategoryAttribute" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /admin/attributes:
+    post:
+      operationId: createAttribute
+      summary: Tạo định nghĩa thuộc tính
+      security: [{ adminKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateAttributeRequest" }
+      responses:
+        "201":
+          description: Đã tạo
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Attribute" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /admin/attributes/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    patch:
+      operationId: updateAttribute
+      summary: Sửa tên, đơn vị, giá trị enum, cờ lọc
+      security: [{ adminKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateAttributeRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Attribute" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteAttribute
+      summary: Xóa định nghĩa không còn gán cho danh mục nào
+      security: [{ adminKey: [] }]
+      responses:
+        "204": { description: Đã xóa }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /admin/categories/{id}/attributes:
+    put:
+      operationId: setCategoryAttributes
+      summary: Thay TOÀN BỘ thuộc tính gán cho danh mục
+      description: >-
+        Gửi danh sách rỗng là gỡ hết — danh mục (và con của nó, nếu không có
+        gán riêng) về chế độ tự do. Danh mục con gán lại cùng thuộc tính thì
+        cấu hình của con thắng.
+      security: [{ adminKey: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SetCategoryAttributesRequest" }
+      responses:
+        "204": { description: Đã lưu }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
@@ -455,6 +621,12 @@ components:
             - INVALID_VARIANT_OPTIONS
             - INVALID_VARIANT_STATUS
             - NO_ACTIVE_VARIANT
+            - INVALID_ATTRIBUTE_CODE
+            - ATTRIBUTE_NAME_INVALID
+            - INVALID_ATTRIBUTE_TYPE
+            - INVALID_ATTRIBUTE_OPTIONS
+            - ATTRIBUTE_NOT_FOUND
+            - DUPLICATE_ATTRIBUTE_ASSIGNMENT
             # catalog/domain — xung đột (409)
             - ALREADY_PUBLISHED
             - DUPLICATE_SKU
@@ -465,6 +637,8 @@ components:
             - CATEGORY_HAS_PRODUCTS
             - BRAND_HAS_PRODUCTS
             - DUPLICATE_VARIANT_OPTIONS
+            - DUPLICATE_ATTRIBUTE_CODE
+            - ATTRIBUTE_IN_USE
             # catalog/domain — không tìm thấy (404). UNKNOWN_* là tài nguyên
             # trên đường dẫn; khác CATEGORY_NOT_FOUND/BRAND_NOT_FOUND (422) là
             # dữ liệu gửi lên tham chiếu thứ không tồn tại.
@@ -472,6 +646,7 @@ components:
             - UNKNOWN_CATEGORY
             - UNKNOWN_BRAND
             - UNKNOWN_VARIANT
+            - UNKNOWN_ATTRIBUTE
             # catalog/domain — tham số không hợp lệ (400)
             - INVALID_SORT
             - PAGE_TOO_DEEP
@@ -486,8 +661,16 @@ components:
             type: object
             required: [field, code, message]
             properties:
-              field:   { type: string }
-              code:    { type: string }
+              field:
+                type: string
+                description: 'Đường dẫn tới trường, ví dụ "attributes.ram" hay "variants[1].options.mau".'
+              code:
+                type: string
+                description: >-
+                  Mã lỗi CẤP TRƯỜNG (khác Problem.code). Với thuộc tính theo danh
+                  mục: UNKNOWN_ATTRIBUTE_KEY, INVALID_ATTRIBUTE_VALUE,
+                  ATTRIBUTE_REQUIRED, VARIANT_ATTRIBUTE_ON_PRODUCT,
+                  PRODUCT_ATTRIBUTE_ON_VARIANT.
               message: { type: string }
 
     Product:
@@ -613,6 +796,99 @@ components:
         options:  { type: object, additionalProperties: { type: string } }
         status:   { type: string, enum: [active, inactive] }
         position: { type: integer }
+
+    Attribute:
+      type: object
+      required: [id, code, name, type, unit, options, filterable, variant]
+      properties:
+        id:   { type: string, format: uuid }
+        code: { type: string, description: "Khóa trong attributes/options và trong tham số attr.<code>. Bất biến." }
+        name: { type: string }
+        type:
+          type: string
+          enum: [text, number, boolean, enum]
+          description: >-
+            Bất biến. number: số thập phân thuần ("16", "15.6") — đơn vị nằm ở
+            `unit`, không nằm trong giá trị. boolean: "true"/"false".
+        unit:       { type: string }
+        options:    { type: array, items: { type: string }, description: "Giá trị cho phép của kiểu enum; rỗng với kiểu khác." }
+        filterable: { type: boolean, description: "Có hiện trong /products/facets không." }
+        variant:
+          type: boolean
+          description: >-
+            Bất biến. true: chỉ đặt trong Variant.options (RAM, màu). false: chỉ
+            đặt trong Product.attributes (CPU). Đặt sai chỗ trả 422.
+
+    CategoryAttribute:
+      allOf:
+        - $ref: "#/components/schemas/Attribute"
+        - type: object
+          required: [required, position, inherited]
+          properties:
+            required:  { type: boolean, description: "Bắt buộc khi sản phẩm live." }
+            position:  { type: integer }
+            inherited: { type: boolean, description: "Gán ở danh mục cha, không ở chính danh mục này." }
+
+    Facet:
+      type: object
+      required: [code, name, type, unit, variant, values]
+      properties:
+        code:    { type: string }
+        name:    { type: string }
+        type:    { type: string, enum: [text, number, boolean, enum] }
+        unit:    { type: string }
+        variant: { type: boolean }
+        values:
+          type: array
+          description: Nhiều sản phẩm trước, rồi theo giá trị.
+          items:
+            type: object
+            required: [value, count]
+            properties:
+              value: { type: string }
+              count: { type: integer }
+
+    CreateAttributeRequest:
+      type: object
+      additionalProperties: false
+      required: [code, name, type]
+      properties:
+        code:       { type: string, pattern: "^[a-z0-9]+(_[a-z0-9]+)*$" }
+        name:       { type: string, maxLength: 100 }
+        type:       { type: string, enum: [text, number, boolean, enum] }
+        unit:       { type: string, maxLength: 20 }
+        options:    { type: array, items: { type: string }, description: "Bắt buộc với enum, cấm với kiểu khác." }
+        filterable: { type: boolean, default: false }
+        variant:    { type: boolean, default: false }
+
+    UpdateAttributeRequest:
+      type: object
+      additionalProperties: false
+      description: >-
+        Không có code, type, variant — chúng bất biến; gửi lên trả 400
+        MALFORMED_REQUEST. Bỏ một giá trị enum đang dùng được phép: dữ liệu cũ
+        không bị sửa, sản phẩm đó báo lỗi ở lần ghi kế tiếp.
+      properties:
+        name:       { type: string, maxLength: 100 }
+        unit:       { type: string, maxLength: 20 }
+        options:    { type: array, items: { type: string } }
+        filterable: { type: boolean }
+
+    SetCategoryAttributesRequest:
+      type: object
+      additionalProperties: false
+      required: [attributes]
+      properties:
+        attributes:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [attribute_id]
+            properties:
+              attribute_id: { type: string, format: uuid }
+              required:     { type: boolean, default: false }
+              position:     { type: integer, default: 0 }
 
     Brand:
       type: object
