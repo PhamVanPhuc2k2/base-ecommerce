@@ -6,7 +6,11 @@ env:
 tasks:
   up:
     desc: Khởi động hạ tầng dev
-    cmd: docker compose -f deploy/compose.dev.yml up -d --wait
+    cmds:
+      - docker compose -f deploy/compose.dev.yml up -d --wait
+      # Tạo bucket (idempotent). Không nằm trong `up --wait` được — xem
+      # chú thích ở service minio-init.
+      - docker compose -f deploy/compose.dev.yml run --rm minio-init
 
   down:
     desc: Dừng hạ tầng dev
@@ -148,7 +152,9 @@ tasks:
 
   up-docker:
     desc: Dựng hạ tầng VÀ toàn bộ tiến trình ứng dụng trong container (api, worker, outboxrelay, web)
-    cmd: docker compose -f deploy/compose.dev.yml --profile app up -d --build --wait
+    cmds:
+      - docker compose -f deploy/compose.dev.yml --profile app up -d --build --wait
+      - docker compose -f deploy/compose.dev.yml run --rm minio-init
 
   down-docker:
     desc: Dừng cả hạ tầng lẫn mọi tiến trình ứng dụng trong container

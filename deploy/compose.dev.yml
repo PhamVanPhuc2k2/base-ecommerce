@@ -51,6 +51,71 @@ services:
       timeout: 5s
       retries: 10
 
+  # MinIO — object storage tương thích S3, giữ file ảnh gốc (P1.4). Production
+  # đổi sang S3/R2 thật bằng biến môi trường, code không đổi.
+  minio:
+    image: minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: app
+      # Tối thiểu 8 ký tự — MinIO từ chối khởi động nếu ngắn hơn.
+      MINIO_ROOT_PASSWORD: app-secret-dev
+    ports: ["127.0.0.1:9000:9000", "127.0.0.1:9001:9001"]
+    volumes: ["miniodata:/data"]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Tạo bucket một lần rồi thoát. Bucket RIÊNG TƯ: không ai đọc thẳng được từ
+  # MinIO, ảnh chỉ ra ngoài qua imgproxy — nên imgproxy là cửa duy nhất và
+  # mọi ảnh trả cho khách đều đã được thu nhỏ, đổi định dạng.
+  #
+  # Profile "init" riêng: `up --wait` coi MỌI container đã thoát là thất bại,
+  # kể cả thoát 0. Taskfile chạy service này bằng `compose run --rm` sau up.
+  minio-init:
+    profiles: ["init"]
+    # Dùng lại image minio/minio: nó có sẵn mc, còn image minio/mc riêng không
+    # kéo được từ Docker Hub (pull access denied).
+    image: minio/minio:latest
+    depends_on:
+      minio: { condition: service_healthy }
+    entrypoint: ["sh", "-c", "mc alias set local http://minio:9000 app app-secret-dev && mc mb --ignore-existing local/catalog && mc anonymous set none local/catalog"]
+    restart: "no"
+
+  # imgproxy — thu nhỏ, đổi định dạng (WebP/AVIF theo header Accept) ảnh đọc từ
+  # bucket catalog. Hai lớp chặn lạm dụng, không cần ký URL:
+  #   - IMGPROXY_ALLOWED_SOURCES: chỉ đọc được s3://catalog/ — không thể biến
+  #     imgproxy thành proxy tải ảnh bất kỳ trên internet (SSRF, băng thông).
+  #   - IMGPROXY_ONLY_PRESETS: URL chỉ được gọi TÊN preset, không truyền tham số
+  #     tùy ý — không ai bắt máy chủ dựng hàng nghìn kích thước lạ để đốt CPU.
+  imgproxy:
+    image: ghcr.io/imgproxy/imgproxy:latest
+    environment:
+      IMGPROXY_USE_S3: "true"
+      IMGPROXY_S3_ENDPOINT: http://minio:9000
+      IMGPROXY_S3_ENDPOINT_USE_PATH_STYLE: "true"
+      IMGPROXY_S3_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: app
+      AWS_SECRET_ACCESS_KEY: app-secret-dev
+      IMGPROXY_ALLOWED_SOURCES: s3://catalog/
+      IMGPROXY_ONLY_PRESETS: "true"
+      # Bậc chiều rộng khớp deviceSizes/imageSizes của next/image (xem
+      # apps/web/lib/image-loader.ts). rs:fit giữ tỉ lệ, không cắt.
+      IMGPROXY_PRESETS: w128=rs:fit:128:0,w256=rs:fit:256:0,w384=rs:fit:384:0,w640=rs:fit:640:0,w828=rs:fit:828:0,w1080=rs:fit:1080:0,w1920=rs:fit:1920:0
+      IMGPROXY_AUTO_WEBP: "true"
+      IMGPROXY_AUTO_AVIF: "true"
+      IMGPROXY_TTL: "31536000"
+    ports: ["127.0.0.1:8081:8080"]
+    depends_on:
+      minio: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "imgproxy", "health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   # Service api nằm sau profile "app": `task up` thường ngày CHỈ dựng hạ tầng và
   # vẫn nhanh như trước, còn API thì chạy bằng `task run` trên máy để giữ vòng
   # lặp sửa–chạy ~1 giây.
@@ -270,3 +335,4 @@ volumes:
   pgdata:
   redisdata:
   rabbitdata:
+  miniodata:
