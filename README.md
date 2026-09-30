@@ -291,7 +291,7 @@ base-ecommerce/
 │   │   │   │       ├── queries/              # *.sql cho sqlc (entry thứ hai trong sqlc.yaml)
 │   │   │   │       └── gen/                  # sqlc sinh ra — KHÔNG sửa tay
 │   │   │   └── delivery/                     # nhận request từ ngoài VÀO
-│   │   │       └── httpapi/                  # router go-chi, handler, DTO, RequireAdminKey
+│   │   │       └── httpapi/                  # router go-chi, handler, DTO, RequireAuth + RequirePermission
 │   │   ├── pkg/                              # hạ tầng dùng chung, KHÔNG biết gì về internal/
 │   │   │   ├── config/                       # đọc env, validate lúc khởi động
 │   │   │   ├── errs/                         # Kind, Code, Message — mô hình lỗi

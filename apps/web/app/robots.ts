@@ -35,7 +35,7 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
           CHÚ Ý — robots.txt KHÔNG phải cơ chế bảo mật. Nó chỉ là lời đề nghị
           với bot lịch sự; ai gõ thẳng URL vẫn vào được, và bản thân file này
           công khai liệt kê đường dẫn cho người tò mò. Việc chặn thật sự là của
-          xác thực phía backend (`X-Admin-Key` hiện tại, JWT + RBAC ở P2). Đừng
+          xác thực phía backend (JWT + RBAC từ P2.2). Đừng
           bao giờ liệt kê ở đây một đường dẫn mà bí mật của nó là thứ cần giữ.
         */
         disallow: '/admin',

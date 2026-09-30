@@ -63,6 +63,14 @@ func (a *Cache) ProductFacets(ctx context.Context, key string, ttl time.Duration
 	return platformredis.GetOrLoad(ctx, a.c, key, ttl, load)
 }
 
+// UserPermissions cache tập quyền. Nội dung hỏng (`null`, `{}`) giải mã thành
+// tập RỖNG — tức là từ chối, không phải cho qua: lỗi cache ở đây nghiêng về
+// phía an toàn.
+func (a *Cache) UserPermissions(ctx context.Context, key string, ttl time.Duration,
+	load func(context.Context) (domain.PermissionSet, error)) (domain.PermissionSet, error) {
+	return platformredis.GetOrLoad(ctx, a.c, key, ttl, load)
+}
+
 func (a *Cache) Invalidate(ctx context.Context, keys ...string) {
 	a.c.Delete(ctx, keys...)
 }

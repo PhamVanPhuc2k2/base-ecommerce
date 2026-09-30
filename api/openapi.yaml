@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: base-ecommerce API
-  version: 0.8.0
+  version: 0.9.0
   description: |
     Hợp đồng API. Đây là NGUỒN SỰ THẬT — sửa endpoint thì sửa file này trước.
 servers:
@@ -390,6 +390,156 @@ paths:
         "500": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  /admin/permissions:
+    get:
+      operationId: listPermissions
+      summary: Danh sách quyền (cố định trong code)
+      security: [{ bearerAuth: [] }]
+      x-required-permission: iam.roles.manage
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [code, description]
+                      properties:
+                        code:        { type: string }
+                        description: { type: string }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /admin/roles:
+    get:
+      operationId: listRoles
+      summary: Mọi vai trò kèm quyền
+      security: [{ bearerAuth: [] }]
+      x-required-permission: iam.roles.manage
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Role" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createRole
+      summary: Tạo vai trò
+      security: [{ bearerAuth: [] }]
+      x-required-permission: iam.roles.manage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateRoleRequest" }
+      responses:
+        "201":
+          description: Đã tạo
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Role" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /admin/roles/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    patch:
+      operationId: updateRole
+      summary: Sửa tên/quyền của vai trò — có hiệu lực ngay với mọi người đang giữ
+      description: Vai trò hệ thống (super_admin) không sửa được → 422 SYSTEM_ROLE_IMMUTABLE.
+      security: [{ bearerAuth: [] }]
+      x-required-permission: iam.roles.manage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateRoleRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Role" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteRole
+      summary: Xóa vai trò không còn ai giữ
+      security: [{ bearerAuth: [] }]
+      x-required-permission: iam.roles.manage
+      responses:
+        "204": { description: Đã xóa }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /admin/users/{id}/roles:
+    put:
+      operationId: setUserRoles
+      summary: Thay toàn bộ vai trò của một người dùng
+      description: >-
+        Không đổi được vai trò của chính mình (422 CANNOT_CHANGE_OWN_ROLES) —
+        super admin duy nhất tự gỡ vai trò là không còn ai quản trị được.
+      security: [{ bearerAuth: [] }]
+      x-required-permission: iam.roles.manage
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [role_ids]
+              properties:
+                role_ids: { type: array, items: { type: string, format: uuid } }
+      responses:
+        "204": { description: Đã lưu }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   /admin/media:
     post:
       operationId: createMedia
@@ -399,7 +549,8 @@ paths:
         `upload.url` với MỌI cặp trong `fields` rồi mới tới trường `file` (thứ
         tự bắt buộc của S3). Storage tự từ chối file sai loại hoặc quá 10 MB.
         URL hết hạn sau 15 phút. Upload xong phải gọi `/complete`.
-      security: [{ adminKey: [] }]
+      security: [{ bearerAuth: [] }]
+      x-required-permission: media.upload
       requestBody:
         required: true
         content:
@@ -418,6 +569,7 @@ paths:
                   upload: { $ref: "#/components/schemas/MediaUpload" }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
         "413": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
@@ -431,7 +583,8 @@ paths:
         Đọc 16 byte đầu để dò định dạng THẬT — không tin Content-Type đã khai.
         Không phải JPEG/PNG/WebP → object bị xóa, 422 INVALID_IMAGE. Gọi lại cho
         media đã ready thì trả về luôn (an toàn khi thử lại).
-      security: [{ adminKey: [] }]
+      security: [{ bearerAuth: [] }]
+      x-required-permission: media.upload
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
@@ -441,6 +594,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Media" }
         "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "413": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
@@ -451,7 +605,8 @@ paths:
     post:
       operationId: createAttribute
       summary: Tạo định nghĩa thuộc tính
-      security: [{ adminKey: [] }]
+      security: [{ bearerAuth: [] }]
+      x-required-permission: catalog.taxonomy.write
       requestBody:
         required: true
         content:
@@ -465,6 +620,7 @@ paths:
               schema: { $ref: "#/components/schemas/Attribute" }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "413": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
@@ -477,7 +633,8 @@ paths:
     patch:
       operationId: updateAttribute
       summary: Sửa tên, đơn vị, giá trị enum, cờ lọc
-      security: [{ adminKey: [] }]
+      security: [{ bearerAuth: [] }]
+      x-required-permission: catalog.taxonomy.write
       requestBody:
         required: true
         content:
@@ -491,6 +648,7 @@ paths:
               schema: { $ref: "#/components/schemas/Attribute" }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "413": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
@@ -499,10 +657,12 @@ paths:
     delete:
       operationId: deleteAttribute
       summary: Xóa định nghĩa không còn gán cho danh mục nào
-      security: [{ adminKey: [] }]
+      security: [{ bearerAuth: [] }]
+      x-required-permission: catalog.taxonomy.write
       responses:
         "204": { description: Đã xóa }
         "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
@@ -516,7 +676,8 @@ paths:
         Gửi danh sách rỗng là gỡ hết — danh mục (và con của nó, nếu không có
         gán riêng) về chế độ tự do. Danh mục con gán lại cùng thuộc tính thì
         cấu hình của con thắng.
-      security: [{ adminKey: [] }]
+      security: [{ bearerAuth: [] }]
+      x-required-permission: catalog.taxonomy.write
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
       requestBody:
@@ -528,6 +689,7 @@ paths:
         "204": { description: Đã lưu }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "413": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
@@ -538,7 +700,8 @@ paths:
     post:
       operationId: createCategory
       summary: Tạo danh mục
-      security: [{ adminKey: [] }]
+      security: [{ bearerAuth: [] }]
+      x-required-permission: catalog.taxonomy.write
       requestBody:
         required: true
         content:
@@ -552,6 +715,7 @@ paths:
               schema: { $ref: "#/components/schemas/CategoryNode" }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "413": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
@@ -564,7 +728,8 @@ paths:
     patch:
       operationId: updateCategory
       summary: Sửa, đổi tên, chuyển danh mục
-      security: [{ adminKey: [] }]
+      security: [{ bearerAuth: [] }]
+      x-required-permission: catalog.taxonomy.write
       requestBody:
         required: true
         content:
@@ -578,6 +743,7 @@ paths:
               schema: { $ref: "#/components/schemas/CategoryNode" }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "413": { $ref: "#/components/responses/Problem" }
@@ -591,10 +757,12 @@ paths:
         Chỉ xóa được danh mục không còn danh mục con (409 CATEGORY_HAS_CHILDREN)
         và không còn sản phẩm nào, KỂ CẢ sản phẩm đã xóa mềm (409
         CATEGORY_HAS_PRODUCTS).
-      security: [{ adminKey: [] }]
+      security: [{ bearerAuth: [] }]
+      x-required-permission: catalog.taxonomy.write
       responses:
         "204": { description: Đã xóa }
         "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
@@ -604,7 +772,8 @@ paths:
     post:
       operationId: createBrand
       summary: Tạo thương hiệu
-      security: [{ adminKey: [] }]
+      security: [{ bearerAuth: [] }]
+      x-required-permission: catalog.taxonomy.write
       requestBody:
         required: true
         content:
@@ -618,6 +787,7 @@ paths:
               schema: { $ref: "#/components/schemas/Brand" }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "413": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
@@ -630,7 +800,8 @@ paths:
     patch:
       operationId: updateBrand
       summary: Sửa thương hiệu
-      security: [{ adminKey: [] }]
+      security: [{ bearerAuth: [] }]
+      x-required-permission: catalog.taxonomy.write
       requestBody:
         required: true
         content:
@@ -644,6 +815,7 @@ paths:
               schema: { $ref: "#/components/schemas/Brand" }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "413": { $ref: "#/components/responses/Problem" }
@@ -653,10 +825,12 @@ paths:
     delete:
       operationId: deleteBrand
       summary: Xóa thương hiệu không còn sản phẩm
-      security: [{ adminKey: [] }]
+      security: [{ bearerAuth: [] }]
+      x-required-permission: catalog.taxonomy.write
       responses:
         "204": { description: Đã xóa }
         "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
@@ -666,7 +840,8 @@ paths:
     post:
       operationId: createProduct
       summary: Tạo sản phẩm
-      security: [{ adminKey: [] }]
+      security: [{ bearerAuth: [] }]
+      x-required-permission: catalog.products.write
       requestBody:
         required: true
         content:
@@ -682,6 +857,7 @@ paths:
               schema: { $ref: "#/components/schemas/Product" }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "413": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
@@ -692,7 +868,8 @@ paths:
     patch:
       operationId: updateProduct
       summary: Sửa sản phẩm
-      security: [{ adminKey: [] }]
+      security: [{ bearerAuth: [] }]
+      x-required-permission: catalog.products.write
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
       requestBody:
@@ -708,6 +885,7 @@ paths:
               schema: { $ref: "#/components/schemas/Product" }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         # 409 rất hay gặp ở màn hình sửa: đổi tên sinh slug mới, đụng slug của
         # sản phẩm khác -> DUPLICATE_SLUG.
@@ -722,7 +900,8 @@ paths:
       operationId: addVariant
       summary: Thêm phiên bản cho sản phẩm
       description: Trả về CẢ sản phẩm — giá "từ" của sản phẩm có thể đổi theo.
-      security: [{ adminKey: [] }]
+      security: [{ bearerAuth: [] }]
+      x-required-permission: catalog.products.write
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
       requestBody:
@@ -738,6 +917,7 @@ paths:
               schema: { $ref: "#/components/schemas/Product" }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "413": { $ref: "#/components/responses/Problem" }
@@ -752,7 +932,8 @@ paths:
       description: >-
         Không có DELETE: đơn hàng sẽ trỏ vào phiên bản, nên ngừng bán là
         `status: inactive`. Trả về CẢ sản phẩm.
-      security: [{ adminKey: [] }]
+      security: [{ bearerAuth: [] }]
+      x-required-permission: catalog.products.write
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
         - { name: variantId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -769,6 +950,7 @@ paths:
               schema: { $ref: "#/components/schemas/Product" }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "413": { $ref: "#/components/responses/Problem" }
@@ -780,7 +962,8 @@ paths:
     post:
       operationId: publishProduct
       summary: Đăng bán sản phẩm
-      security: [{ adminKey: [] }]
+      security: [{ bearerAuth: [] }]
+      x-required-permission: catalog.products.write
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
@@ -790,6 +973,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Product" }
         "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
@@ -805,11 +989,6 @@ components:
       description: >-
         Access token từ /auth/login, sống 15 phút. Chỉ mang định danh người
         dùng — quyền được tra mỗi request.
-    adminKey:
-      type: apiKey
-      in: header
-      name: X-Admin-Key
-      description: Khóa tạm, P2 sẽ thay bằng JWT.
 
   responses:
     Problem:
@@ -838,6 +1017,8 @@ components:
             - INVALID_CREDENTIALS
             - INVALID_REFRESH_TOKEN
             - ACCOUNT_DISABLED
+            # phân quyền (P2.2)
+            - FORBIDDEN
             - RATE_LIMITED
             - INVALID_PAGINATION
             - MALFORMED_REQUEST
@@ -870,6 +1051,12 @@ components:
             - INVALID_ATTRIBUTE_CODE
             - INVALID_EMAIL
             - WEAK_PASSWORD
+            - INVALID_ROLE_CODE
+            - ROLE_NAME_INVALID
+            - UNKNOWN_PERMISSION
+            - SYSTEM_ROLE_IMMUTABLE
+            - CANNOT_CHANGE_OWN_ROLES
+            - ROLE_NOT_FOUND
             - FULL_NAME_INVALID
             - UNSUPPORTED_IMAGE_TYPE
             - INVALID_IMAGE
@@ -891,6 +1078,8 @@ components:
             - DUPLICATE_VARIANT_OPTIONS
             - DUPLICATE_ATTRIBUTE_CODE
             - EMAIL_TAKEN
+            - DUPLICATE_ROLE_CODE
+            - ROLE_IN_USE
             - ATTRIBUTE_IN_USE
             # catalog/domain — không tìm thấy (404). UNKNOWN_* là tài nguyên
             # trên đường dẫn; khác CATEGORY_NOT_FOUND/BRAND_NOT_FOUND (422) là
@@ -901,6 +1090,8 @@ components:
             - UNKNOWN_VARIANT
             - UNKNOWN_ATTRIBUTE
             - UNKNOWN_MEDIA
+            - UNKNOWN_ROLE
+            - UNKNOWN_USER
             # catalog/domain — tham số không hợp lệ (400)
             - INVALID_SORT
             - PAGE_TOO_DEEP
@@ -1058,6 +1249,33 @@ components:
         status:   { type: string, enum: [active, inactive] }
         position: { type: integer }
 
+    Role:
+      type: object
+      required: [id, code, name, is_system, permissions, updated_at]
+      properties:
+        id:          { type: string, format: uuid }
+        code:        { type: string }
+        name:        { type: string }
+        is_system:   { type: boolean, description: "super_admin: mọi quyền, không sửa/xóa được." }
+        permissions: { type: array, items: { type: string } }
+        updated_at:  { type: string, format: date-time }
+
+    CreateRoleRequest:
+      type: object
+      additionalProperties: false
+      required: [code, name]
+      properties:
+        code:        { type: string, pattern: "^[a-z0-9]+(_[a-z0-9]+)*$" }
+        name:        { type: string, maxLength: 100 }
+        permissions: { type: array, items: { type: string }, description: "Chỉ quyền có trong GET /admin/permissions." }
+
+    UpdateRoleRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name:        { type: string, maxLength: 100 }
+        permissions: { type: array, items: { type: string }, description: "THAY toàn bộ tập quyền." }
+
     User:
       type: object
       required: [id, email, full_name, email_verified, created_at]
@@ -1067,6 +1285,12 @@ components:
         full_name:      { type: string }
         email_verified: { type: boolean }
         created_at:     { type: string, format: date-time }
+        permissions:
+          type: array
+          items: { type: string }
+          description: >-
+            Chỉ có ở GET /me. Để client ẩn/hiện chức năng — server vẫn kiểm quyền
+            mỗi request, không tin danh sách này.
 
     Session:
       type: object

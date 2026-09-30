@@ -262,6 +262,84 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/permissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Danh sách quyền (cố định trong code) */
+        get: operations["listPermissions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Mọi vai trò kèm quyền */
+        get: operations["listRoles"];
+        put?: never;
+        /** Tạo vai trò */
+        post: operations["createRole"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/roles/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Xóa vai trò không còn ai giữ */
+        delete: operations["deleteRole"];
+        options?: never;
+        head?: never;
+        /**
+         * Sửa tên/quyền của vai trò — có hiệu lực ngay với mọi người đang giữ
+         * @description Vai trò hệ thống (super_admin) không sửa được → 422 SYSTEM_ROLE_IMMUTABLE.
+         */
+        patch: operations["updateRole"];
+        trace?: never;
+    };
+    "/admin/users/{id}/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Thay toàn bộ vai trò của một người dùng
+         * @description Không đổi được vai trò của chính mình (422 CANNOT_CHANGE_OWN_ROLES) — super admin duy nhất tự gỡ vai trò là không còn ai quản trị được.
+         */
+        put: operations["setUserRoles"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/media": {
         parameters: {
             query?: never;
@@ -539,7 +617,7 @@ export interface components {
              * @description Mã ổn định để frontend map sang thông điệp tiếng Việt.
              * @enum {string}
              */
-            code: "INTERNAL_ERROR" | "IMAGE_TOO_LARGE" | "INVALID_CREDENTIALS" | "INVALID_REFRESH_TOKEN" | "ACCOUNT_DISABLED" | "RATE_LIMITED" | "INVALID_PAGINATION" | "MALFORMED_REQUEST" | "METHOD_NOT_ALLOWED" | "PAYLOAD_TOO_LARGE" | "REQUEST_CANCELED" | "REQUEST_TIMEOUT" | "ROUTE_NOT_FOUND" | "UNAUTHENTICATED" | "VALIDATION_FAILED" | "INVALID_SKU" | "NAME_REQUIRED" | "NAME_TOO_LONG" | "INVALID_PRICE" | "UNSUPPORTED_CURRENCY" | "INVALID_SLUG" | "NO_IMAGE" | "PRICE_REQUIRED" | "INVALID_STATUS" | "CATEGORY_NOT_FOUND" | "BRAND_NOT_FOUND" | "CATEGORY_NAME_INVALID" | "BRAND_NAME_INVALID" | "CATEGORY_CYCLE" | "VARIANT_REQUIRED" | "INVALID_VARIANT_OPTIONS" | "INVALID_VARIANT_STATUS" | "NO_ACTIVE_VARIANT" | "INVALID_ATTRIBUTE_CODE" | "INVALID_EMAIL" | "WEAK_PASSWORD" | "FULL_NAME_INVALID" | "UNSUPPORTED_IMAGE_TYPE" | "INVALID_IMAGE" | "UPLOAD_NOT_FOUND" | "ATTRIBUTE_NAME_INVALID" | "INVALID_ATTRIBUTE_TYPE" | "INVALID_ATTRIBUTE_OPTIONS" | "ATTRIBUTE_NOT_FOUND" | "DUPLICATE_ATTRIBUTE_ASSIGNMENT" | "ALREADY_PUBLISHED" | "DUPLICATE_SKU" | "DUPLICATE_SLUG" | "DUPLICATE_CATEGORY_SLUG" | "DUPLICATE_BRAND_SLUG" | "CATEGORY_HAS_CHILDREN" | "CATEGORY_HAS_PRODUCTS" | "BRAND_HAS_PRODUCTS" | "DUPLICATE_VARIANT_OPTIONS" | "DUPLICATE_ATTRIBUTE_CODE" | "EMAIL_TAKEN" | "ATTRIBUTE_IN_USE" | "PRODUCT_NOT_FOUND" | "UNKNOWN_CATEGORY" | "UNKNOWN_BRAND" | "UNKNOWN_VARIANT" | "UNKNOWN_ATTRIBUTE" | "UNKNOWN_MEDIA" | "INVALID_SORT" | "PAGE_TOO_DEEP";
+            code: "INTERNAL_ERROR" | "IMAGE_TOO_LARGE" | "INVALID_CREDENTIALS" | "INVALID_REFRESH_TOKEN" | "ACCOUNT_DISABLED" | "FORBIDDEN" | "RATE_LIMITED" | "INVALID_PAGINATION" | "MALFORMED_REQUEST" | "METHOD_NOT_ALLOWED" | "PAYLOAD_TOO_LARGE" | "REQUEST_CANCELED" | "REQUEST_TIMEOUT" | "ROUTE_NOT_FOUND" | "UNAUTHENTICATED" | "VALIDATION_FAILED" | "INVALID_SKU" | "NAME_REQUIRED" | "NAME_TOO_LONG" | "INVALID_PRICE" | "UNSUPPORTED_CURRENCY" | "INVALID_SLUG" | "NO_IMAGE" | "PRICE_REQUIRED" | "INVALID_STATUS" | "CATEGORY_NOT_FOUND" | "BRAND_NOT_FOUND" | "CATEGORY_NAME_INVALID" | "BRAND_NAME_INVALID" | "CATEGORY_CYCLE" | "VARIANT_REQUIRED" | "INVALID_VARIANT_OPTIONS" | "INVALID_VARIANT_STATUS" | "NO_ACTIVE_VARIANT" | "INVALID_ATTRIBUTE_CODE" | "INVALID_EMAIL" | "WEAK_PASSWORD" | "INVALID_ROLE_CODE" | "ROLE_NAME_INVALID" | "UNKNOWN_PERMISSION" | "SYSTEM_ROLE_IMMUTABLE" | "CANNOT_CHANGE_OWN_ROLES" | "ROLE_NOT_FOUND" | "FULL_NAME_INVALID" | "UNSUPPORTED_IMAGE_TYPE" | "INVALID_IMAGE" | "UPLOAD_NOT_FOUND" | "ATTRIBUTE_NAME_INVALID" | "INVALID_ATTRIBUTE_TYPE" | "INVALID_ATTRIBUTE_OPTIONS" | "ATTRIBUTE_NOT_FOUND" | "DUPLICATE_ATTRIBUTE_ASSIGNMENT" | "ALREADY_PUBLISHED" | "DUPLICATE_SKU" | "DUPLICATE_SLUG" | "DUPLICATE_CATEGORY_SLUG" | "DUPLICATE_BRAND_SLUG" | "CATEGORY_HAS_CHILDREN" | "CATEGORY_HAS_PRODUCTS" | "BRAND_HAS_PRODUCTS" | "DUPLICATE_VARIANT_OPTIONS" | "DUPLICATE_ATTRIBUTE_CODE" | "EMAIL_TAKEN" | "DUPLICATE_ROLE_CODE" | "ROLE_IN_USE" | "ATTRIBUTE_IN_USE" | "PRODUCT_NOT_FOUND" | "UNKNOWN_CATEGORY" | "UNKNOWN_BRAND" | "UNKNOWN_VARIANT" | "UNKNOWN_ATTRIBUTE" | "UNKNOWN_MEDIA" | "UNKNOWN_ROLE" | "UNKNOWN_USER" | "INVALID_SORT" | "PAGE_TOO_DEEP";
             /**
              * @description Luôn có mặt trong response (không bao giờ bị lược bỏ), nhưng có
              *     thể là chuỗi rỗng nếu middleware RequestID chưa gán được giá trị.
@@ -665,6 +743,28 @@ export interface components {
             status?: "active" | "inactive";
             position?: number;
         };
+        Role: {
+            /** Format: uuid */
+            id: string;
+            code: string;
+            name: string;
+            /** @description super_admin: mọi quyền, không sửa/xóa được. */
+            is_system: boolean;
+            permissions: string[];
+            /** Format: date-time */
+            updated_at: string;
+        };
+        CreateRoleRequest: {
+            code: string;
+            name: string;
+            /** @description Chỉ quyền có trong GET /admin/permissions. */
+            permissions?: string[];
+        };
+        UpdateRoleRequest: {
+            name?: string;
+            /** @description THAY toàn bộ tập quyền. */
+            permissions?: string[];
+        };
         User: {
             /** Format: uuid */
             id: string;
@@ -674,6 +774,8 @@ export interface components {
             email_verified: boolean;
             /** Format: date-time */
             created_at: string;
+            /** @description Chỉ có ở GET /me. Để client ẩn/hiện chức năng — server vẫn kiểm quyền mỗi request, không tin danh sách này. */
+            permissions?: string[];
         };
         Session: {
             access_token: string;
@@ -1314,6 +1416,188 @@ export interface operations {
             503: components["responses"]["Problem"];
         };
     };
+    listPermissions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            code: string;
+                            description: string;
+                        }[];
+                    };
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listRoles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Role"][];
+                    };
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateRoleRequest"];
+            };
+        };
+        responses: {
+            /** @description Đã tạo */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Role"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    deleteRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Đã xóa */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateRoleRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Role"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    setUserRoles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    role_ids: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description Đã lưu */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
     createMedia: {
         parameters: {
             query?: never;
@@ -1341,6 +1625,7 @@ export interface operations {
             };
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             413: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
             500: components["responses"]["Problem"];
@@ -1368,6 +1653,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             413: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
@@ -1399,6 +1685,7 @@ export interface operations {
             };
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             413: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
@@ -1425,6 +1712,7 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             500: components["responses"]["Problem"];
@@ -1457,6 +1745,7 @@ export interface operations {
             };
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             413: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
@@ -1488,6 +1777,7 @@ export interface operations {
             };
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             413: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
@@ -1519,6 +1809,7 @@ export interface operations {
             };
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             413: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
@@ -1545,6 +1836,7 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             500: components["responses"]["Problem"];
@@ -1577,6 +1869,7 @@ export interface operations {
             };
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             413: components["responses"]["Problem"];
@@ -1609,6 +1902,7 @@ export interface operations {
             };
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             413: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
@@ -1635,6 +1929,7 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             500: components["responses"]["Problem"];
@@ -1667,6 +1962,7 @@ export interface operations {
             };
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             413: components["responses"]["Problem"];
@@ -1700,6 +1996,7 @@ export interface operations {
             };
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             413: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
@@ -1733,6 +2030,7 @@ export interface operations {
             };
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             413: components["responses"]["Problem"];
@@ -1767,6 +2065,7 @@ export interface operations {
             };
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             413: components["responses"]["Problem"];
@@ -1802,6 +2101,7 @@ export interface operations {
             };
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             413: components["responses"]["Problem"];
@@ -1831,6 +2131,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             422: components["responses"]["Problem"];

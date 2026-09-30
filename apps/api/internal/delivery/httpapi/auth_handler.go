@@ -73,6 +73,9 @@ type userDTO struct {
 	FullName      string    `json:"full_name"`
 	EmailVerified bool      `json:"email_verified"`
 	CreatedAt     time.Time `json:"created_at"`
+	// Permissions chỉ có ở /me — client (P2.4) ẩn/hiện chức năng quản trị theo
+	// nó. Chỉ để HIỂN THỊ: server vẫn kiểm quyền mỗi request, không tin client.
+	Permissions []string `json:"permissions,omitempty"`
 }
 
 func toUserDTO(u *domain.User) userDTO {
@@ -202,6 +205,15 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) error {
 		}
 		return err
 	}
+	set, err := h.uc.Authorizer.Permissions(r.Context(), u.ID)
+	if err != nil {
+		return err
+	}
+	dto := toUserDTO(u)
+	dto.Permissions = []string{}
+	for _, p := range set.List() {
+		dto.Permissions = append(dto.Permissions, string(p))
+	}
 	w.Header().Set("Cache-Control", "no-store")
-	return httpx.JSON(w, http.StatusOK, toUserDTO(u))
+	return httpx.JSON(w, http.StatusOK, dto)
 }

@@ -17,7 +17,6 @@ type Config struct {
 	Env      string
 	Version  string
 	LogLevel string
-	AdminKey string
 	HTTP     HTTP
 	DB       DB
 	Redis    Redis
@@ -86,9 +85,9 @@ func (c *Config) IsProduction() bool { return c.Env == "production" }
 func (c *Config) String() string {
 	return fmt.Sprintf(
 		"Config{Env:%s Version:%s HTTP.Addr:%s DB.DSN:%s DB.MaxConns:%d Redis.Addr:%s "+
-			"RabbitMQ.URL:%s AdminKey:%s S3.Endpoint:%s S3.PublicEndpoint:%s S3.Bucket:%s S3.SecretKey:%s JWTSecret:%s}",
+			"RabbitMQ.URL:%s S3.Endpoint:%s S3.PublicEndpoint:%s S3.Bucket:%s S3.SecretKey:%s JWTSecret:%s}",
 		c.Env, c.Version, c.HTTP.Addr, redactDSN(c.DB.DSN), c.DB.MaxConns,
-		c.Redis.Addr, redactDSN(c.RabbitMQ.URL), redactSecret(c.AdminKey),
+		c.Redis.Addr, redactDSN(c.RabbitMQ.URL),
 		c.S3.Endpoint, c.S3.PublicEndpoint, c.S3.Bucket, redactSecret(c.S3.SecretKey), redactSecret(c.Auth.JWTSecret),
 	)
 }
@@ -141,10 +140,6 @@ func Load() (*Config, error) {
 			MinConns:        int32(l.num("DB_MIN_CONNS", 2)),
 			MaxConnLifetime: l.dur("DB_MAX_CONN_LIFETIME", time.Hour),
 		},
-		// Khóa tạm bảo vệ API ghi cho tới khi P2 có JWT + RBAC.
-		// BẮT BUỘC: thiếu thì server không khởi động, nên không thể vô tình
-		// deploy một API ghi không ai bảo vệ.
-		AdminKey: l.required("ADMIN_API_KEY"),
 		Redis: Redis{
 			Addr:     l.str("REDIS_ADDR", "localhost:6380"),
 			PoolSize: l.num("REDIS_POOL_SIZE", 20),

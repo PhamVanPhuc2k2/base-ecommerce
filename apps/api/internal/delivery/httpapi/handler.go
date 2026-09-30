@@ -34,6 +34,8 @@ type Usecases struct {
 	Media          *usecase.MediaUploads
 	Sitemap        *usecase.SitemapProducts
 	Auth           *usecase.Auth
+	Authorizer     *usecase.Authorizer
+	RoleAdmin      *usecase.RoleAdmin
 	UpdateVariant  *usecase.UpdateVariant
 	ListBrands     *usecase.ListBrands
 	CreateBrand    *usecase.CreateBrand
@@ -42,13 +44,12 @@ type Usecases struct {
 }
 
 type Handler struct {
-	adminKey string
 	verifier TokenVerifier
 	uc       Usecases
 }
 
-func NewHandler(adminKey string, verifier TokenVerifier, uc Usecases) *Handler {
-	return &Handler{adminKey: adminKey, verifier: verifier, uc: uc}
+func NewHandler(verifier TokenVerifier, uc Usecases) *Handler {
+	return &Handler{verifier: verifier, uc: uc}
 }
 
 func (h *Handler) GetProduct(w http.ResponseWriter, r *http.Request) error {
