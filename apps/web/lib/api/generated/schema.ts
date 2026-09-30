@@ -475,6 +475,83 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/locations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Mọi kho/showroom, theo priority rồi code */
+        get: operations["listLocations"];
+        put?: never;
+        /** Tạo kho/showroom — code không đổi được sau khi tạo */
+        post: operations["createLocation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/locations/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Sửa kho; không xóa được, chỉ đặt active=false */
+        patch: operations["updateLocation"];
+        trace?: never;
+    };
+    "/admin/stock/movements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Sổ cái tồn kho, mới nhất trước, phân trang con trỏ */
+        get: operations["listStockMovements"];
+        put?: never;
+        /**
+         * Nhập hàng (receipt), điều chỉnh (adjustment) hoặc kiểm kê (count)
+         * @description Mỗi thao tác ghi đúng một dòng sổ cái cùng transaction với thay đổi tồn. on_hand không được xuống dưới reserved (409 INSUFFICIENT_STOCK). Gửi lại cùng Idempotency-Key → 200 + kết quả cũ + header Idempotent-Replayed, tồn không đổi thêm.
+         */
+        post: operations["recordStockMovement"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/variants/{id}/stock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Tồn của một phiên bản trên mọi kho, kèm các tổng */
+        get: operations["getVariantStock"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/media": {
         parameters: {
             query?: never;
@@ -752,7 +829,7 @@ export interface components {
              * @description Mã ổn định để frontend map sang thông điệp tiếng Việt.
              * @enum {string}
              */
-            code: "INTERNAL_ERROR" | "IMAGE_TOO_LARGE" | "INVALID_CREDENTIALS" | "INVALID_REFRESH_TOKEN" | "ACCOUNT_DISABLED" | "INVALID_OTP" | "EMAIL_ALREADY_VERIFIED" | "ADDRESS_LIMIT_REACHED" | "UNKNOWN_ADDRESS" | "FORBIDDEN" | "RATE_LIMITED" | "INVALID_PAGINATION" | "MALFORMED_REQUEST" | "METHOD_NOT_ALLOWED" | "PAYLOAD_TOO_LARGE" | "REQUEST_CANCELED" | "REQUEST_TIMEOUT" | "ROUTE_NOT_FOUND" | "UNAUTHENTICATED" | "VALIDATION_FAILED" | "INVALID_SKU" | "NAME_REQUIRED" | "NAME_TOO_LONG" | "INVALID_PRICE" | "UNSUPPORTED_CURRENCY" | "INVALID_SLUG" | "NO_IMAGE" | "PRICE_REQUIRED" | "INVALID_STATUS" | "CATEGORY_NOT_FOUND" | "BRAND_NOT_FOUND" | "CATEGORY_NAME_INVALID" | "BRAND_NAME_INVALID" | "CATEGORY_CYCLE" | "VARIANT_REQUIRED" | "INVALID_VARIANT_OPTIONS" | "INVALID_VARIANT_STATUS" | "NO_ACTIVE_VARIANT" | "INVALID_ATTRIBUTE_CODE" | "INVALID_EMAIL" | "WEAK_PASSWORD" | "INVALID_ROLE_CODE" | "ROLE_NAME_INVALID" | "UNKNOWN_PERMISSION" | "SYSTEM_ROLE_IMMUTABLE" | "CANNOT_CHANGE_OWN_ROLES" | "ROLE_NOT_FOUND" | "FULL_NAME_INVALID" | "UNSUPPORTED_IMAGE_TYPE" | "INVALID_IMAGE" | "UPLOAD_NOT_FOUND" | "ATTRIBUTE_NAME_INVALID" | "INVALID_ATTRIBUTE_TYPE" | "INVALID_ATTRIBUTE_OPTIONS" | "ATTRIBUTE_NOT_FOUND" | "DUPLICATE_ATTRIBUTE_ASSIGNMENT" | "ALREADY_PUBLISHED" | "DUPLICATE_SKU" | "DUPLICATE_SLUG" | "DUPLICATE_CATEGORY_SLUG" | "DUPLICATE_BRAND_SLUG" | "CATEGORY_HAS_CHILDREN" | "CATEGORY_HAS_PRODUCTS" | "BRAND_HAS_PRODUCTS" | "DUPLICATE_VARIANT_OPTIONS" | "DUPLICATE_ATTRIBUTE_CODE" | "EMAIL_TAKEN" | "DUPLICATE_ROLE_CODE" | "ROLE_IN_USE" | "ATTRIBUTE_IN_USE" | "PRODUCT_NOT_FOUND" | "UNKNOWN_CATEGORY" | "UNKNOWN_BRAND" | "UNKNOWN_VARIANT" | "UNKNOWN_ATTRIBUTE" | "UNKNOWN_MEDIA" | "UNKNOWN_ROLE" | "UNKNOWN_USER" | "INVALID_SORT" | "PAGE_TOO_DEEP";
+            code: "INTERNAL_ERROR" | "IMAGE_TOO_LARGE" | "INVALID_CREDENTIALS" | "INVALID_REFRESH_TOKEN" | "ACCOUNT_DISABLED" | "INVALID_OTP" | "EMAIL_ALREADY_VERIFIED" | "ADDRESS_LIMIT_REACHED" | "UNKNOWN_ADDRESS" | "INVALID_LOCATION_CODE" | "LOCATION_NAME_INVALID" | "INVALID_LOCATION_KIND" | "LOCATION_ADDRESS_REQUIRED" | "DUPLICATE_LOCATION_CODE" | "UNKNOWN_LOCATION" | "LOCATION_NOT_FOUND" | "LOCATION_INACTIVE" | "VARIANT_NOT_FOUND" | "INVALID_MOVEMENT_KIND" | "INVALID_QUANTITY" | "STOCK_REASON_REQUIRED" | "INSUFFICIENT_STOCK" | "IDEMPOTENCY_KEY_REUSED" | "INVALID_IDEMPOTENCY_KEY" | "INVALID_MOVEMENT_FILTER" | "FORBIDDEN" | "RATE_LIMITED" | "INVALID_PAGINATION" | "MALFORMED_REQUEST" | "METHOD_NOT_ALLOWED" | "PAYLOAD_TOO_LARGE" | "REQUEST_CANCELED" | "REQUEST_TIMEOUT" | "ROUTE_NOT_FOUND" | "UNAUTHENTICATED" | "VALIDATION_FAILED" | "INVALID_SKU" | "NAME_REQUIRED" | "NAME_TOO_LONG" | "INVALID_PRICE" | "UNSUPPORTED_CURRENCY" | "INVALID_SLUG" | "NO_IMAGE" | "PRICE_REQUIRED" | "INVALID_STATUS" | "CATEGORY_NOT_FOUND" | "BRAND_NOT_FOUND" | "CATEGORY_NAME_INVALID" | "BRAND_NAME_INVALID" | "CATEGORY_CYCLE" | "VARIANT_REQUIRED" | "INVALID_VARIANT_OPTIONS" | "INVALID_VARIANT_STATUS" | "NO_ACTIVE_VARIANT" | "INVALID_ATTRIBUTE_CODE" | "INVALID_EMAIL" | "WEAK_PASSWORD" | "INVALID_ROLE_CODE" | "ROLE_NAME_INVALID" | "UNKNOWN_PERMISSION" | "SYSTEM_ROLE_IMMUTABLE" | "CANNOT_CHANGE_OWN_ROLES" | "ROLE_NOT_FOUND" | "FULL_NAME_INVALID" | "UNSUPPORTED_IMAGE_TYPE" | "INVALID_IMAGE" | "UPLOAD_NOT_FOUND" | "ATTRIBUTE_NAME_INVALID" | "INVALID_ATTRIBUTE_TYPE" | "INVALID_ATTRIBUTE_OPTIONS" | "ATTRIBUTE_NOT_FOUND" | "DUPLICATE_ATTRIBUTE_ASSIGNMENT" | "ALREADY_PUBLISHED" | "DUPLICATE_SKU" | "DUPLICATE_SLUG" | "DUPLICATE_CATEGORY_SLUG" | "DUPLICATE_BRAND_SLUG" | "CATEGORY_HAS_CHILDREN" | "CATEGORY_HAS_PRODUCTS" | "BRAND_HAS_PRODUCTS" | "DUPLICATE_VARIANT_OPTIONS" | "DUPLICATE_ATTRIBUTE_CODE" | "EMAIL_TAKEN" | "DUPLICATE_ROLE_CODE" | "ROLE_IN_USE" | "ATTRIBUTE_IN_USE" | "PRODUCT_NOT_FOUND" | "UNKNOWN_CATEGORY" | "UNKNOWN_BRAND" | "UNKNOWN_VARIANT" | "UNKNOWN_ATTRIBUTE" | "UNKNOWN_MEDIA" | "UNKNOWN_ROLE" | "UNKNOWN_USER" | "INVALID_SORT" | "PAGE_TOO_DEEP";
             /**
              * @description Luôn có mặt trong response (không bao giờ bị lược bỏ), nhưng có
              *     thể là chuỗi rỗng nếu middleware RequestID chưa gán được giá trị.
@@ -899,6 +976,95 @@ export interface components {
             name?: string;
             /** @description THAY toàn bộ tập quyền. */
             permissions?: string[];
+        };
+        Location: {
+            /** Format: uuid */
+            id: string;
+            code: string;
+            name: string;
+            /** @enum {string} */
+            kind: "warehouse" | "showroom";
+            address: string | null;
+            /** @description Tồn của kho này có tính vào tồn bán online */
+            sells_online: boolean;
+            /** @description Số nhỏ được phân bổ trước (P3.2) */
+            priority: number;
+            active: boolean;
+        };
+        CreateLocationRequest: {
+            code: string;
+            name: string;
+            /** @enum {string} */
+            kind: "warehouse" | "showroom";
+            /** @description Bắt buộc với showroom */
+            address?: string;
+            sells_online: boolean;
+            priority: number;
+        };
+        UpdateLocationRequest: {
+            name?: string;
+            /** @enum {string} */
+            kind?: "warehouse" | "showroom";
+            /** @description null = xóa (không được với showroom) */
+            address?: string | null;
+            sells_online?: boolean;
+            priority?: number;
+            active?: boolean;
+        };
+        RecordStockMovementRequest: {
+            /** Format: uuid */
+            location_id: string;
+            /** Format: uuid */
+            variant_id: string;
+            /** @enum {string} */
+            kind: "receipt" | "adjustment" | "count";
+            /** @description receipt: số nhập (> 0). adjustment: phần chênh có dấu (≠ 0). count: số đếm được (tuyệt đối, ≥ 0). */
+            quantity: number;
+            /** @description Bắt buộc với adjustment và count */
+            reason?: string;
+            /** @description Mã chứng từ (phiếu nhập…) */
+            ref?: string;
+        };
+        StockMovement: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            location_id: string;
+            /** Format: uuid */
+            variant_id: string;
+            /** @enum {string} */
+            kind: "receipt" | "adjustment" | "count" | "reserve" | "release" | "commit";
+            on_hand_delta: number;
+            reserved_delta: number;
+            on_hand_after: number;
+            reserved_after: number;
+            reason?: string | null;
+            ref?: string | null;
+            /** Format: uuid */
+            actor_id?: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        StockLevel: {
+            on_hand: number;
+            reserved: number;
+            /** @description on_hand − reserved */
+            available: number;
+        };
+        StockMovementResult: {
+            movement: components["schemas"]["StockMovement"];
+            level: components["schemas"]["StockLevel"];
+        };
+        VariantStock: {
+            /** Format: uuid */
+            variant_id: string;
+            levels: (components["schemas"]["StockLevel"] & {
+                location: components["schemas"]["Location"];
+            })[];
+            totals: components["schemas"]["StockLevel"] & {
+                /** @description Chỉ kho đang hoạt động và bán online */
+                online_available: number;
+            };
         };
         Address: {
             /** Format: uuid */
@@ -2043,6 +2209,205 @@ export interface operations {
             404: components["responses"]["Problem"];
             413: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listLocations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Location"][];
+                    };
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createLocation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateLocationRequest"];
+            };
+        };
+        responses: {
+            /** @description Đã tạo */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Location"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateLocation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateLocationRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Location"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStockMovements: {
+        parameters: {
+            query?: {
+                variant_id?: string;
+                location_id?: string;
+                /** @description meta.next_cursor của trang trước */
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["StockMovement"][];
+                        meta: {
+                            /** Format: uuid */
+                            next_cursor?: string | null;
+                        };
+                    };
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    recordStockMovement: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecordStockMovementRequest"];
+            };
+        };
+        responses: {
+            /** @description Gửi lại cùng Idempotency-Key — kết quả của lần đầu */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockMovementResult"];
+                };
+            };
+            /** @description Đã ghi */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockMovementResult"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getVariantStock: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VariantStock"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             500: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };

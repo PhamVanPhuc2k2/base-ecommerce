@@ -257,6 +257,7 @@ base-ecommerce/
 │   │   │   │   ├── otp.go                    # mã OTP: mục đích, 10 phút, 5 lần sai, chờ 60 giây
 │   │   │   │   ├── email.go                  # thư trong hàng đợi + sự kiện email.queued (chỉ mang id)
 │   │   │   │   ├── address.go                # địa chỉ giao hàng 2 cấp hành chính; chuẩn hóa SĐT di động
+│   │   │   │   ├── inventory.go              # kho, StockLevel.Apply (nhập/điều chỉnh/kiểm kê), dòng sổ cái
 │   │   │   │   ├── category.go               # cây danh mục, DescendantIDs, CheckMove chống vòng lặp
 │   │   │   │   ├── brand.go                  # thương hiệu; slug KHÔNG đổi theo tên
 │   │   │   │   ├── money.go                  # value object (bọc NUMERIC)
@@ -281,7 +282,8 @@ base-ecommerce/
 │   │   │   │   ├── auth.go                   # đăng ký/đăng nhập/refresh xoay vòng/đăng xuất, rate limit
 │   │   │   │   ├── rbac.go                   # Authorizer (quyền qua cache 5') + quản trị vai trò, xóa cache khi đổi
 │   │   │   │   ├── otp.go                    # xác minh email, quên/đặt lại mật khẩu (HMAC), Mailing gửi thư
-│   │   │   │   └── address.go                # sổ địa chỉ: trần 10, luôn đúng một mặc định, khóa dòng người dùng
+│   │   │   │   ├── address.go                # sổ địa chỉ: trần 10, luôn đúng một mặc định, khóa dòng người dùng
+│   │   │   │   └── inventory.go              # quản trị kho + tồn; Idempotency-Key cùng transaction với sổ cái
 │   │   │   ├── repository/                   # cài đặt interface của usecase (đi RA ngoài)
 │   │   │   │   ├── pgstore/                  # Postgres: sqlc + squirrel + mapping → domain
 │   │   │   │   │   ├── queries/              # *.sql cho sqlc
@@ -295,7 +297,8 @@ base-ecommerce/
 │   │   │   │   │   ├── user_repo.go          # users + refresh_tokens (FOR UPDATE khi refresh)
 │   │   │   │   │   ├── role_repo.go          # roles, role_permissions, user_roles; lỗi FK → mã lỗi
 │   │   │   │   │   ├── otp_repo.go           # otp_codes + outbound_emails; lần sai commit không chờ đĩa
-│   │   │   │   │   └── address_repo.go       # addresses; đổi mặc định: bỏ cờ cũ rồi mới đặt cờ mới
+│   │   │   │   │   ├── address_repo.go       # addresses; đổi mặc định: bỏ cờ cũ rồi mới đặt cờ mới
+│   │   │   │   │   └── inventory_repo.go     # locations, stock_levels (ensure + FOR UPDATE), stock_movements
 │   │   │   │   ├── rediscache/               # cache-aside cho sản phẩm và cây danh mục
 │   │   │   │   ├── outboxpub/                # domain.Event → outbox.Record, cùng transaction
 │   │   │   │   └── outbox/                   # outbox + khử trùng lặp, dùng chung, KHÔNG biết domain

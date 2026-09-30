@@ -81,6 +81,7 @@ func newHandler(cfg *config.Config, db *postgres.Manager, cache *platformredis.C
 		Auth:           auth,
 		Verification:   verification,
 		AddressBook:    usecase.NewAddressBook(db, userRepo, pgstore.NewAddressRepository(db)),
+		Inventory:      usecase.NewInventory(db, pgstore.NewLocationRepository(db), pgstore.NewStockRepository(db)),
 		Authorizer:     usecase.NewAuthorizer(roleRepo, c),
 		RoleAdmin:      usecase.NewRoleAdmin(db, roleRepo, c),
 	}), nil

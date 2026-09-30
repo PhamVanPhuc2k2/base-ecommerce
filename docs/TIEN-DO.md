@@ -16,6 +16,7 @@
 | **P0.4** | Storefront Next.js | ✅ xong, đã merge |
 | **P1** | Catalog & PIM | ✅ **P1.1 → P1.5 xong** — xem [tổng quan](superpowers/specs/2026-09-29-p1-tong-quan.md) |
 | **P2** | Identity | ✅ **Xong** — tài khoản + phiên, RBAC, OTP email, trang tài khoản + sổ địa chỉ trên storefront, xem [tổng quan](superpowers/specs/2026-09-30-p2-tong-quan.md) |
+| **P3** | Inventory & Pricing | 🟡 **P3.1 xong** (kho + tồn + sổ cái) — còn P3.2 giữ chỗ, P3.3 bảng giá, P3.4 storefront, xem [tổng quan](superpowers/specs/2026-09-30-p3-tong-quan.md) |
 
 ---
 
@@ -228,6 +229,50 @@ Ngoài ra: `compose.prod.yml` thêm `web`, và mở `worker` + `outboxrelay` (v�
 comment dù P0.3 đã xong), kèm `RABBITMQ_URL` còn thiếu. Biến chung tách thành
 anchor `x-go-env` vì `<<` của YAML chỉ gộp nông. Thiếu `SITE_URL` thì compose từ
 chối chạy.
+
+---
+
+## P3.1 — Kho + tồn kho ✅
+
+Chủ dự án chốt bốn quyết định P3:
+
+- đa kho, tự phân bổ theo ưu tiên;
+- giữ chỗ khi đặt đơn (15 phút);
+- bảng giá + khuyến mãi có hạn;
+- storefront hiện trạng thái, không hiện số lượng.
+
+P3.1 làm các phần sau:
+
+- **Dữ liệu:** `locations`, `stock_levels` (`on_hand`, `reserved`;
+  `available` tính ra), sổ cái chỉ-thêm `stock_movements`.
+- **Thao tác quản trị:** nhập hàng, điều chỉnh, kiểm kê.
+- **Quyền mới:** `inventory.manage`.
+- **Mọi thay đổi:** khóa dòng rồi mới đổi, ghi sổ cái cùng transaction.
+
+Chi tiết: [đặc tả](superpowers/specs/2026-09-30-p3-1-kho-ton.md).
+
+| # | Kiểm | Kết quả |
+|---|---|---|
+| 1 | `task check` | qua (96 mã lỗi) |
+| 2 | Tạo kho tổng + 2 showroom; showroom thiếu địa chỉ; trùng code; code có dấu | 201 ×3; 422 `LOCATION_ADDRESS_REQUIRED`; 409; 422 `INVALID_LOCATION_CODE` |
+| 3 | Nhập A+10, B+5, C+4 (C không bán online) | `online_available` tăng đúng 15 |
+| 4 | Điều chỉnh A −12 | 409 `INSUFFICIENT_STOCK`, tồn giữ 10, **không** có dòng sổ cái; thiếu lý do → 422 |
+| 5 | Kiểm kê A = 7 | sổ cái ghi delta −3 |
+| 6 | Cùng `Idempotency-Key` hai lần / khác nội dung | 201 rồi 200 + `Idempotent-Replayed: true`, cùng một dòng sổ cái, tồn chỉ cộng 1 lần / 422 `IDEMPOTENCY_KEY_REUSED` |
+| 6b | 10 request **song song** cùng khóa | 1 × 201 + 9 × 200, tồn cộng đúng 1 lần |
+| 7 | 50 request nhập +1 song song vào cùng dòng | tồn = 50; `on_hand_after` đúng dãy 1…50, không trùng |
+| 8 | Kho ngừng hoạt động | nhập → 422 `LOCATION_INACTIVE`; kiểm kê về 0 vẫn được; sửa `code` → 400; xóa địa chỉ showroom → 422 |
+| 9 | Đối soát toàn bảng Σ delta sổ cái vs `stock_levels` | 0 dòng lệch |
+| 10 | Không token / khách thường | 401 / 403 |
+
+Ngoài ra đã kiểm:
+
+- phiên bản lạ → 422 `VARIANT_NOT_FOUND`; kho lạ → 422 `LOCATION_NOT_FOUND`;
+- sổ cái phân trang 20 + 20 + 11 dòng, không trùng, trang cuối `next_cursor = null`.
+
+**Lệch khỏi thiết kế 02, có chủ ý:** `Idempotency-Key` của tồn kho lưu ở cột
+UNIQUE của sổ cái, CÙNG transaction với thay đổi tồn. Thiết kế 02 định lưu ở
+Redis 24 giờ — không commit cùng Postgres, sập giữa hai bước là nhập hai lần.
 
 ---
 
