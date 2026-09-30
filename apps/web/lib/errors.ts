@@ -83,6 +83,8 @@ export const errorMessages: Record<string, string> = {
   INVALID_REFRESH_TOKEN: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.',
   RATE_LIMITED: 'Bạn thao tác quá nhanh. Vui lòng thử lại sau ít phút.',
   WEAK_PASSWORD: 'Mật khẩu phải dài từ 8 đến 128 ký tự.',
+  INVALID_OTP: 'Mã xác nhận không đúng hoặc đã hết hạn. Hãy kiểm tra lại hoặc yêu cầu mã mới.',
+  EMAIL_ALREADY_VERIFIED: 'Email của bạn đã được xác minh.',
   CANNOT_CHANGE_OWN_ROLES: 'Bạn không thể tự thay đổi vai trò của chính mình.',
   DUPLICATE_ROLE_CODE: 'Mã vai trò này đã tồn tại.',
   FORBIDDEN: 'Bạn không có quyền thực hiện thao tác này.',

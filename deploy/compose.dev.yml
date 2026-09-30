@@ -116,6 +116,21 @@ services:
       timeout: 3s
       retries: 10
 
+  # Mailpit nhận MỌI thư của môi trường dev và không gửi đi đâu cả — mã OTP
+  # đăng ký bằng email thật cũng chỉ nằm ở http://localhost:8025. Worker chạy
+  # trên máy (`task run-worker`) gửi vào localhost:1025 (mặc định của
+  # SMTP_HOST/SMTP_PORT), worker trong compose gửi vào mailpit:1025.
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "127.0.0.1:8025:8025" # giao diện web + API đọc thư (script kiểm chứng dùng)
+      - "127.0.0.1:1025:1025" # SMTP
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   # Service api nằm sau profile "app": `task up` thường ngày CHỈ dựng hạ tầng và
   # vẫn nhanh như trước, còn API thì chạy bằng `task run` trên máy để giữ vòng
   # lặp sửa–chạy ~1 giây.
@@ -241,7 +256,8 @@ services:
     # đoạn dừng êm có chạy xong hay không.
     stop_grace_period: 70s
 
-  # worker đọc queue catalog.indexer và xử lý sự kiện sản phẩm. Cùng profile
+  # worker đọc queue catalog.indexer (sự kiện sản phẩm) và mailer (gửi thư,
+  # P2.3). Cùng profile
   # "app" với api và outboxrelay: `task up` thường ngày chỉ dựng hạ tầng, còn
   # `task up-docker` dựng cả tiến trình nền.
   #
@@ -266,6 +282,8 @@ services:
       # container.
       DATABASE_URL: postgres://app:app@postgres:5432/base_ecommerce?sslmode=disable
       RABBITMQ_URL: amqp://app:app@rabbitmq:5672/
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
       # Vòng lặp consume xử lý tuần tự nên một kết nối là đủ; để 3 cho thoải
       # mái. Mặc định 20 mà nhân với số tiến trình thì Postgres hết slot nhanh.
       DB_MAX_CONNS: "3"
@@ -273,6 +291,9 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
+      # service_started, không phải healthy: Mailpit chết thì thư vào queue
+      # retry và tự gửi lại — không phải lý do để worker không chạy.
+      mailpit: { condition: service_started }
     # KHÔNG có healthcheck, cùng lý do đã ghi ở outboxrelay: /healthcheck trong
     # image gọi một URL HTTP, mà worker không mở cổng HTTP nào. Dấu hiệu sống
     # của nó là log và bảng processed_events, không phải một cái đèn xanh giả.

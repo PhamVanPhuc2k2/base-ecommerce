@@ -1,4 +1,5 @@
-// Command worker đọc queue catalog.indexer và xử lý sự kiện sản phẩm.
+// Command worker đọc hai queue: catalog.indexer (sự kiện sản phẩm) và mailer
+// (gửi thư trong hàng đợi, P2.3 — xem mailer.go).
 //
 // # Nó làm gì ở P0.3, và vì sao chỉ có thế
 //
@@ -28,12 +29,16 @@ import (
 	"time"
 
 	"base-ecommerce/api/internal/repository/outbox"
+	"base-ecommerce/api/internal/repository/pgstore"
+	"base-ecommerce/api/internal/usecase"
 	"base-ecommerce/api/pkg/config"
+	"base-ecommerce/api/pkg/mailer"
 	"base-ecommerce/api/pkg/observability"
 	"base-ecommerce/api/pkg/postgres"
 	"base-ecommerce/api/pkg/rabbitmq"
 
 	"github.com/google/uuid"
+	"golang.org/x/sync/errgroup"
 )
 
 // version được nhúng lúc build: -ldflags="-X main.version=$GIT_SHA"
@@ -69,6 +74,13 @@ func run() error {
 	log := observability.NewLogger(os.Stdout, cfg.LogLevel, cfg.Env, cfg.Version)
 	slog.SetDefault(log)
 	log.Info("đang khởi động worker", "config", cfg.String())
+	if err := cfg.Mail.ValidateForSending(cfg.IsProduction()); err != nil {
+		return err
+	}
+	sender, err := mailer.New(cfg.Mail)
+	if err != nil {
+		return err
+	}
 
 	// Nhận tín hiệu tắt TRƯỚC khi mở tài nguyên, để Ctrl+C lúc đang kết nối
 	// database cũng thoát được. Giống hệt cmd/api và cmd/outboxrelay.
@@ -92,17 +104,28 @@ func run() error {
 		log:  log,
 	}
 
+	m := &mailWorker{mailing: usecase.NewMailing(txManager, pgstore.NewEmailRepository(txManager), sender), log: log}
+
 	// NewConsumer không kết nối ngay: Consumer.Run vốn đã phải biết dựng lại
 	// phiên sau sự cố, nên broker chưa lên lúc container khởi động chỉ làm
 	// vòng lặp đó chạy thêm vài nhịp — không phải lý do để tiến trình chết.
-	consumer := rabbitmq.NewConsumer(cfg.RabbitMQ, rabbitmq.QueueCatalogIndexer, log)
-
-	if err := consumer.Run(ctx, w.handle); err != nil {
+	//
+	// Hai consumer, một tiến trình. errgroup: một cái trả lỗi thì ctx chung bị
+	// hủy, cái kia dừng êm, và tiến trình thoát để orchestrator khởi động lại
+	// — sống dở với một nửa số consumer là hỏng im lặng.
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		return rabbitmq.NewConsumer(cfg.RabbitMQ, rabbitmq.QueueCatalogIndexer, log).Run(gctx, w.handle)
+	})
+	g.Go(func() error {
+		return rabbitmq.NewConsumer(cfg.RabbitMQ, rabbitmq.QueueMailer, log).Run(gctx, m.handle)
+	})
+	if err := g.Wait(); err != nil {
 		return err
 	}
 
-	// Tới đây là đã hủy consumer, xử lý xong message đang dở và đóng kết nối
-	// broker. Sau dòng này là defer: đóng pool database.
+	// Tới đây là đã hủy cả hai consumer, xử lý xong message đang dở và đóng kết
+	// nối broker. Sau dòng này là defer: đóng pool database.
 	log.Info("đã dừng êm")
 	return nil
 }

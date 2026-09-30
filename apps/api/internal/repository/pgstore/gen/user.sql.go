@@ -68,6 +68,21 @@ func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) error {
 	return err
 }
 
+const markEmailVerified = `-- name: MarkEmailVerified :exec
+UPDATE users SET email_verified_at = COALESCE(email_verified_at, $2), updated_at = $2 WHERE id = $1
+`
+
+type MarkEmailVerifiedParams struct {
+	ID        uuid.UUID
+	UpdatedAt time.Time
+}
+
+// COALESCE: xác minh lại (đặt lại mật khẩu của người đã xác minh) giữ mốc cũ.
+func (q *Queries) MarkEmailVerified(ctx context.Context, arg MarkEmailVerifiedParams) error {
+	_, err := q.db.Exec(ctx, markEmailVerified, arg.ID, arg.UpdatedAt)
+	return err
+}
+
 const markRefreshTokenUsed = `-- name: MarkRefreshTokenUsed :exec
 UPDATE refresh_tokens SET used_at = $2 WHERE id = $1
 `
@@ -121,6 +136,35 @@ func (q *Queries) RevokeRefreshFamily(ctx context.Context, arg RevokeRefreshFami
 	return err
 }
 
+const revokeUserRefreshTokens = `-- name: RevokeUserRefreshTokens :exec
+UPDATE refresh_tokens SET revoked_at = $2 WHERE user_id = $1 AND revoked_at IS NULL
+`
+
+type RevokeUserRefreshTokensParams struct {
+	UserID    uuid.UUID
+	RevokedAt *time.Time
+}
+
+func (q *Queries) RevokeUserRefreshTokens(ctx context.Context, arg RevokeUserRefreshTokensParams) error {
+	_, err := q.db.Exec(ctx, revokeUserRefreshTokens, arg.UserID, arg.RevokedAt)
+	return err
+}
+
+const updatePassword = `-- name: UpdatePassword :exec
+UPDATE users SET password_hash = $2, updated_at = $3 WHERE id = $1
+`
+
+type UpdatePasswordParams struct {
+	ID           uuid.UUID
+	PasswordHash string
+	UpdatedAt    time.Time
+}
+
+func (q *Queries) UpdatePassword(ctx context.Context, arg UpdatePasswordParams) error {
+	_, err := q.db.Exec(ctx, updatePassword, arg.ID, arg.PasswordHash, arg.UpdatedAt)
+	return err
+}
+
 const userByEmail = `-- name: UserByEmail :one
 SELECT id, email, password_hash, full_name, status, email_verified_at, created_at, updated_at
 FROM users WHERE email = $1
@@ -149,6 +193,28 @@ FROM users WHERE id = $1
 
 func (q *Queries) UserByID(ctx context.Context, id uuid.UUID) (User, error) {
 	row := q.db.QueryRow(ctx, userByID, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.FullName,
+		&i.Status,
+		&i.EmailVerifiedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const userByIDForUpdate = `-- name: UserByIDForUpdate :one
+SELECT id, email, password_hash, full_name, status, email_verified_at, created_at, updated_at
+FROM users WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) UserByIDForUpdate(ctx context.Context, id uuid.UUID) (User, error) {
+	row := q.db.QueryRow(ctx, userByIDForUpdate, id)
 	var i User
 	err := row.Scan(
 		&i.ID,

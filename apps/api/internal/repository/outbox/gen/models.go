@@ -59,6 +59,26 @@ type Medium struct {
 	UpdatedAt   time.Time
 }
 
+type OtpCode struct {
+	ID         uuid.UUID
+	UserID     uuid.UUID
+	Purpose    string
+	CodeHash   []byte
+	ExpiresAt  time.Time
+	Attempts   int32
+	ConsumedAt *time.Time
+	CreatedAt  time.Time
+}
+
+type OutboundEmail struct {
+	ID        uuid.UUID
+	ToAddress string
+	Subject   string
+	BodyText  string
+	CreatedAt time.Time
+	SentAt    *time.Time
+}
+
 type Outbox struct {
 	ID            uuid.UUID
 	AggregateType string

@@ -205,6 +205,83 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/email/verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Gửi (lại) mã xác minh email
+         * @description Mã 6 số, sống 10 phút, sai 5 lần là chết; xin mã mới giết mã cũ. Hai lần xin cách nhau tối thiểu 60 giây — sớm hơn thì 429 kèm Retry-After. Đăng ký đã tự gửi một mã.
+         */
+        post: operations["requestEmailVerification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/email/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Xác minh email bằng mã trong thư */
+        post: operations["verifyEmail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/password/forgot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Gửi mã đặt lại mật khẩu
+         * @description LUÔN 202 với email đúng cú pháp — có tài khoản hay không, bị khóa hay không, đang trong 60 giây chờ hay không. Khác đi là tiết lộ email nào đã đăng ký.
+         */
+        post: operations["forgotPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/password/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Đặt mật khẩu mới bằng mã trong thư
+         * @description Thành công thì MỌI phiên đăng nhập (refresh token) của tài khoản bị thu hồi, và email được coi là đã xác minh. Email không tồn tại trả đúng 422 INVALID_OTP như mã sai.
+         */
+        post: operations["resetPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me": {
         parameters: {
             query?: never;
@@ -617,7 +694,7 @@ export interface components {
              * @description Mã ổn định để frontend map sang thông điệp tiếng Việt.
              * @enum {string}
              */
-            code: "INTERNAL_ERROR" | "IMAGE_TOO_LARGE" | "INVALID_CREDENTIALS" | "INVALID_REFRESH_TOKEN" | "ACCOUNT_DISABLED" | "FORBIDDEN" | "RATE_LIMITED" | "INVALID_PAGINATION" | "MALFORMED_REQUEST" | "METHOD_NOT_ALLOWED" | "PAYLOAD_TOO_LARGE" | "REQUEST_CANCELED" | "REQUEST_TIMEOUT" | "ROUTE_NOT_FOUND" | "UNAUTHENTICATED" | "VALIDATION_FAILED" | "INVALID_SKU" | "NAME_REQUIRED" | "NAME_TOO_LONG" | "INVALID_PRICE" | "UNSUPPORTED_CURRENCY" | "INVALID_SLUG" | "NO_IMAGE" | "PRICE_REQUIRED" | "INVALID_STATUS" | "CATEGORY_NOT_FOUND" | "BRAND_NOT_FOUND" | "CATEGORY_NAME_INVALID" | "BRAND_NAME_INVALID" | "CATEGORY_CYCLE" | "VARIANT_REQUIRED" | "INVALID_VARIANT_OPTIONS" | "INVALID_VARIANT_STATUS" | "NO_ACTIVE_VARIANT" | "INVALID_ATTRIBUTE_CODE" | "INVALID_EMAIL" | "WEAK_PASSWORD" | "INVALID_ROLE_CODE" | "ROLE_NAME_INVALID" | "UNKNOWN_PERMISSION" | "SYSTEM_ROLE_IMMUTABLE" | "CANNOT_CHANGE_OWN_ROLES" | "ROLE_NOT_FOUND" | "FULL_NAME_INVALID" | "UNSUPPORTED_IMAGE_TYPE" | "INVALID_IMAGE" | "UPLOAD_NOT_FOUND" | "ATTRIBUTE_NAME_INVALID" | "INVALID_ATTRIBUTE_TYPE" | "INVALID_ATTRIBUTE_OPTIONS" | "ATTRIBUTE_NOT_FOUND" | "DUPLICATE_ATTRIBUTE_ASSIGNMENT" | "ALREADY_PUBLISHED" | "DUPLICATE_SKU" | "DUPLICATE_SLUG" | "DUPLICATE_CATEGORY_SLUG" | "DUPLICATE_BRAND_SLUG" | "CATEGORY_HAS_CHILDREN" | "CATEGORY_HAS_PRODUCTS" | "BRAND_HAS_PRODUCTS" | "DUPLICATE_VARIANT_OPTIONS" | "DUPLICATE_ATTRIBUTE_CODE" | "EMAIL_TAKEN" | "DUPLICATE_ROLE_CODE" | "ROLE_IN_USE" | "ATTRIBUTE_IN_USE" | "PRODUCT_NOT_FOUND" | "UNKNOWN_CATEGORY" | "UNKNOWN_BRAND" | "UNKNOWN_VARIANT" | "UNKNOWN_ATTRIBUTE" | "UNKNOWN_MEDIA" | "UNKNOWN_ROLE" | "UNKNOWN_USER" | "INVALID_SORT" | "PAGE_TOO_DEEP";
+            code: "INTERNAL_ERROR" | "IMAGE_TOO_LARGE" | "INVALID_CREDENTIALS" | "INVALID_REFRESH_TOKEN" | "ACCOUNT_DISABLED" | "INVALID_OTP" | "EMAIL_ALREADY_VERIFIED" | "FORBIDDEN" | "RATE_LIMITED" | "INVALID_PAGINATION" | "MALFORMED_REQUEST" | "METHOD_NOT_ALLOWED" | "PAYLOAD_TOO_LARGE" | "REQUEST_CANCELED" | "REQUEST_TIMEOUT" | "ROUTE_NOT_FOUND" | "UNAUTHENTICATED" | "VALIDATION_FAILED" | "INVALID_SKU" | "NAME_REQUIRED" | "NAME_TOO_LONG" | "INVALID_PRICE" | "UNSUPPORTED_CURRENCY" | "INVALID_SLUG" | "NO_IMAGE" | "PRICE_REQUIRED" | "INVALID_STATUS" | "CATEGORY_NOT_FOUND" | "BRAND_NOT_FOUND" | "CATEGORY_NAME_INVALID" | "BRAND_NAME_INVALID" | "CATEGORY_CYCLE" | "VARIANT_REQUIRED" | "INVALID_VARIANT_OPTIONS" | "INVALID_VARIANT_STATUS" | "NO_ACTIVE_VARIANT" | "INVALID_ATTRIBUTE_CODE" | "INVALID_EMAIL" | "WEAK_PASSWORD" | "INVALID_ROLE_CODE" | "ROLE_NAME_INVALID" | "UNKNOWN_PERMISSION" | "SYSTEM_ROLE_IMMUTABLE" | "CANNOT_CHANGE_OWN_ROLES" | "ROLE_NOT_FOUND" | "FULL_NAME_INVALID" | "UNSUPPORTED_IMAGE_TYPE" | "INVALID_IMAGE" | "UPLOAD_NOT_FOUND" | "ATTRIBUTE_NAME_INVALID" | "INVALID_ATTRIBUTE_TYPE" | "INVALID_ATTRIBUTE_OPTIONS" | "ATTRIBUTE_NOT_FOUND" | "DUPLICATE_ATTRIBUTE_ASSIGNMENT" | "ALREADY_PUBLISHED" | "DUPLICATE_SKU" | "DUPLICATE_SLUG" | "DUPLICATE_CATEGORY_SLUG" | "DUPLICATE_BRAND_SLUG" | "CATEGORY_HAS_CHILDREN" | "CATEGORY_HAS_PRODUCTS" | "BRAND_HAS_PRODUCTS" | "DUPLICATE_VARIANT_OPTIONS" | "DUPLICATE_ATTRIBUTE_CODE" | "EMAIL_TAKEN" | "DUPLICATE_ROLE_CODE" | "ROLE_IN_USE" | "ATTRIBUTE_IN_USE" | "PRODUCT_NOT_FOUND" | "UNKNOWN_CATEGORY" | "UNKNOWN_BRAND" | "UNKNOWN_VARIANT" | "UNKNOWN_ATTRIBUTE" | "UNKNOWN_MEDIA" | "UNKNOWN_ROLE" | "UNKNOWN_USER" | "INVALID_SORT" | "PAGE_TOO_DEEP";
             /**
              * @description Luôn có mặt trong response (không bao giờ bị lược bỏ), nhưng có
              *     thể là chuỗi rỗng nếu middleware RequestID chưa gán được giá trị.
@@ -1338,6 +1415,125 @@ export interface operations {
             };
             400: components["responses"]["Problem"];
             413: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    requestEmailVerification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Đã xếp thư vào hàng đợi */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    verifyEmail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    code: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Đã xác minh */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    forgotPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    email: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Nếu email có tài khoản thì thư đang trên đường tới */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    resetPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    email: string;
+                    code: string;
+                    new_password: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Đã đổi mật khẩu */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
             500: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };

@@ -213,6 +213,12 @@ type UserRepository interface {
 	// ByEmail / ByID trả (nil, nil) khi không có.
 	ByEmail(ctx context.Context, email string) (*domain.User, error)
 	ByID(ctx context.Context, id uuid.UUID) (*domain.User, error)
+	// ByIDForUpdate khóa dòng người dùng — xếp hàng các thao tác phát mã OTP
+	// của cùng một người, để hai request song song không cùng lọt qua 60 giây
+	// chờ. (nil, nil) khi không có.
+	ByIDForUpdate(ctx context.Context, id uuid.UUID) (*domain.User, error)
+	MarkEmailVerified(ctx context.Context, id uuid.UUID, at time.Time) error
+	UpdatePassword(ctx context.Context, id uuid.UUID, hash string, at time.Time) error
 }
 
 // RefreshToken là một dòng refresh_tokens. Hash là SHA-256 của token — token
@@ -234,6 +240,35 @@ type RefreshTokenRepository interface {
 	ByHashForUpdate(ctx context.Context, hash []byte) (*RefreshToken, error)
 	MarkUsed(ctx context.Context, id uuid.UUID, at time.Time) error
 	RevokeFamily(ctx context.Context, familyID uuid.UUID, at time.Time) error
+	// RevokeAllForUser cắt MỌI phiên của người dùng — sau khi đặt lại mật khẩu.
+	RevokeAllForUser(ctx context.Context, userID uuid.UUID, at time.Time) error
+}
+
+// ---- OTP qua email (P2.3) ----
+
+type OTPRepository interface {
+	// Latest trả mã phát GẦN NHẤT cho mục đích này (kể cả mã đã chết), khóa
+	// dòng; (nil, nil) khi chưa phát lần nào. Chỉ mã mới nhất có thể còn sống:
+	// phát mã mới là giết mọi mã cũ (KillActive).
+	Latest(ctx context.Context, userID uuid.UUID, purpose domain.OTPPurpose) (*domain.OTP, error)
+	KillActive(ctx context.Context, userID uuid.UUID, purpose domain.OTPPurpose, at time.Time) error
+	Insert(ctx context.Context, o *domain.OTP) error
+	RecordFailure(ctx context.Context, id uuid.UUID) error
+	Consume(ctx context.Context, id uuid.UUID, at time.Time) error
+}
+
+type EmailRepository interface {
+	Insert(ctx context.Context, e *domain.OutboundEmail) error
+	// ByIDForUpdate khóa thư — hai worker nhận bản trùng của cùng sự kiện thì
+	// cái sau chờ, rồi thấy sent_at và bỏ qua. (nil, nil) khi không có.
+	ByIDForUpdate(ctx context.Context, id uuid.UUID) (*domain.OutboundEmail, error)
+	// MarkSent đánh dấu đã gửi VÀ xóa nội dung — nội dung có mã OTP.
+	MarkSent(ctx context.Context, id uuid.UUID, at time.Time) error
+}
+
+// MailSender gửi một thư chữ thuần. Cài đặt: pkg/mailer (SMTP).
+type MailSender interface {
+	Send(ctx context.Context, to, subject, body string) error
 }
 
 type PasswordHasher interface {

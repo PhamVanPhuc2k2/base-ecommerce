@@ -15,7 +15,7 @@
 | **P0.3** | Outbox + relay + worker | ✅ xong, đã merge |
 | **P0.4** | Storefront Next.js | ✅ xong, đã merge |
 | **P1** | Catalog & PIM | ✅ **P1.1 → P1.5 xong** — xem [tổng quan](superpowers/specs/2026-09-29-p1-tong-quan.md) |
-| **P2** | Identity | 🟡 **P2.1–P2.2 xong** (tài khoản + phiên, RBAC) — còn P2.3 OTP email, P2.4 storefront, xem [tổng quan](superpowers/specs/2026-09-30-p2-tong-quan.md) |
+| **P2** | Identity | 🟡 **P2.1–P2.3 xong** (tài khoản + phiên, RBAC, OTP email) — còn P2.4 storefront + sổ địa chỉ, xem [tổng quan](superpowers/specs/2026-09-30-p2-tong-quan.md) |
 
 ---
 
@@ -228,6 +228,41 @@ Ngoài ra: `compose.prod.yml` thêm `web`, và mở `worker` + `outboxrelay` (v�
 comment dù P0.3 đã xong), kèm `RABBITMQ_URL` còn thiếu. Biến chung tách thành
 anchor `x-go-env` vì `<<` của YAML chỉ gộp nông. Thiếu `SITE_URL` thì compose từ
 chối chạy.
+
+---
+
+## P2.3 — OTP qua email ✅
+
+Mã 6 số cho **xác minh email** và **quên / đặt lại mật khẩu**. Thư đi qua outbox
+→ RabbitMQ (queue `mailer`, bind `email.*`) → worker → SMTP; dev dùng Mailpit
+(`http://localhost:8025`). Mã KHÔNG nằm trong payload outbox — thư đã soạn nằm
+ở `outbound_emails`, sự kiện chỉ mang id, worker gửi xong thì xóa nội dung.
+Chi tiết: [đặc tả](superpowers/specs/2026-09-30-p2-3-otp-email.md).
+
+| # | Kiểm | Kết quả |
+|---|---|---|
+| 1 | `task check` | 8/8 bước qua |
+| 2 | Đăng ký | thư tới Mailpit sau 0,7 s; mã không nằm ở tiêu đề; `body_text` rỗng sau khi gửi |
+| 3 | Mã đúng, rồi dùng lại | 200 `email_verified: true`; 409 `EMAIL_ALREADY_VERIFIED` |
+| 4 | Xin lại ngay / sau 60 giây | 429 + `Retry-After: 60` / 202; mã cũ 422, mã mới 200 |
+| 5 | 5 lần sai rồi mã ĐÚNG | lần 6 vẫn 422 `INVALID_OTP`; `attempts = 5` |
+| 6 | Mã đúng nhưng hết hạn | 422 `INVALID_OTP` |
+| 7 | Quên mật khẩu: có / không có / đang chờ | cả ba 202; chỉ email có mới nhận đúng một thư |
+| 8 | Đặt lại mật khẩu | 204; refresh cũ 401; mật khẩu cũ 401, mới 200; dùng lại mã / email không tồn tại cùng 422 `INVALID_OTP` |
+| 9 | Mã xác minh email đem đặt lại mật khẩu | 422 — mục đích nằm trong HMAC |
+| 10 | Mailpit tắt khi đăng ký | đăng ký 201; bật lại → thư tới sau 34 s (queue retry 30 s) |
+| 11 | Publish tay bản trùng `email.queued` | không có thư thứ hai (khóa là `sent_at`) |
+| — | Log api/relay/worker | 0/8 mã xuất hiện |
+| — | Worker `APP_ENV=production` thiếu `SMTP_HOST`/`MAIL_FROM` | từ chối khởi động |
+
+**Hai chỗ rò thời gian đo ra được và đã sửa** (thời gian phía server, n=15, trung vị):
+
+| Endpoint | Trước | Sau |
+|---|---|---|
+| `forgot`: không có / có | 0,8 ms / **21,6 ms** — transaction phát mã chờ fsync | 0,5 / 0,5 ms — trả 202 rồi mới phát mã ở goroutine nền |
+| `reset`: không có / có, sai mã | 21,7 ms / **45,1 ms** — commit lần sai chờ fsync | 20,9 / 21,9 ms — `SET LOCAL synchronous_commit TO OFF` cho transaction ghi lần sai |
+
+Còn ~1 ms (ba câu truy vấn) ở `reset`, dưới mức dao động mạng và bị rate limit 5/phút.
 
 ---
 
@@ -503,8 +538,9 @@ chặn SELECT lẫn khóa FK khi ghi sản phẩm.
 | **Không xóa được variant** | Có chủ đích: đơn hàng (P4) sẽ trỏ vào variant. Ngừng bán là `inactive` |
 | **Số đếm lệch tối đa 60 giây** | Cache số đếm không vô hiệu hóa khi ghi — trang cuối có thể thiếu/thừa sản phẩm vừa đăng trong một phút (P1.1) |
 | **Chưa phát sự kiện `category.*`/`brand.*`** | Chưa consumer nào cần; phát mà thiếu binding thì relay thử lại mãi. P7 thêm cả hai cùng lúc |
-| **Đăng ký lộ email đã tồn tại** | 409 `EMAIL_TAKEN` — giấu được cần luồng xác nhận qua thư (P2.3). Rate limit làm việc dò hàng loạt đắt (P2.1) |
+| **Đăng ký lộ email đã tồn tại** | 409 `EMAIL_TAKEN`. Quên / đặt lại mật khẩu đã kín (P2.3), nhưng đăng ký thì chưa: giấu được cần đăng ký trả 202 rồi gửi thư "bạn đã có tài khoản" — đổi hợp đồng API, để lúc làm màn hình đăng ký (P2.4) cân nhắc. Rate limit làm việc dò hàng loạt đắt (P2.1) |
 | **Đăng xuất không giết access token đang có** | Sống tối đa 15 phút — cái giá của JWT không tra DB mỗi request (P2.1) |
+| **Quên mật khẩu phát mã ở goroutine nền** | Tiến trình tắt đúng lúc đó thì mã không được phát, người dùng bấm gửi lại. Cái giá của việc không để thời gian phản hồi lộ email (P2.3) |
 | **Hai tab refresh cùng lúc = bị đăng xuất** | Không phân biệt được với token bị trộm. Storefront refresh ở server một chỗ nên hiếm (P2.1) |
 | **Chưa có job dọn refresh token hết hạn** | Bảng tăng dần; có index `expires_at` sẵn cho job dọn |
 | **Tách hai instance Redis** | Hoãn tới P4 khi có giỏ hàng — P0 chỉ dùng vai trò cache |

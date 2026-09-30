@@ -46,6 +46,7 @@ type Auth struct {
 	hasher     PasswordHasher
 	issuer     TokenIssuer
 	limiter    RateLimiter
+	verify     *Verification
 	refreshTTL time.Duration
 	// dummyHash: băm sẵn một mật khẩu giả lúc khởi động. Đăng nhập với email
 	// KHÔNG tồn tại vẫn chạy argon2 trên nó — không thì phản hồi nhanh hơn
@@ -54,18 +55,22 @@ type Auth struct {
 }
 
 func NewAuth(tx TxManager, users UserRepository, tokens RefreshTokenRepository,
-	hasher PasswordHasher, issuer TokenIssuer, limiter RateLimiter, refreshTTL time.Duration) (*Auth, error) {
+	hasher PasswordHasher, issuer TokenIssuer, limiter RateLimiter, verify *Verification, refreshTTL time.Duration) (*Auth, error) {
 	dummy, err := hasher.Hash("mat-khau-gia-de-can-bang-thoi-gian")
 	if err != nil {
 		return nil, err
 	}
 	return &Auth{tx: tx, users: users, tokens: tokens, hasher: hasher, issuer: issuer,
-		limiter: limiter, refreshTTL: refreshTTL, dummyHash: dummy}, nil
+		limiter: limiter, verify: verify, refreshTTL: refreshTTL, dummyHash: dummy}, nil
 }
 
 func (a *Auth) limit(ctx context.Context, keys ...string) error {
+	return limitAll(ctx, a.limiter, keys...)
+}
+
+func limitAll(ctx context.Context, limiter RateLimiter, keys ...string) error {
 	for _, k := range keys {
-		if ok, wait := a.limiter.Allow(ctx, k, authLimit, authWindow); !ok {
+		if ok, wait := limiter.Allow(ctx, k, authLimit, authWindow); !ok {
 			return &RateLimitError{RetryAfter: wait}
 		}
 	}
@@ -103,6 +108,11 @@ func (a *Auth) Register(ctx context.Context, in RegisterInput) (*Session, error)
 	var s *Session
 	if err := a.tx.Run(ctx, func(ctx context.Context) error {
 		if err := a.users.Insert(ctx, u); err != nil {
+			return err
+		}
+		// Thư xác minh xếp hàng CÙNG transaction: đăng ký hỏng thì không có
+		// thư, thư gửi hỏng thì đăng ký vẫn xong (worker gửi bất đồng bộ).
+		if err := a.verify.issue(ctx, u, domain.OTPVerifyEmail); err != nil {
 			return err
 		}
 		s, err = a.startSession(ctx, u, uuid.Must(uuid.NewV7()))

@@ -43,8 +43,13 @@ func newHandler(cfg *config.Config, db *postgres.Manager, cache *platformredis.C
 	rules := usecase.NewProductRules(schemas, mediaRepo)
 
 	issuer := authtoken.NewIssuer(cfg.Auth.JWTSecret, cfg.Auth.AccessTTL)
-	auth, err := usecase.NewAuth(db, pgstore.NewUserRepository(db), pgstore.NewRefreshTokenRepository(db),
-		password.NewHasher(), issuer, platformredis.NewRateLimiter(rdb, log), cfg.Auth.RefreshTTL)
+	userRepo := pgstore.NewUserRepository(db)
+	tokenRepo := pgstore.NewRefreshTokenRepository(db)
+	hasher := password.NewHasher()
+	limiter := platformredis.NewRateLimiter(rdb, log)
+	verification := usecase.NewVerification(db, userRepo, tokenRepo, pgstore.NewOTPRepository(db),
+		pgstore.NewEmailRepository(db), events, hasher, limiter, []byte(cfg.Auth.JWTSecret))
+	auth, err := usecase.NewAuth(db, userRepo, tokenRepo, hasher, issuer, limiter, verification, cfg.Auth.RefreshTTL)
 	if err != nil {
 		return nil, err
 	}
@@ -74,6 +79,7 @@ func newHandler(cfg *config.Config, db *postgres.Manager, cache *platformredis.C
 		UpdateBrand:    usecase.NewUpdateBrand(db, brandRepo, c),
 		DeleteBrand:    usecase.NewDeleteBrand(db, brandRepo, c),
 		Auth:           auth,
+		Verification:   verification,
 		Authorizer:     usecase.NewAuthorizer(roleRepo, c),
 		RoleAdmin:      usecase.NewRoleAdmin(db, roleRepo, c),
 	}), nil
