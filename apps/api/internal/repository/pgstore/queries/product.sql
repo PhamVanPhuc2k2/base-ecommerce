@@ -1,12 +1,12 @@
 -- name: UpsertProduct :exec
 INSERT INTO products (
-    id, sku, slug, name, short_description, category_id, brand_id,
+    id, slug, name, short_description, category_id, brand_id,
     price, currency, status, attributes, images, created_at, updated_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
 )
--- sku KHÔNG nằm trong DO UPDATE SET: đó là chủ đích, chốt thêm một lần nữa ở
--- tầng lưu trữ cho quy tắc "SKU không đổi được" của domain.
+-- SKU không còn ở đây từ P1.2 — nó thuộc product_variants (variant.sql).
+-- price là giá "từ", domain tính lại sau mọi thay đổi variant.
 --
 -- ⚠️ Cột nào vắng mặt ở đây thì Save trả nil mà thay đổi BIẾN MẤT. category_id
 -- và brand_id từng vắng mặt tới P1.1 — thêm trường sửa được vào Product.Update

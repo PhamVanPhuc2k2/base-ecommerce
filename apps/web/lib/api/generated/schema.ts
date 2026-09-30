@@ -199,6 +199,46 @@ export interface paths {
         patch: operations["updateProduct"];
         trace?: never;
     };
+    "/admin/products/{id}/variants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Thêm phiên bản cho sản phẩm
+         * @description Trả về CẢ sản phẩm — giá "từ" của sản phẩm có thể đổi theo.
+         */
+        post: operations["addVariant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/products/{id}/variants/{variantId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Sửa phiên bản (giá, tùy chọn, trạng thái, thứ tự)
+         * @description Không có DELETE: đơn hàng sẽ trỏ vào phiên bản, nên ngừng bán là `status: inactive`. Trả về CẢ sản phẩm.
+         */
+        patch: operations["updateVariant"];
+        trace?: never;
+    };
     "/admin/products/{id}/publish": {
         parameters: {
             query?: never;
@@ -228,7 +268,7 @@ export interface components {
              * @description Mã ổn định để frontend map sang thông điệp tiếng Việt.
              * @enum {string}
              */
-            code: "INTERNAL_ERROR" | "INVALID_PAGINATION" | "MALFORMED_REQUEST" | "METHOD_NOT_ALLOWED" | "PAYLOAD_TOO_LARGE" | "REQUEST_CANCELED" | "REQUEST_TIMEOUT" | "ROUTE_NOT_FOUND" | "UNAUTHENTICATED" | "VALIDATION_FAILED" | "INVALID_SKU" | "NAME_REQUIRED" | "NAME_TOO_LONG" | "INVALID_PRICE" | "UNSUPPORTED_CURRENCY" | "INVALID_SLUG" | "NO_IMAGE" | "PRICE_REQUIRED" | "INVALID_STATUS" | "CATEGORY_NOT_FOUND" | "BRAND_NOT_FOUND" | "CATEGORY_NAME_INVALID" | "BRAND_NAME_INVALID" | "CATEGORY_CYCLE" | "ALREADY_PUBLISHED" | "DUPLICATE_SKU" | "DUPLICATE_SLUG" | "DUPLICATE_CATEGORY_SLUG" | "DUPLICATE_BRAND_SLUG" | "CATEGORY_HAS_CHILDREN" | "CATEGORY_HAS_PRODUCTS" | "BRAND_HAS_PRODUCTS" | "PRODUCT_NOT_FOUND" | "UNKNOWN_CATEGORY" | "UNKNOWN_BRAND" | "INVALID_SORT" | "PAGE_TOO_DEEP";
+            code: "INTERNAL_ERROR" | "INVALID_PAGINATION" | "MALFORMED_REQUEST" | "METHOD_NOT_ALLOWED" | "PAYLOAD_TOO_LARGE" | "REQUEST_CANCELED" | "REQUEST_TIMEOUT" | "ROUTE_NOT_FOUND" | "UNAUTHENTICATED" | "VALIDATION_FAILED" | "INVALID_SKU" | "NAME_REQUIRED" | "NAME_TOO_LONG" | "INVALID_PRICE" | "UNSUPPORTED_CURRENCY" | "INVALID_SLUG" | "NO_IMAGE" | "PRICE_REQUIRED" | "INVALID_STATUS" | "CATEGORY_NOT_FOUND" | "BRAND_NOT_FOUND" | "CATEGORY_NAME_INVALID" | "BRAND_NAME_INVALID" | "CATEGORY_CYCLE" | "VARIANT_REQUIRED" | "INVALID_VARIANT_OPTIONS" | "INVALID_VARIANT_STATUS" | "NO_ACTIVE_VARIANT" | "ALREADY_PUBLISHED" | "DUPLICATE_SKU" | "DUPLICATE_SLUG" | "DUPLICATE_CATEGORY_SLUG" | "DUPLICATE_BRAND_SLUG" | "CATEGORY_HAS_CHILDREN" | "CATEGORY_HAS_PRODUCTS" | "BRAND_HAS_PRODUCTS" | "DUPLICATE_VARIANT_OPTIONS" | "PRODUCT_NOT_FOUND" | "UNKNOWN_CATEGORY" | "UNKNOWN_BRAND" | "UNKNOWN_VARIANT" | "INVALID_SORT" | "PAGE_TOO_DEEP";
             /**
              * @description Luôn có mặt trong response (không bao giờ bị lược bỏ), nhưng có
              *     thể là chuỗi rỗng nếu middleware RequestID chưa gán được giá trị.
@@ -243,7 +283,6 @@ export interface components {
         Product: {
             /** Format: uuid */
             id: string;
-            sku: string;
             slug: string;
             name: string;
             short_description: string;
@@ -252,7 +291,9 @@ export interface components {
             /** Format: uuid */
             brand_id: string;
             /**
-             * @description Chuỗi thập phân. Số 0 thừa ở cuối BỊ CẮT ("25990000.50" đọc lại thành "25990000.5"), nên đừng so sánh bằng chuỗi — hãy parse bằng thư viện decimal. KHÔNG BAO GIỜ dùng number:
+             * @description GIÁ "TỪ": giá thấp nhất trong các phiên bản đang bán (từ 0.4.0; trước
+             *     đó là giá của sản phẩm duy nhất). Lọc `price_min`/`price_max` và sắp
+             *     xếp theo giá đều dùng con số này. Chuỗi thập phân. Số 0 thừa ở cuối BỊ CẮT ("25990000.50" đọc lại thành "25990000.5"), nên đừng so sánh bằng chuỗi — hãy parse bằng thư viện decimal. KHÔNG BAO GIỜ dùng number:
              *     JSON number qua JS mất chính xác với NUMERIC(15,2) lớn (IEEE 754
              *     double chỉ biểu diễn chính xác số nguyên tới 2^53), nên giá đọc lại
              *     có thể lệch so với giá đã ghi. Server luôn trả amount đã được
@@ -271,6 +312,8 @@ export interface components {
                 [key: string]: string;
             };
             images: string[];
+            /** @description Sắp theo `position` rồi `id`. Endpoint công khai chỉ trả phiên bản `active`; response của các lệnh quản trị trả đủ, kể cả `inactive`. */
+            variants: components["schemas"]["Variant"][];
             /**
              * Format: date-time
              * @description RFC 3339, luôn ở múi giờ UTC (hậu tố "Z").
@@ -302,6 +345,51 @@ export interface components {
             name: string;
             position: number;
             children: components["schemas"]["Category"][];
+        };
+        Variant: {
+            /** Format: uuid */
+            id: string;
+            /** @description Duy nhất toàn hệ thống, không đổi được. */
+            sku: string;
+            /** @description Chuỗi thập phân VND — xem Product.price. */
+            price: string;
+            /** @example VND */
+            currency: string;
+            /** @description Tùy chọn phân biệt các phiên bản, ví dụ {"ram": "16GB", "màu": "Đen"}. */
+            options: {
+                [key: string]: string;
+            };
+            /** @enum {string} */
+            status: "active" | "inactive";
+            position: number;
+        };
+        CreateVariantRequest: {
+            sku: string;
+            /** @description Chuỗi thập phân VND. Nháp chưa có giá thì gửi "0". */
+            price: string;
+            /** @default VND */
+            currency: string;
+            /** @description Tối đa 10 cặp. Không được trùng options của phiên bản khác cùng sản phẩm (409 DUPLICATE_VARIANT_OPTIONS). */
+            options?: {
+                [key: string]: string;
+            };
+            /** @default 0 */
+            position: number;
+        };
+        /** @description Sửa từng phần, trường vắng mặt giữ nguyên. Không đổi được `sku`. Với sản phẩm đang live: không thể tắt phiên bản đang bán cuối cùng (422 NO_ACTIVE_VARIANT) hay để một phiên bản đang bán có giá 0 (422 PRICE_REQUIRED). */
+        UpdateVariantRequest: {
+            price?: string;
+            /**
+             * @description Chỉ có ý nghĩa khi gửi kèm `price`.
+             * @default VND
+             */
+            currency: string;
+            options?: {
+                [key: string]: string;
+            };
+            /** @enum {string} */
+            status?: "active" | "inactive";
+            position?: number;
         };
         Brand: {
             /** Format: uuid */
@@ -356,17 +444,14 @@ export interface components {
             slug?: string;
         };
         CreateProductRequest: {
-            sku: string;
             name: string;
             short_description?: string;
             /** Format: uuid */
             category_id: string;
             /** Format: uuid */
             brand_id: string;
-            /** @description Chuỗi thập phân VND, ví dụ "25990000". BẮT BUỘC. Muốn tạo nháp chưa có giá thì gửi "0" — chuỗi rỗng hoặc thiếu hẳn field đều trả 422 INVALID_PRICE. */
-            price: string;
-            /** @default VND */
-            currency: string;
+            /** @description Ít nhất một phiên bản (422 VARIANT_REQUIRED). Từ 0.4.0 `sku` và `price` nằm ở đây, không còn ở cấp sản phẩm. */
+            variants: components["schemas"]["CreateVariantRequest"][];
             attributes?: {
                 [key: string]: string;
             };
@@ -375,19 +460,14 @@ export interface components {
         /**
          * @description Sửa TỪNG PHẦN: mọi trường đều không bắt buộc, và trường vắng mặt GIỮ NGUYÊN giá trị đang có. Gửi `{}` là lệnh không đổi gì.
          *
-         *     Ràng buộc của sản phẩm đang "live" được kiểm trên trạng thái SAU khi sửa: không thể PATCH để nó còn 0 ảnh (422 NO_IMAGE) hay giá 0 (422 PRICE_REQUIRED).
+         *     Ràng buộc của sản phẩm đang "live" được kiểm trên trạng thái SAU khi sửa: không thể PATCH để nó còn 0 ảnh (422 NO_IMAGE).
+         *
+         *     Từ 0.4.0 không còn `price`/`currency`: giá thuộc phiên bản — sửa qua PATCH /admin/products/{id}/variants/{variantId}. Gửi `price` ở đây trả 400 MALFORMED_REQUEST.
          */
         UpdateProductRequest: {
             /** @description Đổi tên sẽ sinh lại slug; trùng slug sản phẩm khác trả 409 DUPLICATE_SLUG. */
             name?: string;
             short_description?: string;
-            /** @description Chuỗi thập phân VND. Sản phẩm đang "live" bắt buộc giá > 0. */
-            price?: string;
-            /**
-             * @description Chỉ có ý nghĩa khi gửi kèm `price`; gửi một mình thì bị bỏ qua.
-             * @default VND
-             */
-            currency: string;
             attributes?: {
                 [key: string]: string;
             };
@@ -758,6 +838,75 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["UpdateProductRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Product"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    addVariant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateVariantRequest"];
+            };
+        };
+        responses: {
+            /** @description Đã thêm */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Product"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateVariant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                variantId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateVariantRequest"];
             };
         };
         responses: {

@@ -14,7 +14,7 @@ import (
 )
 
 const productByID = `-- name: ProductByID :one
-SELECT products.id, products.sku, products.slug, products.name, products.short_description, products.category_id, products.brand_id, products.price, products.currency, products.status, products.attributes, products.images, products.created_at, products.updated_at, products.deleted_at
+SELECT products.id, products.slug, products.name, products.short_description, products.category_id, products.brand_id, products.price, products.currency, products.status, products.attributes, products.images, products.created_at, products.updated_at, products.deleted_at
 FROM products
 WHERE id = $1 AND deleted_at IS NULL
 FOR UPDATE
@@ -33,7 +33,6 @@ func (q *Queries) ProductByID(ctx context.Context, id uuid.UUID) (ProductByIDRow
 	var i ProductByIDRow
 	err := row.Scan(
 		&i.Product.ID,
-		&i.Product.Sku,
 		&i.Product.Slug,
 		&i.Product.Name,
 		&i.Product.ShortDescription,
@@ -52,7 +51,7 @@ func (q *Queries) ProductByID(ctx context.Context, id uuid.UUID) (ProductByIDRow
 }
 
 const productBySlug = `-- name: ProductBySlug :one
-SELECT products.id, products.sku, products.slug, products.name, products.short_description, products.category_id, products.brand_id, products.price, products.currency, products.status, products.attributes, products.images, products.created_at, products.updated_at, products.deleted_at
+SELECT products.id, products.slug, products.name, products.short_description, products.category_id, products.brand_id, products.price, products.currency, products.status, products.attributes, products.images, products.created_at, products.updated_at, products.deleted_at
 FROM products
 WHERE slug = $1 AND deleted_at IS NULL AND status = 'live'
 `
@@ -66,7 +65,6 @@ func (q *Queries) ProductBySlug(ctx context.Context, slug string) (ProductBySlug
 	var i ProductBySlugRow
 	err := row.Scan(
 		&i.Product.ID,
-		&i.Product.Sku,
 		&i.Product.Slug,
 		&i.Product.Name,
 		&i.Product.ShortDescription,
@@ -86,10 +84,10 @@ func (q *Queries) ProductBySlug(ctx context.Context, slug string) (ProductBySlug
 
 const upsertProduct = `-- name: UpsertProduct :exec
 INSERT INTO products (
-    id, sku, slug, name, short_description, category_id, brand_id,
+    id, slug, name, short_description, category_id, brand_id,
     price, currency, status, attributes, images, created_at, updated_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
 )
 ON CONFLICT (id) DO UPDATE SET
     slug              = EXCLUDED.slug,
@@ -107,7 +105,6 @@ ON CONFLICT (id) DO UPDATE SET
 
 type UpsertProductParams struct {
 	ID               uuid.UUID
-	Sku              string
 	Slug             string
 	Name             string
 	ShortDescription string
@@ -122,8 +119,8 @@ type UpsertProductParams struct {
 	UpdatedAt        time.Time
 }
 
-// sku KHÔNG nằm trong DO UPDATE SET: đó là chủ đích, chốt thêm một lần nữa ở
-// tầng lưu trữ cho quy tắc "SKU không đổi được" của domain.
+// SKU không còn ở đây từ P1.2 — nó thuộc product_variants (variant.sql).
+// price là giá "từ", domain tính lại sau mọi thay đổi variant.
 //
 // ⚠️ Cột nào vắng mặt ở đây thì Save trả nil mà thay đổi BIẾN MẤT. category_id
 // và brand_id từng vắng mặt tới P1.1 — thêm trường sửa được vào Product.Update
@@ -131,7 +128,6 @@ type UpsertProductParams struct {
 func (q *Queries) UpsertProduct(ctx context.Context, arg UpsertProductParams) error {
 	_, err := q.db.Exec(ctx, upsertProduct,
 		arg.ID,
-		arg.Sku,
 		arg.Slug,
 		arg.Name,
 		arg.ShortDescription,

@@ -13,24 +13,57 @@ import (
 // đồng OpenAPI ổn định độc lập với thay đổi bên trong.
 type productDTO struct {
 	ID               uuid.UUID         `json:"id"`
-	SKU              string            `json:"sku"`
 	Slug             string            `json:"slug"`
 	Name             string            `json:"name"`
 	ShortDescription string            `json:"short_description"`
 	CategoryID       uuid.UUID         `json:"category_id"`
 	BrandID          uuid.UUID         `json:"brand_id"`
-	Price            string            `json:"price"` // chuỗi: number của JS mất chính xác với số lớn
+	Price            string            `json:"price"` // giá "từ"; chuỗi: number của JS mất chính xác với số lớn
 	Currency         string            `json:"currency"`
 	Status           string            `json:"status"`
 	Attributes       map[string]string `json:"attributes"`
 	Images           []string          `json:"images"`
+	Variants         []variantDTO      `json:"variants"`
 	CreatedAt        time.Time         `json:"created_at"`
 	UpdatedAt        time.Time         `json:"updated_at"`
 }
 
-func toProductDTO(p *domain.Product) productDTO {
+type variantDTO struct {
+	ID       uuid.UUID         `json:"id"`
+	SKU      string            `json:"sku"`
+	Price    string            `json:"price"`
+	Currency string            `json:"currency"`
+	Options  map[string]string `json:"options"`
+	Status   string            `json:"status"`
+	Position int               `json:"position"`
+}
+
+// variantScope quyết định variant nào lọt vào response.
+type variantScope int
+
+const (
+	// publicVariants: chỉ variant active — khách không được thấy phiên bản đã
+	// ngừng bán, càng không được đặt mua nó.
+	publicVariants variantScope = iota
+	// adminVariants: đủ cả variant inactive, để quản trị thấy và bật lại được.
+	adminVariants
+)
+
+func toProductDTO(p *domain.Product, scope variantScope) productDTO {
+	vs := p.Variants
+	if scope == publicVariants {
+		vs = p.ActiveVariants()
+	}
+	variants := make([]variantDTO, 0, len(vs))
+	for _, v := range vs {
+		variants = append(variants, variantDTO{
+			ID: v.ID, SKU: v.SKU, Price: v.Price.String(), Currency: v.Price.Currency(),
+			Options: v.Options, Status: string(v.Status), Position: v.Position,
+		})
+	}
 	return productDTO{
-		ID: p.ID, SKU: p.SKU, Slug: p.Slug, Name: p.Name,
+		ID: p.ID, Slug: p.Slug, Name: p.Name,
+		Variants:         variants,
 		ShortDescription: p.ShortDescription,
 		CategoryID:       p.CategoryID, BrandID: p.BrandID,
 		Price:      p.Price.String(),
@@ -78,15 +111,39 @@ type listResponse struct {
 }
 
 type createProductRequest struct {
-	SKU              string            `json:"sku"`
-	Name             string            `json:"name"`
-	ShortDescription string            `json:"short_description"`
-	CategoryID       uuid.UUID         `json:"category_id"`
-	BrandID          uuid.UUID         `json:"brand_id"`
-	Price            string            `json:"price"`
-	Currency         string            `json:"currency"`
-	Attributes       map[string]string `json:"attributes"`
-	Images           []string          `json:"images"`
+	Name             string                 `json:"name"`
+	ShortDescription string                 `json:"short_description"`
+	CategoryID       uuid.UUID              `json:"category_id"`
+	BrandID          uuid.UUID              `json:"brand_id"`
+	Variants         []createVariantRequest `json:"variants"`
+	Attributes       map[string]string      `json:"attributes"`
+	Images           []string               `json:"images"`
+}
+
+type createVariantRequest struct {
+	SKU      string            `json:"sku"`
+	Price    string            `json:"price"`
+	Currency string            `json:"currency"`
+	Options  map[string]string `json:"options"`
+	Position int               `json:"position"`
+}
+
+func (r createVariantRequest) toInput() (domain.VariantInput, error) {
+	price, err := domain.NewMoney(r.Price, r.Currency)
+	if err != nil {
+		return domain.VariantInput{}, err
+	}
+	return domain.VariantInput{SKU: r.SKU, Price: price, Options: r.Options, Position: r.Position}, nil
+}
+
+// updateVariantRequest: PATCH từng phần, con trỏ cho mọi trường vô hướng — cùng
+// lý do với updateProductRequest. Không có sku: SKU bất biến.
+type updateVariantRequest struct {
+	Price    *string           `json:"price"`
+	Currency *string           `json:"currency"`
+	Options  map[string]string `json:"options"`
+	Status   *string           `json:"status"`
+	Position *int              `json:"position"`
 }
 
 // updateProductRequest dùng con trỏ cho mọi trường vô hướng vì đây là PATCH:
@@ -96,12 +153,12 @@ type createProductRequest struct {
 //
 // Attributes và Images để nguyên kiểu map/slice vì chúng đã có nil sẵn.
 //
-// Currency chỉ có ý nghĩa khi gửi kèm Price; gửi một mình thì bị bỏ qua.
+// Không có price/currency: giá thuộc variant từ P1.2. Gửi `price` ở đây trả
+// 400 MALFORMED_REQUEST (DisallowUnknownFields) — cố ý báo to, vì client cũ
+// tưởng mình đang đổi giá mà thật ra không có gì đổi cả.
 type updateProductRequest struct {
 	Name             *string           `json:"name"`
 	ShortDescription *string           `json:"short_description"`
-	Price            *string           `json:"price"`
-	Currency         *string           `json:"currency"`
 	Attributes       map[string]string `json:"attributes"`
 	Images           []string          `json:"images"`
 	// Con trỏ: vắng mặt = giữ nguyên. Không có "null = xóa" — sản phẩm luôn

@@ -50,7 +50,6 @@ type ProcessedEvent struct {
 
 type Product struct {
 	ID               uuid.UUID
-	Sku              string
 	Slug             string
 	Name             string
 	ShortDescription string
@@ -64,4 +63,17 @@ type Product struct {
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 	DeletedAt        *time.Time
+}
+
+type ProductVariant struct {
+	ID        uuid.UUID
+	ProductID uuid.UUID
+	Sku       string
+	Price     pgtype.Numeric
+	Currency  string
+	Options   []byte
+	Status    string
+	Position  int32
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }

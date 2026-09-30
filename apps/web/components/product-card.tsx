@@ -2,6 +2,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import type { components } from '@/lib/api/generated/schema'
 import { formatVND } from '@/lib/format'
+import { hasPriceRange } from '@/lib/variants'
 
 type Product = components['schemas']['Product']
 
@@ -75,7 +76,14 @@ export function ProductCard({
           nguyên như vậy cho tới đúng lúc hiển thị — xem chú thích trong
           lib/format.ts về giới hạn của kiểu number trong JS.
         */}
-        <p className="mt-2 text-base font-semibold text-brand">{formatVND(product.price)}</p>
+        {/*
+          `price` là giá "từ" (thấp nhất trong các phiên bản đang bán). Chỉ thêm
+          chữ "Từ" khi các phiên bản thật sự có giá khác nhau.
+        */}
+        <p className="mt-2 text-base font-semibold text-brand">
+          {hasPriceRange(product) ? <span className="mr-1 text-sm font-normal">Từ</span> : null}
+          {formatVND(product.price)}
+        </p>
       </Link>
     </article>
   )

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: base-ecommerce API
-  version: 0.3.0
+  version: 0.4.0
   description: |
     Hợp đồng API. Đây là NGUỒN SỰ THẬT — sửa endpoint thì sửa file này trước.
 servers:
@@ -319,6 +319,65 @@ paths:
         "500": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  /admin/products/{id}/variants:
+    post:
+      operationId: addVariant
+      summary: Thêm phiên bản cho sản phẩm
+      description: Trả về CẢ sản phẩm — giá "từ" của sản phẩm có thể đổi theo.
+      security: [{ adminKey: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateVariantRequest" }
+      responses:
+        "201":
+          description: Đã thêm
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /admin/products/{id}/variants/{variantId}:
+    patch:
+      operationId: updateVariant
+      summary: Sửa phiên bản (giá, tùy chọn, trạng thái, thứ tự)
+      description: >-
+        Không có DELETE: đơn hàng sẽ trỏ vào phiên bản, nên ngừng bán là
+        `status: inactive`. Trả về CẢ sản phẩm.
+      security: [{ adminKey: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: variantId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateVariantRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   /admin/products/{id}/publish:
     post:
       operationId: publishProduct
@@ -392,6 +451,10 @@ components:
             - CATEGORY_NAME_INVALID
             - BRAND_NAME_INVALID
             - CATEGORY_CYCLE
+            - VARIANT_REQUIRED
+            - INVALID_VARIANT_OPTIONS
+            - INVALID_VARIANT_STATUS
+            - NO_ACTIVE_VARIANT
             # catalog/domain — xung đột (409)
             - ALREADY_PUBLISHED
             - DUPLICATE_SKU
@@ -401,12 +464,14 @@ components:
             - CATEGORY_HAS_CHILDREN
             - CATEGORY_HAS_PRODUCTS
             - BRAND_HAS_PRODUCTS
+            - DUPLICATE_VARIANT_OPTIONS
             # catalog/domain — không tìm thấy (404). UNKNOWN_* là tài nguyên
             # trên đường dẫn; khác CATEGORY_NOT_FOUND/BRAND_NOT_FOUND (422) là
             # dữ liệu gửi lên tham chiếu thứ không tồn tại.
             - PRODUCT_NOT_FOUND
             - UNKNOWN_CATEGORY
             - UNKNOWN_BRAND
+            - UNKNOWN_VARIANT
             # catalog/domain — tham số không hợp lệ (400)
             - INVALID_SORT
             - PAGE_TOO_DEEP
@@ -427,11 +492,10 @@ components:
 
     Product:
       type: object
-      required: [id, sku, slug, name, short_description, category_id, brand_id,
-                 price, currency, status, attributes, images, created_at, updated_at]
+      required: [id, slug, name, short_description, category_id, brand_id,
+                 price, currency, status, attributes, images, variants, created_at, updated_at]
       properties:
         id:                { type: string, format: uuid }
-        sku:               { type: string }
         slug:              { type: string }
         name:              { type: string }
         short_description: { type: string }
@@ -440,7 +504,9 @@ components:
         price:
           type: string
           description: |
-            Chuỗi thập phân. Số 0 thừa ở cuối BỊ CẮT ("25990000.50" đọc lại thành "25990000.5"), nên đừng so sánh bằng chuỗi — hãy parse bằng thư viện decimal. KHÔNG BAO GIỜ dùng number:
+            GIÁ "TỪ": giá thấp nhất trong các phiên bản đang bán (từ 0.4.0; trước
+            đó là giá của sản phẩm duy nhất). Lọc `price_min`/`price_max` và sắp
+            xếp theo giá đều dùng con số này. Chuỗi thập phân. Số 0 thừa ở cuối BỊ CẮT ("25990000.50" đọc lại thành "25990000.5"), nên đừng so sánh bằng chuỗi — hãy parse bằng thư viện decimal. KHÔNG BAO GIỜ dùng number:
             JSON number qua JS mất chính xác với NUMERIC(15,2) lớn (IEEE 754
             double chỉ biểu diễn chính xác số nguyên tới 2^53), nên giá đọc lại
             có thể lệch so với giá đã ghi. Server luôn trả amount đã được
@@ -453,6 +519,12 @@ components:
         status:     { type: string, enum: [draft, live, archived] }
         attributes: { type: object, additionalProperties: { type: string } }
         images:     { type: array, items: { type: string } }
+        variants:
+          type: array
+          description: >-
+            Sắp theo `position` rồi `id`. Endpoint công khai chỉ trả phiên bản
+            `active`; response của các lệnh quản trị trả đủ, kể cả `inactive`.
+          items: { $ref: "#/components/schemas/Variant" }
         created_at:
           type: string
           format: date-time
@@ -497,6 +569,50 @@ components:
         children:
           type: array
           items: { $ref: "#/components/schemas/Category" }
+
+    Variant:
+      type: object
+      required: [id, sku, price, currency, options, status, position]
+      properties:
+        id:       { type: string, format: uuid }
+        sku:      { type: string, description: "Duy nhất toàn hệ thống, không đổi được." }
+        price:    { type: string, description: "Chuỗi thập phân VND — xem Product.price." }
+        currency: { type: string, examples: ["VND"] }
+        options:
+          type: object
+          additionalProperties: { type: string }
+          description: 'Tùy chọn phân biệt các phiên bản, ví dụ {"ram": "16GB", "màu": "Đen"}.'
+        status:   { type: string, enum: [active, inactive] }
+        position: { type: integer }
+
+    CreateVariantRequest:
+      type: object
+      additionalProperties: false
+      required: [sku, price]
+      properties:
+        sku:      { type: string, maxLength: 64 }
+        price:    { type: string, description: "Chuỗi thập phân VND. Nháp chưa có giá thì gửi \"0\"." }
+        currency: { type: string, default: "VND" }
+        options:
+          type: object
+          additionalProperties: { type: string }
+          description: "Tối đa 10 cặp. Không được trùng options của phiên bản khác cùng sản phẩm (409 DUPLICATE_VARIANT_OPTIONS)."
+        position: { type: integer, default: 0 }
+
+    UpdateVariantRequest:
+      type: object
+      additionalProperties: false
+      description: >-
+        Sửa từng phần, trường vắng mặt giữ nguyên. Không đổi được `sku`. Với sản
+        phẩm đang live: không thể tắt phiên bản đang bán cuối cùng (422
+        NO_ACTIVE_VARIANT) hay để một phiên bản đang bán có giá 0 (422
+        PRICE_REQUIRED).
+      properties:
+        price:    { type: string }
+        currency: { type: string, default: "VND", description: "Chỉ có ý nghĩa khi gửi kèm `price`." }
+        options:  { type: object, additionalProperties: { type: string } }
+        status:   { type: string, enum: [active, inactive] }
+        position: { type: integer }
 
     Brand:
       type: object
@@ -569,20 +685,19 @@ components:
       # Thiếu dòng này thì theo JSON Schema nghĩa là CHO PHÉP trường thêm, và
       # frontend gửi kèm một field của UI sẽ ăn 400 dù spec bảo hợp lệ.
       additionalProperties: false
-      required: [sku, name, category_id, brand_id, price]
+      required: [name, category_id, brand_id, variants]
       properties:
-        sku:               { type: string, maxLength: 64 }
         name:              { type: string, maxLength: 200 }
         short_description: { type: string }
         category_id:       { type: string, format: uuid }
         brand_id:          { type: string, format: uuid }
-        price:
-          type: string
+        variants:
+          type: array
+          minItems: 1
           description: >-
-            Chuỗi thập phân VND, ví dụ "25990000". BẮT BUỘC. Muốn tạo nháp chưa
-            có giá thì gửi "0" — chuỗi rỗng hoặc thiếu hẳn field đều trả 422
-            INVALID_PRICE.
-        currency:          { type: string, default: "VND" }
+            Ít nhất một phiên bản (422 VARIANT_REQUIRED). Từ 0.4.0 `sku` và
+            `price` nằm ở đây, không còn ở cấp sản phẩm.
+          items: { $ref: "#/components/schemas/CreateVariantRequest" }
         attributes:        { type: object, additionalProperties: { type: string } }
         images:            { type: array, items: { type: string } }
 
@@ -595,21 +710,18 @@ components:
 
 
         Ràng buộc của sản phẩm đang "live" được kiểm trên trạng thái SAU khi
-        sửa: không thể PATCH để nó còn 0 ảnh (422 NO_IMAGE) hay giá 0 (422
-        PRICE_REQUIRED).
+        sửa: không thể PATCH để nó còn 0 ảnh (422 NO_IMAGE).
+
+
+        Từ 0.4.0 không còn `price`/`currency`: giá thuộc phiên bản — sửa qua
+        PATCH /admin/products/{id}/variants/{variantId}. Gửi `price` ở đây trả
+        400 MALFORMED_REQUEST.
       properties:
         name:
           type: string
           maxLength: 200
           description: "Đổi tên sẽ sinh lại slug; trùng slug sản phẩm khác trả 409 DUPLICATE_SLUG."
         short_description: { type: string }
-        price:
-          type: string
-          description: "Chuỗi thập phân VND. Sản phẩm đang \"live\" bắt buộc giá > 0."
-        currency:
-          type: string
-          default: "VND"
-          description: "Chỉ có ý nghĩa khi gửi kèm `price`; gửi một mình thì bị bỏ qua."
         attributes:        { type: object, additionalProperties: { type: string } }
         images:            { type: array, items: { type: string } }
         category_id:

@@ -54,6 +54,12 @@ export const errorMessages: Record<string, string> = {
   UNKNOWN_CATEGORY: 'Không tìm thấy danh mục này.',
   UNSUPPORTED_CURRENCY: 'Loại tiền tệ này chưa được hỗ trợ.',
   VALIDATION_FAILED: 'Thông tin chưa hợp lệ. Vui lòng kiểm tra lại các ô đã nhập.',
+  DUPLICATE_VARIANT_OPTIONS: 'Đã có phiên bản khác với đúng các tùy chọn này.',
+  INVALID_VARIANT_OPTIONS: 'Tùy chọn phiên bản chưa hợp lệ. Vui lòng kiểm tra lại tên và giá trị.',
+  INVALID_VARIANT_STATUS: 'Trạng thái phiên bản không hợp lệ.',
+  NO_ACTIVE_VARIANT: 'Sản phẩm đang bán cần còn ít nhất một phiên bản đang bán.',
+  UNKNOWN_VARIANT: 'Không tìm thấy phiên bản này của sản phẩm.',
+  VARIANT_REQUIRED: 'Sản phẩm cần có ít nhất một phiên bản.',
 
   UNKNOWN: 'Đã có lỗi xảy ra. Vui lòng thử lại.',
   NETWORK_ERROR: 'Không kết nối được tới máy chủ. Vui lòng kiểm tra mạng rồi thử lại.',

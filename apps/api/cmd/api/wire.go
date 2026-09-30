@@ -38,6 +38,8 @@ func newCatalogHandler(db *postgres.Manager, cache *platformredis.Cache, adminKe
 		CreateCategory: usecase.NewCreateCategory(db, categoryRepo, c),
 		UpdateCategory: usecase.NewUpdateCategory(db, categoryRepo, c),
 		DeleteCategory: usecase.NewDeleteCategory(db, categoryRepo, c),
+		AddVariant:     usecase.NewAddVariant(db, productRepo, events, c),
+		UpdateVariant:  usecase.NewUpdateVariant(db, productRepo, events, c),
 		ListBrands:     usecase.NewListBrands(brandRepo, c),
 		CreateBrand:    usecase.NewCreateBrand(db, brandRepo, c),
 		UpdateBrand:    usecase.NewUpdateBrand(db, brandRepo, c),
