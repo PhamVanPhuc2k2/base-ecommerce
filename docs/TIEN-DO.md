@@ -231,6 +231,36 @@ chối chạy.
 
 ---
 
+## Sửa: trang sản phẩm chưa bao giờ thật sự là ISR ✅
+
+**Nguyên nhân.** Route động không có `generateStaticParams` bị Next 16 render
+động mỗi lượt xem, bất kể `export const revalidate = 60` (tài liệu
+`generate-static-params.md`: "must return an empty array … to revalidate (ISR)
+paths at runtime"). Build ghi `ƒ`, và không ai đo header nên ghi chép "ISR
+60 s" sống từ P0.4 tới P2.4.
+
+**Sửa.**
+
+- **`generateStaticParams()` trả `[]`:** không dựng sẵn trang nào lúc build
+  (khi đó API không chạy); mỗi sản phẩm được dựng ở lượt xem đầu tiên.
+- **Nhánh API lỗi giờ NÉM thay vì trả `<ErrorState>`:** trang lỗi HTTP 200 sẽ
+  bị ISR cache nguyên 60 giây. Ném thì Next không cache lượt hỏng và giữ bản
+  tốt gần nhất.
+
+| Kiểm | Trước | Sau |
+|---|---|---|
+| `next build` | `ƒ /san-pham/[slug]` | `● /san-pham/[slug]` |
+| Ba lượt xem liên tiếp | `private, no-store` ×3 | `MISS` rồi `HIT`, `HIT` — `s-maxage=60, stale-while-revalidate` |
+| Slug không tồn tại | 404 | 404 (giữ nguyên) |
+| API tắt, chờ 62 s, xem sản phẩm ĐÃ cache | — | 200 `STALE` rồi `HIT`, nội dung đầy đủ |
+| API tắt, sản phẩm CHƯA từng cache | — | 500 (error.tsx); log ghi `code` + `request_id` |
+| API sống lại | — | 200 |
+
+**Cái giá.** Lượt xem đầu của một sản phẩm chưa có trong cache mà gặp lúc API
+chết thì khách thấy trang lỗi chung (error.tsx), không phải câu theo từng mã.
+
+---
+
 ## P2.4 — Storefront: tài khoản + sổ địa chỉ ✅
 
 - **Trang:** `/dang-nhap`, `/dang-ky`, `/quen-mat-khau`, `/dat-lai-mat-khau`,
@@ -261,8 +291,7 @@ chối chạy.
 
 **Phát hiện, KHÔNG do P2.4:** `/san-pham/[slug]` trả `Cache-Control: private,
 no-store` — trang render động, không phải "ISR 60 s" như ghi ở P1.5. Đã build
-lại chính `main` để so: y hệt. Cần điều tra riêng (cache dữ liệu ở tầng fetch
-vẫn còn, mất là cache HTML).
+lại chính `main` để so: y hệt. Đã sửa ngay sau — xem mục kế tiếp.
 
 **Lỗi của script kiểm, không phải của code** — ghi lại để lần sau khỏi mất công:
 cắt cookie `bec_rt=` bằng `slice(6)` (dài 7 ký tự) làm token gửi lại thừa dấu

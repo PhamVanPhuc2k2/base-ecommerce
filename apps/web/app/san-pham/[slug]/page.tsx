@@ -4,7 +4,6 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { cache } from 'react'
 import { Breadcrumb, type Crumb } from '@/components/breadcrumb'
-import { ErrorState } from '@/components/error-state'
 import {
   type SelectorGroup,
   type SelectorVariant,
@@ -40,6 +39,23 @@ type CategoryAttribute = components['schemas']['CategoryAttribute']
  * là trang được dựng lại ngay, không phải chờ hết 60 giây.
  */
 export const revalidate = 60
+
+/**
+ * Mảng RỖNG, và BẮT BUỘC phải có — không có nó thì `revalidate` ở trên VÔ
+ * TÁC DỤNG.
+ *
+ * Route động (`[slug]`) không có `generateStaticParams` bị Next 16 render ĐỘNG
+ * mỗi lượt xem (`Cache-Control: private, no-store`), bất kể `revalidate`. Trang
+ * này đã như vậy suốt từ P0.4 tới P2.4 mà ghi chép vẫn nói "ISR 60 giây" —
+ * phát hiện khi đo header ở P2.4, xác nhận bằng cách build lại chính `main`.
+ *
+ * Rỗng = không dựng sẵn trang nào lúc `next build` (lúc đó trong `docker build`
+ * API không chạy — dựng sẵn là cache trang lỗi, bài học của /thuong-hieu), mỗi
+ * sản phẩm được dựng ở lượt xem ĐẦU TIÊN rồi phục vụ từ cache.
+ */
+export function generateStaticParams(): { slug: string }[] {
+  return []
+}
 
 const PRODUCT_PATH = '/san-pham'
 const CATEGORY_PATH = '/danh-muc'
@@ -324,28 +340,27 @@ export default async function Page({ params }: PageProps<'/san-pham/[slug]'>) {
 
     Đây cũng là lý do `PRODUCT_NOT_FOUND` phải tách khỏi mọi mã lỗi khác:
     backend chết thì KHÔNG được trả 404, nếu không Google gỡ sạch sản phẩm
-    khỏi chỉ mục chỉ vì ta có mười phút hỏng hóc — nhánh 'error' bên dưới trả
-    200 kèm <ErrorState> đúng vì vậy.
+    khỏi chỉ mục chỉ vì ta có mười phút hỏng hóc.
   */
   if (loaded.kind === 'not-found') notFound()
 
   if (loaded.kind === 'error') {
-    // Vẫn ở trên server nên `code` và `requestId` còn nguyên vẹn — khách đọc
-    // đúng câu tiếng Việt cho từng mã, và tổng đài có mã để tra log.
-    return (
-      <div>
-        <Breadcrumb items={[{ label: 'Trang chủ', href: '/' }, { label: 'Sản phẩm' }]} />
-        <h1 className="mt-3 mb-8 text-2xl font-semibold text-gray-900">Sản phẩm</h1>
-        <ErrorState code={loaded.code} requestId={loaded.requestId}>
-          <Link
-            href={CATEGORY_PATH}
-            className="rounded-md bg-brand px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-dark"
-          >
-            Xem danh mục sản phẩm
-          </Link>
-        </ErrorState>
-      </div>
-    )
+    /*
+      NÉM, không trả <ErrorState> — vì trang này là ISR.
+
+      Trả một trang lỗi bình thường (HTTP 200) thì Next CACHE chính trang lỗi
+      đó 60 giây: API chớp tắt một giây, mọi khách xem sản phẩm này suốt một
+      phút sau đều thấy "không kết nối được", dù API đã sống lại. Ném lỗi thì
+      Next KHÔNG cache lượt render hỏng và tiếp tục phục vụ bản tốt gần nhất —
+      khách không hề biết có sự cố. Chỉ lượt xem đầu tiên của một sản phẩm
+      CHƯA TỪNG có trong cache mới rơi vào error.tsx (HTTP 500 — với Google là
+      "lỗi tạm thời, quay lại sau", đúng hơn 200 kèm chữ báo lỗi).
+
+      Cái giá: error.tsx không đọc được `code`/`request_id` (production che
+      thông điệp lỗi server), nên ghi chúng vào log ở đây.
+    */
+    console.error(`san-pham/${slug}: API lỗi ${loaded.code} request_id=${loaded.requestId ?? '-'}`)
+    throw new Error(`Không tải được sản phẩm ${slug}: ${loaded.code}`)
   }
 
   const product = loaded.product

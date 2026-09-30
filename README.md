@@ -805,7 +805,7 @@ nghiệp vụ thật đi xuyên mọi tầng, thay vì khung xương trên lý t
 > chi tiết hơn ở cuối — đọc kèm khi bắt tay vào hạng mục tương ứng.
 
 > Trạng thái: **P0.1 xong** (nền móng backend), **P0.2 xong** (module catalog).
-> Trạng thái: **P0 và P1 (Catalog & PIM, P1.1 → P1.5) xong, đã merge**. Tiếp theo: P2 (Identity) và P3 (Inventory & Pricing), làm song song được.
+> Trạng thái: **P0, P1 (Catalog & PIM) và P2 (Identity) xong, đã merge**. Tiếp theo: P3 (Inventory & Pricing).
 
 ### Chuẩn bị
 - [x] `git init`, `.gitignore`, `.editorconfig`
