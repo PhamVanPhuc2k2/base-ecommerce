@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { absoluteUrl } from '@/lib/site'
 
 /** Một chặng trên đường dẫn. Không có `href` nghĩa là chặng hiện tại. */
 export type Crumb = {
@@ -26,6 +27,7 @@ export function Breadcrumb({ items }: { items: Crumb[] }) {
 
   return (
     <nav aria-label="Đường dẫn" className="text-sm text-gray-500">
+      <BreadcrumbJsonLd items={items} />
       <ol className="flex flex-wrap items-center gap-x-2 gap-y-1">
         {items.map((item, index) => {
           const isLast = index === items.length - 1
@@ -49,5 +51,34 @@ export function Breadcrumb({ items }: { items: Crumb[] }) {
         })}
       </ol>
     </nav>
+  )
+}
+
+/**
+ * JSON-LD `BreadcrumbList` đi KÈM breadcrumb nhìn thấy (P1.5) — một component,
+ * hai đầu ra, nên không có trang nào có breadcrumb mà thiếu dữ liệu có cấu trúc.
+ * Google dùng nó để hiện "Trang chủ › Laptop › Laptop gaming" thay cho URL trần
+ * trên trang kết quả.
+ *
+ * `item` phải là URL TUYỆT ĐỐI. Chặng cuối (trang hiện tại, không có href) bỏ
+ * `item` — schema.org cho phép, và đó đúng là trang Google đang đọc.
+ */
+function BreadcrumbJsonLd({ items }: { items: Crumb[] }) {
+  const data = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: items.map((c, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      name: c.label,
+      ...(c.href !== undefined ? { item: absoluteUrl(c.href) } : {}),
+    })),
+  }
+  return (
+    <script
+      type="application/ld+json"
+      // biome-ignore lint/security/noDangerouslySetInnerHtml: JSON-LD bắt buộc nằm nguyên văn trong <script>; `<` được thoát ở dưới — xem ProductJsonLd.
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(data).replaceAll('<', '\\u003c') }}
+    />
   )
 }

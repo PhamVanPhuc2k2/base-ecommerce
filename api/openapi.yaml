@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: base-ecommerce API
-  version: 0.6.0
+  version: 0.7.0
   description: |
     Hợp đồng API. Đây là NGUỒN SỰ THẬT — sửa endpoint thì sửa file này trước.
 servers:
@@ -165,6 +165,47 @@ paths:
                   data:
                     type: array
                     items: { $ref: "#/components/schemas/Brand" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /sitemap/products:
+    get:
+      operationId: sitemapProducts
+      security: []
+      summary: Slug + ngày cập nhật của sản phẩm live, cho sitemap phân mảnh
+      description: >-
+        5.000 dòng mỗi trang, sắp theo id — sản phẩm mới luôn rơi vào trang
+        CUỐI, trang cũ không bị dồn dịch. Không có trần 200 trang như GET
+        /products (câu này chạy trên index hẹp, Index Only Scan). Trang vượt
+        quá trả `data` rỗng, không báo lỗi.
+      parameters:
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [slug, updated_at]
+                      properties:
+                        slug:       { type: string }
+                        updated_at: { type: string, format: date-time }
+                  meta:
+                    type: object
+                    required: [page, page_size, total, total_pages]
+                    properties:
+                      page:        { type: integer }
+                      page_size:   { type: integer }
+                      total:       { type: integer }
+                      total_pages: { type: integer }
+        "400": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 

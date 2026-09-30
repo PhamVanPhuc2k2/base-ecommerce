@@ -38,3 +38,15 @@ FOR UPDATE;
 SELECT sqlc.embed(products)
 FROM products
 WHERE slug = $1 AND deleted_at IS NULL AND status = 'live';
+
+-- name: SitemapProducts :many
+-- Dùng index partial products_live_id_idx (id) INCLUDE (slug, updated_at):
+-- Index Only Scan, không đọc heap. Sắp theo id để sản phẩm mới luôn nằm ở
+-- trang CUỐI — trang cũ không bị dồn dịch mỗi khi có hàng mới.
+SELECT slug, updated_at FROM products
+WHERE deleted_at IS NULL AND status = 'live'
+ORDER BY id
+LIMIT sqlc.arg(page_size) OFFSET sqlc.arg(page_offset);
+
+-- name: CountLiveProducts :one
+SELECT count(*) FROM products WHERE deleted_at IS NULL AND status = 'live';

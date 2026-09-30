@@ -53,6 +53,15 @@ type ProductRepository interface {
 	List(ctx context.Context, f ListFilter) ([]*domain.Product, error)
 	Count(ctx context.Context, f ListFilter) (int, error)
 	Facets(ctx context.Context, f ListFilter, productCodes, variantCodes []string) (domain.FacetCounts, error)
+	// Sitemap trả slug + updated_at của sản phẩm live, sắp theo id.
+	Sitemap(ctx context.Context, offset, limit int) ([]SitemapEntry, error)
+	CountLive(ctx context.Context) (int, error)
+}
+
+// SitemapEntry là đúng hai thứ một dòng sitemap cần — không nạp cả sản phẩm.
+type SitemapEntry struct {
+	Slug      string
+	UpdatedAt time.Time
 }
 
 type MediaRepository interface {

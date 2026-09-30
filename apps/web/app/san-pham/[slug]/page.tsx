@@ -5,13 +5,20 @@ import { notFound } from 'next/navigation'
 import { cache } from 'react'
 import { Breadcrumb, type Crumb } from '@/components/breadcrumb'
 import { ErrorState } from '@/components/error-state'
+import {
+  type SelectorGroup,
+  type SelectorVariant,
+  VariantSelector,
+} from '@/components/variant-selector'
 import { ApiError } from '@/lib/api/error'
 import type { components } from '@/lib/api/generated/schema'
 import { apiGet } from '@/lib/api/server'
 import { byPosition, formatAttrValue, indexAttributes } from '@/lib/attributes'
+import { brandHref } from '@/lib/brands'
+import { categoryHref, categoryPathById } from '@/lib/categories'
 import { formatDate, formatVND } from '@/lib/format'
 import { absoluteImageUrl, absoluteUrl } from '@/lib/site'
-import { hasPriceRange, optionsLabel, priceRange } from '@/lib/variants'
+import { hasPriceRange, priceRange } from '@/lib/variants'
 
 type Product = components['schemas']['Product']
 type Category = components['schemas']['Category']
@@ -181,27 +188,6 @@ const loadCategoryAttributes = cache(async (slug: string): Promise<CategoryAttri
   }
 })
 
-/**
- * Đường đi từ gốc tới danh mục có `id` cho trước, ví dụ
- * [Máy tính, Laptop, Laptop Gaming].
- *
- * Tìm theo ID chứ không theo slug vì `Product` chỉ mang `category_id` — API
- * không trả kèm slug danh mục. Trả về CẢ đường đi chứ không chỉ nút cuối, vì
- * breadcrumb cần đủ các cấp cha; chỉ hiện "Laptop Gaming" thì khách (và
- * Google) không thấy được sản phẩm này nằm ở đâu trong cửa hàng.
- *
- * Cây của một cửa hàng bán lẻ sâu 3–4 cấp, đệ quy là đủ — xem thêm chú thích
- * của `findCategory` trong components/category-filter.tsx.
- */
-function categoryPath(tree: Category[], id: string): Category[] {
-  for (const node of tree) {
-    if (node.id === id) return [node]
-    const deeper = categoryPath(node.children, id)
-    if (deeper.length > 0) return [node, ...deeper]
-  }
-  return []
-}
-
 /** Giới hạn mô tả cho thẻ meta. Google cắt quanh 155–160 ký tự. */
 const META_DESCRIPTION_MAX = 160
 
@@ -364,7 +350,7 @@ export default async function Page({ params }: PageProps<'/san-pham/[slug]'>) {
 
   const product = loaded.product
   const brand = brands.find((b) => b.id === product.brand_id)
-  const path = categoryPath(tree, product.category_id)
+  const path = categoryPathById(tree, product.category_id)
   // Gọi SAU khi có cây: cần slug của danh mục lá, mà Product chỉ mang id.
   const leaf = path.at(-1)
   const order = leaf ? (await loadCategoryAttributes(leaf.slug)).map((a) => a.code) : []
@@ -372,12 +358,22 @@ export default async function Page({ params }: PageProps<'/san-pham/[slug]'>) {
     { label: 'Trang chủ', href: '/' },
     { label: 'Danh mục sản phẩm', href: CATEGORY_PATH },
     // Mỗi cấp danh mục trỏ về trang danh mục đã lọc sẵn theo slug của nó.
-    ...path.map((c): Crumb => ({ label: c.name, href: `${CATEGORY_PATH}?category=${c.slug}` })),
+    ...path.map((c): Crumb => ({ label: c.name, href: categoryHref(c.slug) })),
     { label: product.name },
   ]
 
   const variants = product.variants
   const single = variants.length === 1 ? variants[0] : undefined
+  const selectorVariants: SelectorVariant[] = variants.map((v) => ({
+    id: v.id,
+    sku: v.sku,
+    price: v.price,
+    options: v.options,
+  }))
+  // Mặc định chọn phiên bản RẺ NHẤT — khớp giá "Từ …" in ngay phía trên, để
+  // con số khách thấy trước và sau khi bộ chọn hiện ra là một.
+  const defaultVariantId =
+    (variants.find((v) => v.price === product.price) ?? variants[0])?.id ?? ''
   const cover = product.images[0]
   const rest = product.images.slice(1)
   const specs = byPosition(Object.entries(product.attributes), order)
@@ -415,10 +411,10 @@ export default async function Page({ params }: PageProps<'/san-pham/[slug]'>) {
                 // cover sẽ cắt mất góc máy.
                 className="object-contain"
                 // Ảnh lớn nhất trên màn hình đầu của trang chi tiết — chính là
-                // phần tử Google đo LCP. Đúng MỘT ảnh được `priority`
+                // phần tử Google đo LCP. Đúng MỘT ảnh được `preload`
                 // (README mục 7.6); bật cho cả dải ảnh thì chúng tranh băng
                 // thông và ảnh quan trọng nhất về chậm hơn.
-                priority
+                preload
               />
             )}
           </div>
@@ -471,7 +467,7 @@ export default async function Page({ params }: PageProps<'/san-pham/[slug]'>) {
               <>
                 Thương hiệu:{' '}
                 <Link
-                  href={`${CATEGORY_PATH}?brand=${brand.slug}`}
+                  href={brandHref(brand.slug)}
                   className="font-medium text-gray-700 hover:text-brand"
                 >
                   {brand.name}
@@ -503,43 +499,16 @@ export default async function Page({ params }: PageProps<'/san-pham/[slug]'>) {
           ) : null}
 
           {variants.length > 1 ? (
-            <section className="mt-8">
-              <h2 className="text-lg font-semibold text-gray-900">Phiên bản</h2>
-              {/*
-                Bảng CHỈ ĐỂ XEM ở P1.2. Bộ chọn phiên bản có bấm được (đổi giá,
-                đổi ảnh, thêm vào giỏ đúng SKU) cần Client Component và giỏ hàng
-                — để P1.5 và P4. Bảng tĩnh vẫn cho khách lẫn Google thấy đủ mọi
-                cấu hình và giá của từng cấu hình.
-              */}
-              <table className="mt-3 w-full border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-gray-200 text-left text-gray-500">
-                    <th scope="col" className="py-2 pr-4 font-medium">
-                      Tùy chọn
-                    </th>
-                    <th scope="col" className="py-2 pr-4 font-medium">
-                      Mã
-                    </th>
-                    <th scope="col" className="py-2 text-right font-medium">
-                      Giá
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {variants.map((v) => (
-                    <tr key={v.id} className="border-b border-gray-200 last:border-0">
-                      <td className="py-2.5 pr-4 text-gray-900">
-                        {optionsLabel(v, defs, order) || '—'}
-                      </td>
-                      <td className="py-2.5 pr-4 font-mono text-gray-600">{v.sku}</td>
-                      <td className="py-2.5 text-right font-medium text-gray-900">
-                        {formatVND(v.price)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </section>
+            /*
+              Bộ chọn phiên bản (P1.5) thay cho bảng tĩnh của P1.2. HTML server
+              render vẫn chứa MỌI tùy chọn và giá của phiên bản mặc định; khoảng
+              giá đầy đủ nằm trong JSON-LD AggregateOffer cho Google.
+            */
+            <VariantSelector
+              variants={selectorVariants}
+              groups={selectorGroups(variants, order, defs)}
+              initialId={defaultVariantId}
+            />
           ) : null}
 
           {specs.length > 0 ? (
@@ -692,4 +661,33 @@ function ProductJsonLd({ product, brand }: { product: Product; brand: Brand | un
       dangerouslySetInnerHTML={{ __html: JSON.stringify(data).replaceAll('<', '\\u003c') }}
     />
   )
+}
+
+/**
+ * Nhóm tùy chọn cho bộ chọn phiên bản: mỗi mã xuất hiện trong ít nhất một
+ * phiên bản, theo thứ tự quản trị đặt cho danh mục; giá trị theo thứ tự phiên
+ * bản (position), không trùng. Nhãn ("16 GB", "Có") dựng ở ĐÂY, trên server —
+ * client không phải tải bảng định nghĩa thuộc tính.
+ */
+function selectorGroups(
+  variants: Product['variants'],
+  order: string[],
+  defs: Map<string, Attribute>,
+): SelectorGroup[] {
+  const codes = new Set(variants.flatMap((v) => Object.keys(v.options)))
+  const ordered = byPosition(
+    [...codes].map((c): [string, string] => [c, '']),
+    order,
+  ).map(([c]) => c)
+  return ordered.map((code) => {
+    const def = defs.get(code)
+    const values: SelectorGroup['values'] = []
+    for (const v of variants) {
+      const value = v.options[code]
+      if (value !== undefined && !values.some((x) => x.value === value)) {
+        values.push({ value, label: formatAttrValue(def, value) })
+      }
+    }
+    return { code, name: def?.name ?? code, values }
+  })
 }

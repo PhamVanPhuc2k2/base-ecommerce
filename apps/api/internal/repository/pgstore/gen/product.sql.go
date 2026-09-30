@@ -13,6 +13,17 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+const countLiveProducts = `-- name: CountLiveProducts :one
+SELECT count(*) FROM products WHERE deleted_at IS NULL AND status = 'live'
+`
+
+func (q *Queries) CountLiveProducts(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countLiveProducts)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const productByID = `-- name: ProductByID :one
 SELECT products.id, products.slug, products.name, products.short_description, products.category_id, products.brand_id, products.price, products.currency, products.status, products.attributes, products.images, products.created_at, products.updated_at, products.deleted_at
 FROM products
@@ -80,6 +91,46 @@ func (q *Queries) ProductBySlug(ctx context.Context, slug string) (ProductBySlug
 		&i.Product.DeletedAt,
 	)
 	return i, err
+}
+
+const sitemapProducts = `-- name: SitemapProducts :many
+SELECT slug, updated_at FROM products
+WHERE deleted_at IS NULL AND status = 'live'
+ORDER BY id
+LIMIT $2 OFFSET $1
+`
+
+type SitemapProductsParams struct {
+	PageOffset int32
+	PageSize   int32
+}
+
+type SitemapProductsRow struct {
+	Slug      string
+	UpdatedAt time.Time
+}
+
+// Dùng index partial products_live_id_idx (id) INCLUDE (slug, updated_at):
+// Index Only Scan, không đọc heap. Sắp theo id để sản phẩm mới luôn nằm ở
+// trang CUỐI — trang cũ không bị dồn dịch mỗi khi có hàng mới.
+func (q *Queries) SitemapProducts(ctx context.Context, arg SitemapProductsParams) ([]SitemapProductsRow, error) {
+	rows, err := q.db.Query(ctx, sitemapProducts, arg.PageOffset, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SitemapProductsRow
+	for rows.Next() {
+		var i SitemapProductsRow
+		if err := rows.Scan(&i.Slug, &i.UpdatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const upsertProduct = `-- name: UpsertProduct :exec

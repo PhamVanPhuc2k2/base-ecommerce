@@ -5,7 +5,7 @@ import { absoluteUrl } from '@/lib/site'
 /**
  * `/robots.txt` — file đầu tiên mọi con bot đọc trước khi cào bất cứ thứ gì.
  *
- * `await connection()` vì đúng lý do như `app/sitemap.ts`: mặc định Next.js
+ * `await connection()` vì cùng lý do với sitemap (app/sitemap.xml/route.ts): mặc định Next.js
  * dựng sẵn file này lúc `next build`, và khi đó `SITE_URL` bị đóng băng vào
  * image. Hậu quả cụ thể: image build ở staging đem lên production sẽ phát ra
  * dòng `Sitemap: https://staging.../sitemap.xml`, tức là ta tự tay chỉ Google

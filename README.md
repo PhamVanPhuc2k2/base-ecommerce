@@ -316,22 +316,32 @@ base-ecommerce/
 │       │   ├── format.ts                     # formatVND (nhận chuỗi decimal), formatDate
 │       │   ├── search-params.ts              # dựng link lọc: giữ tham số khác, luôn reset page
 │       │   ├── site.ts                       # SITE_URL đọc lúc chạy → canonical, sitemap, JSON-LD
+│       │   ├── categories.ts                 # duyệt cây danh mục, categoryHref → /danh-muc/<slug>
+│       │   ├── brands.ts                     # brandHref → /thuong-hieu/<slug>
+│       │   ├── sitemap-xml.ts                # dựng XML sitemap + index, thoát ký tự
 │       │   └── image-loader.ts               # next/image → /img/<preset>/<khóa>, không NEXT_PUBLIC_*
 │       ├── app/                              # App Router
 │       │   ├── img/[preset]/[...key]/route.ts # proxy ảnh tới imgproxy; chặn preset/khóa lạ
 │       │   ├── fonts/                        # Geist .woff2 tự host + OFL.txt — build không cần Google Fonts
 │       │   ├── layout.tsx                    # <html lang="vi">, header, footer, metadata mặc định
 │       │   ├── page.tsx                      # trang chủ tối giản, dẫn sang /danh-muc
-│       │   ├── danh-muc/page.tsx             # danh sách sản phẩm: lọc trên URL, force-dynamic
-│       │   ├── danh-muc/loading.tsx          # skeleton; ở đây chứ KHÔNG ở app/ — xem mục 7.8
-│       │   ├── san-pham/[slug]/page.tsx      # chi tiết: ISR 60s, generateMetadata, JSON-LD Product
-│       │   ├── sitemap.ts                    # sinh từ API, trần 20.000 sản phẩm, API chết vẫn ra XML
+│       │   ├── danh-muc/(tat-ca)/page.tsx    # /danh-muc: tất cả sản phẩm
+│       │   ├── danh-muc/(tat-ca)/loading.tsx # skeleton CHỈ cho /danh-muc — route group giữ 404 thật cho /danh-muc/<slug>
+│       │   ├── danh-muc/[slug]/page.tsx      # trang danh mục theo đường dẫn; slug lạ → 404 thật
+│       │   ├── thuong-hieu/page.tsx          # liệt kê thương hiệu
+│       │   ├── thuong-hieu/[slug]/page.tsx   # trang thương hiệu; lọc danh mục TRONG hãng
+│       │   ├── san-pham/[slug]/page.tsx      # chi tiết: ISR 60s, bộ chọn phiên bản, JSON-LD Product
+│       │   ├── sitemap.xml/route.ts          # sitemap INDEX, số file tính lúc chạy
+│       │   ├── sitemaps/[file]/route.ts      # pages.xml + products-<n>.xml (5.000/file)
 │       │   ├── robots.ts                     # chặn /admin, trỏ Sitemap:
 │       │   ├── error.tsx                     # lưới an toàn cuối; production KHÔNG còn mã lỗi để đọc
 │       │   ├── global-error.tsx              # phủ cả lỗi ném từ layout.tsx; tự khai <html>/<body>
 │       │   └── not-found.tsx                 # 404 tiếng Việt, dẫn về trang danh mục
+│       ├── proxy.ts                          # ?category= cũ → 308 /danh-muc/<slug> (trước render — xem file)
 │       ├── components/
-│       │   ├── breadcrumb.tsx                # đường dẫn phân cấp; mục cuối không bao giờ là link
+│       │   ├── breadcrumb.tsx                # đường dẫn phân cấp + JSON-LD BreadcrumbList
+│       │   ├── product-listing.tsx           # danh sách dùng chung: danh mục, danh mục theo slug, thương hiệu
+│       │   ├── variant-selector.tsx          # bộ chọn phiên bản (client), không đọc/ghi URL
 │       │   ├── category-filter.tsx           # cây danh mục dạng link, không dùng state
 │       │   ├── error-state.tsx               # lỗi API hiện TRONG trang, còn nguyên code + request_id
 │       │   ├── pagination.tsx                # theo meta.has_next/has_prev, KHÔNG tự tính total_pages
@@ -770,7 +780,7 @@ nghiệp vụ thật đi xuyên mọi tầng, thay vì khung xương trên lý t
 > chi tiết hơn ở cuối — đọc kèm khi bắt tay vào hạng mục tương ứng.
 
 > Trạng thái: **P0.1 xong** (nền móng backend), **P0.2 xong** (module catalog).
-> Trạng thái: **P0.1 → P0.4 xong, đã merge**. Tiếp theo: P1 (Catalog & PIM).
+> Trạng thái: **P0 và P1 (Catalog & PIM, P1.1 → P1.5) xong, đã merge**. Tiếp theo: P2 (Identity) và P3 (Inventory & Pricing), làm song song được.
 
 ### Chuẩn bị
 - [x] `git init`, `.gitignore`, `.editorconfig`

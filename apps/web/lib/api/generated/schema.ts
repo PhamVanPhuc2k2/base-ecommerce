@@ -108,6 +108,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/sitemap/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Slug + ngày cập nhật của sản phẩm live, cho sitemap phân mảnh
+         * @description 5.000 dòng mỗi trang, sắp theo id — sản phẩm mới luôn rơi vào trang CUỐI, trang cũ không bị dồn dịch. Không có trần 200 trang như GET /products (câu này chạy trên index hẹp, Index Only Scan). Trang vượt quá trả `data` rỗng, không báo lỗi.
+         */
+        get: operations["sitemapProducts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/attributes": {
         parameters: {
             query?: never;
@@ -900,6 +920,43 @@ export interface operations {
                     };
                 };
             };
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    sitemapProducts: {
+        parameters: {
+            query?: {
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            slug: string;
+                            /** Format: date-time */
+                            updated_at: string;
+                        }[];
+                        meta: {
+                            page: number;
+                            page_size: number;
+                            total: number;
+                            total_pages: number;
+                        };
+                    };
+                };
+            };
+            400: components["responses"]["Problem"];
             500: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };

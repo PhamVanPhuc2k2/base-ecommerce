@@ -1,88 +1,41 @@
 import Link from 'next/link'
 import type { components } from '@/lib/api/generated/schema'
-import { hrefWith } from '@/lib/search-params'
 
 type Category = components['schemas']['Category']
 
 /**
- * Tìm một danh mục theo slug trong cây lồng nhau.
+ * Cột lọc theo danh mục, dạng cây.
  *
- * Đặt ở đây thay vì trong page vì nó là hiểu biết về CÂY DANH MỤC, không phải
- * về trang: trang chi tiết sản phẩm (Task 5) cũng sẽ cần đúng phép tìm này để
- * dựng breadcrumb.
+ * Mỗi mục là một LINK chứ không phải nút giữ state: mở được tab mới, Google bò
+ * được vào từng danh mục, và nút Back trả về đúng bộ lọc trước đó mà không cần
+ * một dòng JavaScript nào. Nếu làm bằng `useState` thì cả ba thứ trên đều mất,
+ * và trang phải trở thành Client Component.
  *
- * Cây danh mục của một cửa hàng bán lẻ sâu tối đa 3–4 cấp và rộng vài trăm nút,
- * nên duyệt đệ quy là đủ; không cần lo tràn ngăn xếp.
- */
-/**
- * Bản vá xóa mọi `attr.*` đang có. Đổi danh mục thì bộ lọc thuộc tính cũ phải
- * đi theo: thuộc tính thuộc về danh mục (P1.3), và giữ `attr.ram=16` khi
- * chuyển từ Laptop sang Chuột chỉ cho ra một trang rỗng khó hiểu.
- */
-function clearAttrs(params: URLSearchParams): Record<string, undefined> {
-  const patch: Record<string, undefined> = {}
-  for (const key of params.keys()) {
-    if (key.startsWith('attr.')) patch[key] = undefined
-  }
-  return patch
-}
-
-export function findCategory(tree: Category[], slug: string): Category | undefined {
-  for (const node of tree) {
-    if (node.slug === slug) return node
-    const found = findCategory(node.children, slug)
-    if (found !== undefined) return found
-  }
-  return undefined
-}
-
-/**
- * Bộ lọc theo danh mục — một cây link, KHÔNG phải form có state.
- *
- * Mỗi mục là một thẻ <a> thật trỏ tới URL đã lọc. Hệ quả: bấm chuột giữa mở
- * được tab mới, Google bò được vào từng danh mục, và nút Back trả về đúng bộ
- * lọc trước đó mà không cần một dòng JavaScript nào. Nếu làm bằng `useState`
- * thì cả ba thứ trên đều mất, và trang phải trở thành Client Component.
+ * Link dựng thế nào do TRANG quyết định qua `hrefFor` (P1.5): trên `/danh-muc`
+ * bấm danh mục là sang trang `/danh-muc/<slug>`; trên trang thương hiệu thì ở
+ * lại trang đó và lọc bằng `?category=`. `hrefFor(undefined)` là link "Tất cả".
  */
 export function CategoryFilter({
   tree,
   activeSlug,
-  basePath,
-  params,
+  hrefFor,
 }: {
   tree: Category[]
-  /** Slug đang được chọn, lấy từ `?category=`. */
+  /** Slug đang được chọn. */
   activeSlug?: string
-  /** Đường dẫn của trang đang đứng, ví dụ `/danh-muc`. */
-  basePath: string
-  /** Toàn bộ tham số hiện tại — để link lọc giữ nguyên sắp xếp, khoảng giá... */
-  params: URLSearchParams
+  hrefFor: (slug: string | undefined) => string
 }) {
   return (
     <nav aria-label="Lọc theo danh mục" className="text-sm">
       <h2 className="mb-3 font-semibold text-gray-900">Danh mục</h2>
       <ul className="space-y-1">
         <li>
-          {/*
-            "Tất cả" truyền category: undefined nên hrefWith XÓA hẳn tham số,
-            chứ không để lại `category=` rỗng — backend sẽ coi chuỗi rỗng là một
-            slug không tồn tại và trả 422 CATEGORY_NOT_FOUND.
-          */}
-          <FilterLink
-            href={hrefWith(basePath, params, { ...clearAttrs(params), category: undefined })}
-            active={activeSlug === undefined}
-          >
+          <FilterLink href={hrefFor(undefined)} active={activeSlug === undefined}>
             Tất cả sản phẩm
           </FilterLink>
         </li>
         {tree.map((node) => (
-          <CategoryNode
-            key={node.id}
-            node={node}
-            activeSlug={activeSlug}
-            basePath={basePath}
-            params={params}
-          />
+          <CategoryNode key={node.id} node={node} activeSlug={activeSlug} hrefFor={hrefFor} />
         ))}
       </ul>
     </nav>
@@ -93,20 +46,15 @@ export function CategoryFilter({
 function CategoryNode({
   node,
   activeSlug,
-  basePath,
-  params,
+  hrefFor,
 }: {
   node: Category
   activeSlug?: string
-  basePath: string
-  params: URLSearchParams
+  hrefFor: (slug: string | undefined) => string
 }) {
   return (
     <li>
-      <FilterLink
-        href={hrefWith(basePath, params, { ...clearAttrs(params), category: node.slug })}
-        active={node.slug === activeSlug}
-      >
+      <FilterLink href={hrefFor(node.slug)} active={node.slug === activeSlug}>
         {node.name}
       </FilterLink>
       {node.children.length > 0 ? (
@@ -115,13 +63,7 @@ function CategoryNode({
         // vào đó để báo "mục 2 trong 5, cấp 2".
         <ul className="mt-1 ml-4 space-y-1 border-l border-gray-200 pl-3">
           {node.children.map((child) => (
-            <CategoryNode
-              key={child.id}
-              node={child}
-              activeSlug={activeSlug}
-              basePath={basePath}
-              params={params}
-            />
+            <CategoryNode key={child.id} node={child} activeSlug={activeSlug} hrefFor={hrefFor} />
           ))}
         </ul>
       ) : null}
