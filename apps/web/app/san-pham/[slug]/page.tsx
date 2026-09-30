@@ -10,6 +10,7 @@ import type { components } from '@/lib/api/generated/schema'
 import { apiGet } from '@/lib/api/server'
 import { formatDate, formatVND } from '@/lib/format'
 import { absoluteUrl } from '@/lib/site'
+import { hasPriceRange, optionsLabel, priceRange } from '@/lib/variants'
 
 type Product = components['schemas']['Product']
 type Category = components['schemas']['Category']
@@ -333,6 +334,8 @@ export default async function Page({ params }: PageProps<'/san-pham/[slug]'>) {
     { label: product.name },
   ]
 
+  const variants = product.variants
+  const single = variants.length === 1 ? variants[0] : undefined
   const cover = product.images[0]
   const rest = product.images.slice(1)
   const specs = Object.entries(product.attributes)
@@ -431,10 +434,15 @@ export default async function Page({ params }: PageProps<'/san-pham/[slug]'>) {
                 >
                   {brand.name}
                 </Link>
-                <span className="mx-2 text-gray-300">|</span>
+                {single !== undefined ? <span className="mx-2 text-gray-300">|</span> : null}
               </>
             ) : null}
-            Mã sản phẩm: <span className="font-mono text-gray-700">{product.sku}</span>
+            {/* Nhiều phiên bản thì mỗi cái một SKU — nằm trong bảng bên dưới. */}
+            {single !== undefined ? (
+              <>
+                Mã sản phẩm: <span className="font-mono text-gray-700">{single.sku}</span>
+              </>
+            ) : null}
           </p>
 
           {/*
@@ -442,11 +450,52 @@ export default async function Page({ params }: PageProps<'/san-pham/[slug]'>) {
             giữ nguyên như vậy cho tới đúng lúc hiển thị — xem chú thích trong
             lib/format.ts về ranh giới của kiểu number trong JS.
           */}
-          <p className="mt-4 text-3xl font-bold text-brand">{formatVND(product.price)}</p>
+          <p className="mt-4 text-3xl font-bold text-brand">
+            {hasPriceRange(product) ? <span className="mr-2 text-lg font-normal">Từ</span> : null}
+            {formatVND(product.price)}
+          </p>
           <p className="mt-1 text-sm text-gray-500">Đã bao gồm VAT</p>
 
           {product.short_description.trim() !== '' ? (
             <p className="mt-6 text-base text-gray-700">{product.short_description}</p>
+          ) : null}
+
+          {variants.length > 1 ? (
+            <section className="mt-8">
+              <h2 className="text-lg font-semibold text-gray-900">Phiên bản</h2>
+              {/*
+                Bảng CHỈ ĐỂ XEM ở P1.2. Bộ chọn phiên bản có bấm được (đổi giá,
+                đổi ảnh, thêm vào giỏ đúng SKU) cần Client Component và giỏ hàng
+                — để P1.5 và P4. Bảng tĩnh vẫn cho khách lẫn Google thấy đủ mọi
+                cấu hình và giá của từng cấu hình.
+              */}
+              <table className="mt-3 w-full border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 text-left text-gray-500">
+                    <th scope="col" className="py-2 pr-4 font-medium">
+                      Tùy chọn
+                    </th>
+                    <th scope="col" className="py-2 pr-4 font-medium">
+                      Mã
+                    </th>
+                    <th scope="col" className="py-2 text-right font-medium">
+                      Giá
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {variants.map((v) => (
+                    <tr key={v.id} className="border-b border-gray-200 last:border-0">
+                      <td className="py-2.5 pr-4 text-gray-900">{optionsLabel(v) || '—'}</td>
+                      <td className="py-2.5 pr-4 font-mono text-gray-600">{v.sku}</td>
+                      <td className="py-2.5 text-right font-medium text-gray-900">
+                        {formatVND(v.price)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
           ) : null}
 
           {specs.length > 0 ? (
@@ -510,20 +559,40 @@ export default async function Page({ params }: PageProps<'/san-pham/[slug]'>) {
  */
 function ProductJsonLd({ product, brand }: { product: Product; brand: Brand | undefined }) {
   const url = absoluteUrl(`${PRODUCT_PATH}/${product.slug}`)
+  const variants = product.variants
+  const { low, high } = priceRange(product)
 
   const data = {
     '@context': 'https://schema.org',
     '@type': 'Product',
     name: product.name,
-    sku: product.sku,
+    // sku ở cấp Product chỉ khi có đúng một phiên bản; nhiều phiên bản thì
+    // không có SKU nào đại diện được cho cả sản phẩm.
+    ...(variants.length === 1 && variants[0] !== undefined ? { sku: variants[0].sku } : {}),
     description: product.short_description,
     image: product.images,
     // Chỉ khai khi tra được tên thật. `brand` rỗng hay mang uuid là dữ liệu có
     // cấu trúc không khớp nội dung trang — đúng thứ Google phạt.
     ...(brand !== undefined ? { brand: { '@type': 'Brand', name: brand.name } } : {}),
-    offers: {
-      '@type': 'Offer',
-      /*
+    /*
+      Nhiều phiên bản giá khác nhau → AggregateOffer (lowPrice/highPrice), đúng
+      cái Google hiện thành "20.000.000 ₫ – 25.000.000 ₫" trên trang kết quả.
+      Một giá → Offer như cũ. Cả hai nhánh đều dùng chuỗi giá thô — xem chú
+      thích lớn ở `price` bên dưới.
+    */
+    offers: hasPriceRange(product)
+      ? {
+          '@type': 'AggregateOffer',
+          lowPrice: low,
+          highPrice: high,
+          offerCount: variants.length,
+          priceCurrency: product.currency,
+          availability: 'https://schema.org/InStock',
+          url,
+        }
+      : {
+          '@type': 'Offer',
+          /*
         ====================================================================
         `price` PHẢI là chuỗi số thuần: "25990000". KHÔNG được formatVND.
         ====================================================================
@@ -537,17 +606,17 @@ function ProductJsonLd({ product, brand }: { product: Product; brand: Brand | un
         định dạng hiển thị — xem api/openapi.yaml), nên chỉ việc truyền thẳng.
         Đừng "dọn dẹp" dòng này cho giống các dòng khác trong file.
       */
-      price: product.price,
-      priceCurrency: product.currency,
-      /*
+          price: product.price,
+          priceCurrency: product.currency,
+          /*
         P0 chưa có tồn kho: mọi sản phẩm `live` đều coi là còn hàng. Nói dối
         Google chỗ này rất đắt — khách bấm vào từ kết quả tìm kiếm rồi thấy
         hết hàng sẽ thoát ngay, và Google ghi nhận điều đó.
         TODO P1: lấy `availability` từ tồn kho thật.
       */
-      availability: 'https://schema.org/InStock',
-      url,
-    },
+          availability: 'https://schema.org/InStock',
+          url,
+        },
   }
 
   return (
