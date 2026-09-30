@@ -51,7 +51,6 @@ type ProcessedEvent struct {
 
 type Product struct {
 	ID               uuid.UUID
-	Sku              string
 	Slug             string
 	Name             string
 	ShortDescription string

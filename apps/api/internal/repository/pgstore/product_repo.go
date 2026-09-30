@@ -40,11 +40,7 @@ func (r *ProductRepository) Save(ctx context.Context, p *domain.Product) error {
 	}
 	q := gen.New(r.db.DB(ctx))
 	if err := mapErr(q.UpsertProduct(ctx, gen.UpsertProductParams{
-		ID: p.ID,
-		// EXPAND/CONTRACT: products.sku vẫn NOT NULL tới migration contract.
-		// Ghi SKU của variant đầu tiên để code cũ còn đọc được cột này trong
-		// lúc chuyển đổi. Dòng này BIẾN MẤT cùng migration drop_products_sku.
-		Sku:              p.Variants[0].SKU,
+		ID:               p.ID,
 		Slug:             p.Slug,
 		Name:             p.Name,
 		ShortDescription: p.ShortDescription,
@@ -176,7 +172,7 @@ func (r *ProductRepository) List(ctx context.Context, f usecase.ListFilter) ([]*
 	}
 
 	q := base.Columns(
-		"id", "sku", "slug", "name", "short_description", "category_id", "brand_id",
+		"id", "slug", "name", "short_description", "category_id", "brand_id",
 		"price", "currency", "status", "attributes", "images", "created_at", "updated_at",
 	)
 
@@ -208,7 +204,7 @@ func (r *ProductRepository) List(ctx context.Context, f usecase.ListFilter) ([]*
 	for rows.Next() {
 		var g gen.Product
 		if err := rows.Scan(
-			&g.ID, &g.Sku, &g.Slug, &g.Name, &g.ShortDescription, &g.CategoryID,
+			&g.ID, &g.Slug, &g.Name, &g.ShortDescription, &g.CategoryID,
 			&g.BrandID, &g.Price, &g.Currency, &g.Status, &g.Attributes, &g.Images,
 			&g.CreatedAt, &g.UpdatedAt,
 		); err != nil {
