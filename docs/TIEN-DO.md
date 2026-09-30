@@ -14,7 +14,7 @@
 | **P0.2** | Module `catalog` (lát cắt dọc) | ✅ xong, đã merge |
 | **P0.3** | Outbox + relay + worker | ✅ xong, đã merge |
 | **P0.4** | Storefront Next.js | ✅ xong, đã merge |
-| **P1** | Catalog & PIM | 🟡 **P1.1 → P1.3 xong** — còn P1.4 (media), P1.5 (SEO & storefront), xem [tổng quan](superpowers/specs/2026-09-29-p1-tong-quan.md) |
+| **P1** | Catalog & PIM | 🟡 **P1.1 → P1.4 xong** — còn P1.5 (SEO & storefront), xem [tổng quan](superpowers/specs/2026-09-29-p1-tong-quan.md) |
 
 ---
 
@@ -230,6 +230,46 @@ chối chạy.
 
 ---
 
+## P1.4 — Media ✅
+
+MinIO giữ ảnh gốc, imgproxy thu nhỏ + đổi định dạng; upload bằng **presigned
+POST** thẳng lên storage; `Product.images` giờ là **khóa media** chỉ nhận ảnh
+đã upload xong; storefront bỏ `remotePatterns: '**'`. 33 sản phẩm mẫu đã có
+ảnh thật (upload qua đúng luồng) thay cho URL bịa. Chi tiết:
+[đặc tả](superpowers/specs/2026-09-30-p1-4-media.md).
+
+**Đo hạ tầng TRƯỚC khi thiết kế** (imgproxy chế độ chỉ-preset, chỉ đọc bucket):
+
+| Thử | Kết quả |
+|---|---|
+| Preset `w640` | 1600×1200 → 640×480; AVIF / WebP / JPEG theo `Accept`; cache 1 năm |
+| Tham số tùy ý `rs:fit:5000:5000` | 404 `Invalid URL` — không ai đốt CPU bằng kích thước lạ |
+| Nguồn ngoài `https://example.com/…` | 404 `Invalid source URL` — không thành proxy ảnh internet |
+
+| # | Kiểm | Kết quả |
+|---|---|---|
+| 2 | Upload JPEG, PNG, WebP | cả ba `ready`, khóa `products/<uuidv7>.<đuôi>`; gọi `complete` lần hai an toàn |
+| 3 | 11 MB / đổi Content-Type trong form | MinIO 400 `EntityTooLarge` / 403 `AccessDenied` — API không nhận byte nào |
+| 4 | **File HTML khai `image/png`** | MinIO nhận (policy chỉ so chuỗi khai báo) → `complete` 422 `INVALID_IMAGE`, **object bị xóa** |
+| 5 | `complete` khi chưa upload | 422 `UPLOAD_NOT_FOUND` |
+| 6 | Policy hết hạn | **chưa kiểm** — TTL 15 phút không cấu hình được để thử nhanh |
+| 7 | Sản phẩm với khóa pending + khóa bịa + khóa ready | 422, đúng `images[0]`, `images[1]` |
+| 8 | `/img/w640/<khóa>` | AVIF/WebP/JPEG theo `Accept`, `Vary: Accept`, `immutable` |
+| 9 | 5 URL xấu (preset lạ, `../`, URL ngoài, `.gif`, tham số) | 404 ở Next; **0 request** tới imgproxy |
+| 10 | Chrome: `/danh-muc` + chi tiết | 24/24 ảnh tải được; **0** request `/_next/image`; 0 lỗi |
+| 11 | `/_next/image?url=https://example.com/…` | 404 — hết proxy ảnh ngoài |
+| 12 | og:image / JSON-LD | URL tuyệt đối, tải được từ ngoài (200) |
+
+**Tưởng là lỗi, đo lại thì không:** lần đầu đọc header thấy `Vary` của Next
+(`rsc, next-router-…`) mà không thấy `Accept`. Đọc `send-response.js`: Next
+**nối thêm** chứ không ghi đè — response có HAI dòng `Vary`, và RFC 9110 gộp
+chúng. Công cụ đo chỉ lấy dòng đầu.
+
+Production: config **từ chối khởi động** nếu `S3_SECRET_KEY` còn là mật khẩu
+MinIO dev (đã thử với `APP_ENV=production`).
+
+---
+
 ## P1.3 — Thuộc tính động theo danh mục ✅
 
 Định nghĩa thuộc tính (kiểu text/number/boolean/enum, đơn vị, lọc được, thuộc
@@ -349,8 +389,11 @@ chặn SELECT lẫn khóa FK khi ghi sản phẩm.
 | **At-least-once, không exactly-once** | Consumer bắt buộc idempotent. Không có cách nào bỏ yêu cầu này |
 | **Backoff cố định 30 giây** | `x-message-ttl` hết hạn theo thứ tự đầu hàng, nên không đặt TTL riêng từng message được |
 | **Trang lỗi trả HTTP 200** | API chết thì `/danh-muc` hiện `<ErrorState>` với status 200 — App Router không cho Server Component đặt 503. Crawler có thể index trang lỗi nếu API chết đúng lúc nó ghé |
-| **Dữ liệu mẫu dùng ảnh bịa** | `https://vi.du/anh.jpg` làm `/_next/image` trả 500. Kèm theo: `remotePatterns` đang cho `hostname: '**'` — lỗ hổng lạm dụng băng thông/SSRF, P1 phải siết về CDN thật (đã có TODO trong `next.config.ts`) |
 | **Ký hiệu ₫ không có trong Geist** | Hiện bằng font dự phòng — y như bản Google Fonts trước đây |
+| **File upload dở không ai dọn** | `media` pending mà không bao giờ `complete` để lại object mồ côi. Cần job dọn hoặc lifecycle rule của bucket |
+| **Ảnh cũ chỉ bị kiểm khi ghi lại ảnh** | Sản phẩm có URL cũ vẫn sửa được giá, phiên bản; chỉ lệnh đặt `images` hoặc publish mới kiểm |
+| **`imgproxy:latest`, `minio:latest` chưa ghim phiên bản** | Nên ghim tag trước production |
+| **`<Image priority>` đã deprecated ở Next 16** | Vẫn chạy (preload đúng srcset `/img/*`), nên đổi sang `preload` |
 | **Facet chọn một giá trị mỗi nhóm, đếm conjunctive** | "8GB hoặc 16GB" cần API hỗ trợ OR; số đếm áp cả bộ lọc của chính nhóm đó (P1.3) |
 | **Chưa lọc khoảng số** | `RAM ≥ 16` chưa có — chỉ lọc bằng đúng giá trị |
 | **Dữ liệu cũ chỉ bị kiểm ở lần ghi kế tiếp** | Bật chế độ chặt cho danh mục hay bỏ giá trị enum không sửa dữ liệu đã lưu; sản phẩm sai báo lỗi khi sửa lần sau |

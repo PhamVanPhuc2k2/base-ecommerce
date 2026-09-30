@@ -33,6 +33,16 @@ x-go-env: &go-env
   # PHẢI lớn hơn HTTP_HANDLER_TIMEOUT — config từ chối khởi động nếu sai.
   HTTP_WRITE_TIMEOUT: ${HTTP_WRITE_TIMEOUT:-35s}
   HTTP_SHUTDOWN_TIMEOUT: ${HTTP_SHUTDOWN_TIMEOUT:-30s}
+  # Object storage (P1.4): S3/R2 thật, KHÔNG chạy MinIO trên VPS — ảnh gốc là
+  # dữ liệu không được mất cùng ổ đĩa của máy chủ. Config từ chối khởi động nếu
+  # S3_SECRET_KEY còn là mật khẩu dev.
+  S3_ENDPOINT: ${S3_ENDPOINT}
+  S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-${S3_ENDPOINT}}
+  S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+  S3_SECRET_KEY: ${S3_SECRET_KEY}
+  S3_BUCKET: ${S3_BUCKET:-catalog}
+  S3_REGION: ${S3_REGION:-auto}
+  S3_USE_SSL: "true"
 
 x-logging: &logging
   driver: json-file
@@ -123,6 +133,8 @@ services:
       # tín hiệu xếp hạng về localhost và trang thật biến mất khỏi kết quả tìm
       # kiếm — không lỗi nào báo. `:?` làm compose TỪ CHỐI chạy khi thiếu biến.
       SITE_URL: ${SITE_URL:?SITE_URL phải là tên miền thật, ví dụ https://example.vn}
+      IMGPROXY_URL: http://imgproxy:8080
+      IMGPROXY_SOURCE_PREFIX: s3://${S3_BUCKET:-catalog}/
     # Chỉ loopback, giống api: reverse proxy trên cùng máy mới chạm tới.
     ports: ["127.0.0.1:3000:3000"]
     depends_on:
@@ -139,6 +151,36 @@ services:
     # thoát (exit 143 là CỐ Ý, xem apps/web/Dockerfile). Request storefront chờ
     # backend tối đa HTTP_HANDLER_TIMEOUT, nên phải dài hơn con số đó.
     stop_grace_period: 40s
+    logging: *logging
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 512M }
+
+  # imgproxy đọc ảnh từ S3 thật. Cùng hai lớp chặn như dev (chỉ-preset, chỉ đọc
+  # bucket) — xem deploy/compose.dev.yml. Không mở cổng: storefront gọi nó qua
+  # mạng nội bộ; nên cấu hình reverse proxy chuyển /img/* thẳng tới đây để bỏ
+  # một chặng qua Node (thiết kế 05).
+  imgproxy:
+    image: ghcr.io/imgproxy/imgproxy:${IMGPROXY_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      IMGPROXY_USE_S3: "true"
+      IMGPROXY_S3_ENDPOINT: https://${S3_ENDPOINT}
+      IMGPROXY_S3_REGION: ${S3_REGION:-auto}
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
+      IMGPROXY_ALLOWED_SOURCES: s3://${S3_BUCKET:-catalog}/
+      IMGPROXY_ONLY_PRESETS: "true"
+      # PHẢI khớp compose.dev.yml và apps/web/lib/image-loader.ts.
+      IMGPROXY_PRESETS: w128=rs:fit:128:0,w256=rs:fit:256:0,w384=rs:fit:384:0,w640=rs:fit:640:0,w828=rs:fit:828:0,w1080=rs:fit:1080:0,w1920=rs:fit:1920:0
+      IMGPROXY_AUTO_WEBP: "true"
+      IMGPROXY_AUTO_AVIF: "true"
+      IMGPROXY_TTL: "31536000"
+    healthcheck:
+      test: ["CMD", "imgproxy", "health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
     logging: *logging
     deploy:
       resources:
