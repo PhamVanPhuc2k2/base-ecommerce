@@ -56,40 +56,42 @@ func newBase(aggregateID uuid.UUID) baseEvent {
 	return baseEvent{id: id, aggregateID: aggregateID, occurredAt: time.Now().UTC()}
 }
 
-// sku và slug không xuất khẩu: chúng chỉ tồn tại để dựng payload, không phải
-// một hợp đồng cho code ngoài package domain đọc trực tiếp.
+// slug không xuất khẩu: nó chỉ tồn tại để dựng payload, không phải một hợp
+// đồng cho code ngoài package domain đọc trực tiếp.
+//
+// Payload từng có "sku". P1.2 bỏ nó: một sản phẩm giờ có nhiều SKU (mỗi variant
+// một cái), và nhét cả danh sách vào payload là làm dày đúng thứ thiết kế đòi
+// giữ mỏng. Consumer cần SKU thì đọc lại sản phẩm theo aggregate.id. Đây là
+// thay đổi hợp đồng dây — worker P0.3 chỉ ghi log nên không vỡ.
 type ProductCreated struct {
 	baseEvent
-	sku  string
 	slug string
 }
 
 func (ProductCreated) EventType() string     { return "product.created" }
 func (ProductCreated) AggregateType() string { return "product" }
 func (e ProductCreated) Payload() any {
-	return map[string]string{"sku": e.sku, "slug": e.slug}
+	return map[string]string{"slug": e.slug}
 }
 
 type ProductUpdated struct {
 	baseEvent
-	sku  string
 	slug string
 }
 
 func (ProductUpdated) EventType() string     { return "product.updated" }
 func (ProductUpdated) AggregateType() string { return "product" }
 func (e ProductUpdated) Payload() any {
-	return map[string]string{"sku": e.sku, "slug": e.slug}
+	return map[string]string{"slug": e.slug}
 }
 
 type ProductPublished struct {
 	baseEvent
-	sku  string
 	slug string
 }
 
 func (ProductPublished) EventType() string     { return "product.published" }
 func (ProductPublished) AggregateType() string { return "product" }
 func (e ProductPublished) Payload() any {
-	return map[string]string{"sku": e.sku, "slug": e.slug}
+	return map[string]string{"slug": e.slug}
 }

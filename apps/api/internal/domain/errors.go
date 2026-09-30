@@ -67,6 +67,20 @@ var (
 	ErrUnknownBrand = errs.New(errs.KindNotFound, "UNKNOWN_BRAND",
 		"Không tìm thấy thương hiệu")
 
+	// Biến thể (P1.2).
+	ErrVariantRequired = errs.New(errs.KindValidation, "VARIANT_REQUIRED",
+		"Sản phẩm phải có ít nhất một phiên bản")
+	ErrInvalidVariantOptions = errs.New(errs.KindValidation, "INVALID_VARIANT_OPTIONS",
+		"Tùy chọn phiên bản không hợp lệ: tối đa 10 cặp, tên và giá trị không được rỗng")
+	ErrInvalidVariantStatus = errs.New(errs.KindValidation, "INVALID_VARIANT_STATUS",
+		"Trạng thái phiên bản không hợp lệ")
+	ErrNoActiveVariant = errs.New(errs.KindValidation, "NO_ACTIVE_VARIANT",
+		"Sản phẩm đang bán phải còn ít nhất một phiên bản đang bán")
+	ErrDuplicateVariantOptions = errs.New(errs.KindConflict, "DUPLICATE_VARIANT_OPTIONS",
+		"Đã có phiên bản khác với đúng các tùy chọn này")
+	ErrUnknownVariant = errs.New(errs.KindNotFound, "UNKNOWN_VARIANT",
+		"Không tìm thấy phiên bản này của sản phẩm")
+
 	ErrInvalidPagination = errs.New(errs.KindInvalid, "INVALID_PAGINATION",
 		"Tham số phân trang không hợp lệ")
 
