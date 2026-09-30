@@ -835,7 +835,7 @@ components:
       properties:
         code:    { type: string }
         name:    { type: string }
-        type:    { type: string }
+        type:    { type: string, enum: [text, number, boolean, enum] }
         unit:    { type: string }
         variant: { type: boolean }
         values:

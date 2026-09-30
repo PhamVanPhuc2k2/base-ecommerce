@@ -8,6 +8,7 @@ import { ErrorState } from '@/components/error-state'
 import { ApiError } from '@/lib/api/error'
 import type { components } from '@/lib/api/generated/schema'
 import { apiGet } from '@/lib/api/server'
+import { formatAttrValue, indexAttributes } from '@/lib/attributes'
 import { formatDate, formatVND } from '@/lib/format'
 import { absoluteUrl } from '@/lib/site'
 import { hasPriceRange, optionsLabel, priceRange } from '@/lib/variants'
@@ -15,6 +16,7 @@ import { hasPriceRange, optionsLabel, priceRange } from '@/lib/variants'
 type Product = components['schemas']['Product']
 type Category = components['schemas']['Category']
 type Brand = components['schemas']['Brand']
+type Attribute = components['schemas']['Attribute']
 
 /**
  * ISR 60 giây (README mục 7.2).
@@ -145,6 +147,23 @@ const loadBrands = cache(async (): Promise<Brand[]> => {
 })
 
 /**
+ * Mọi định nghĩa thuộc tính, để đổi mã (`ram`) ra tên và đơn vị ("RAM: 16 GB")
+ * trong bảng thông số. Cùng khuôn loadBrands: ISR một giờ, hỏng thì mảng rỗng
+ * và bảng hiện nguyên mã — vẫn đọc được, chỉ kém đẹp.
+ */
+const loadAttributes = cache(async (): Promise<Attribute[]> => {
+  try {
+    const body = await apiGet<{ data: Attribute[] }>('/attributes', {
+      tags: ['attributes'],
+      revalidate: BRAND_REVALIDATE,
+    })
+    return body.data
+  } catch {
+    return []
+  }
+})
+
+/**
  * Đường đi từ gốc tới danh mục có `id` cho trước, ví dụ
  * [Máy tính, Laptop, Laptop Gaming].
  *
@@ -255,11 +274,13 @@ export default async function Page({ params }: PageProps<'/san-pham/[slug]'>) {
     phát sinh request mới — `generateMetadata` đã gọi nó trong cùng request nên
     kết quả lấy từ bộ nhớ đệm của `cache()`.
   */
-  const [loaded, tree, brands] = await Promise.all([
+  const [loaded, tree, brands, attributes] = await Promise.all([
     loadProduct(slug),
     loadCategoryTree(),
     loadBrands(),
+    loadAttributes(),
   ])
+  const defs = indexAttributes(attributes)
 
   /*
     ======================================================================
@@ -486,7 +507,7 @@ export default async function Page({ params }: PageProps<'/san-pham/[slug]'>) {
                 <tbody>
                   {variants.map((v) => (
                     <tr key={v.id} className="border-b border-gray-200 last:border-0">
-                      <td className="py-2.5 pr-4 text-gray-900">{optionsLabel(v) || '—'}</td>
+                      <td className="py-2.5 pr-4 text-gray-900">{optionsLabel(v, defs) || '—'}</td>
                       <td className="py-2.5 pr-4 font-mono text-gray-600">{v.sku}</td>
                       <td className="py-2.5 text-right font-medium text-gray-900">
                         {formatVND(v.price)}
@@ -522,9 +543,11 @@ export default async function Page({ params }: PageProps<'/san-pham/[slug]'>) {
                         scope="row"
                         className="w-2/5 py-2.5 pr-4 text-left font-medium text-gray-500"
                       >
-                        {key}
+                        {defs.get(key)?.name ?? key}
                       </th>
-                      <td className="py-2.5 text-gray-900">{value}</td>
+                      <td className="py-2.5 text-gray-900">
+                        {formatAttrValue(defs.get(key), value)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

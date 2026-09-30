@@ -539,7 +539,8 @@ export interface components {
         Facet: {
             code: string;
             name: string;
-            type: string;
+            /** @enum {string} */
+            type: "text" | "number" | "boolean" | "enum";
             unit: string;
             variant: boolean;
             /** @description Nhiều sản phẩm trước, rồi theo giá trị. */

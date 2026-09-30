@@ -1,7 +1,9 @@
 import type { components } from '@/lib/api/generated/schema'
+import { formatAttrValue } from '@/lib/attributes'
 
 type Product = components['schemas']['Product']
 type Variant = components['schemas']['Variant']
+type Attribute = components['schemas']['Attribute']
 
 /**
  * So hai giá dạng chuỗi thập phân, CHỈ để so lớn nhỏ — không bao giờ để hiển
@@ -37,9 +39,16 @@ export function hasPriceRange(p: Product): boolean {
   return cmp(low, high) !== 0
 }
 
-/** Nhãn tùy chọn dạng "RAM: 16GB · Màu: Đen"; phiên bản không tùy chọn trả chuỗi rỗng. */
-export function optionsLabel(v: Variant): string {
+/**
+ * Nhãn tùy chọn dạng "RAM: 16 GB · Màu: Đen"; phiên bản không tùy chọn trả
+ * chuỗi rỗng. Có định nghĩa thì dùng tên + đơn vị, không có (danh mục ở chế độ
+ * tự do) thì hiện nguyên mã và giá trị.
+ */
+export function optionsLabel(v: Variant, defs?: Map<string, Attribute>): string {
   return Object.entries(v.options)
-    .map(([k, val]) => `${k}: ${val}`)
+    .map(([k, val]) => {
+      const def = defs?.get(k)
+      return `${def?.name ?? k}: ${formatAttrValue(def, val)}`
+    })
     .join(' · ')
 }
