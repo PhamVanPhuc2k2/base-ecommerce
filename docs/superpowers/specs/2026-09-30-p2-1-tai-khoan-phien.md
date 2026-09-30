@@ -71,11 +71,15 @@ IP). Vượt → 429 `RATE_LIMITED` + `Retry-After`. Redis chết → cho qua (t
 ## 3. Schema
 
 ```sql
-users (id, email citext UNIQUE, password_hash, full_name, status active|disabled,
-       email_verified_at, created_at, updated_at)
+users (id, email UNIQUE + CHECK (email = lower(btrim(email))), password_hash,
+       full_name, status active|disabled, email_verified_at, created_at, updated_at)
 refresh_tokens (id, family_id, user_id, token_hash UNIQUE, expires_at,
                 used_at, revoked_at, created_at)
 ```
+
+(Bản đầu ghi `email citext`. Đổi khi viết migration: domain vốn phải chuẩn hóa
+email để so sánh trong Go, nên thêm extension chỉ để so sánh không phân biệt
+hoa thường là thừa; ràng buộc CHECK chặn SQL tay ghi email chưa chuẩn hóa.)
 
 ## 4. Kiểm chứng
 
