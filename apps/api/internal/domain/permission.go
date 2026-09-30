@@ -19,6 +19,7 @@ const (
 	PermCatalogTaxonomyWrite Permission = "catalog.taxonomy.write"
 	PermMediaUpload          Permission = "media.upload"
 	PermIAMRolesManage       Permission = "iam.roles.manage"
+	PermInventoryManage      Permission = "inventory.manage"
 )
 
 // PermissionInfo mô tả một quyền cho màn hình quản trị.
@@ -34,6 +35,7 @@ var AllPermissions = []PermissionInfo{
 	{PermCatalogTaxonomyWrite, "Quản lý danh mục, thương hiệu, định nghĩa thuộc tính"},
 	{PermMediaUpload, "Tải ảnh lên kho"},
 	{PermIAMRolesManage, "Quản lý vai trò và phân vai trò cho người dùng"},
+	{PermInventoryManage, "Quản lý kho, nhập hàng, điều chỉnh và kiểm kê tồn kho"},
 }
 
 func (p Permission) Valid() bool {

@@ -85,6 +85,16 @@ func (h *Handler) Mount(r chi.Router) {
 		})
 
 		r.Group(func(r chi.Router) {
+			r.Use(h.RequirePermission(domain.PermInventoryManage))
+			r.Get("/locations", httpx.Wrap(h.ListLocations))
+			r.Post("/locations", httpx.Wrap(h.CreateLocation))
+			r.Patch("/locations/{id}", httpx.Wrap(h.UpdateLocation))
+			r.Post("/stock/movements", httpx.Wrap(h.RecordStockMovement))
+			r.Get("/stock/movements", httpx.Wrap(h.ListStockMovements))
+			r.Get("/variants/{id}/stock", httpx.Wrap(h.VariantStock))
+		})
+
+		r.Group(func(r chi.Router) {
 			r.Use(h.RequirePermission(domain.PermIAMRolesManage))
 			r.Get("/permissions", httpx.Wrap(h.ListPermissions))
 			r.Get("/roles", httpx.Wrap(h.ListRoles))

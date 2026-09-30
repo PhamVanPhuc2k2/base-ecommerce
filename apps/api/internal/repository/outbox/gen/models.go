@@ -62,6 +62,19 @@ type CategoryAttribute struct {
 	Position    int32
 }
 
+type Location struct {
+	ID          uuid.UUID
+	Code        string
+	Name        string
+	Kind        string
+	Address     *string
+	SellsOnline bool
+	Priority    int32
+	Active      bool
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
 type Medium struct {
 	ID          uuid.UUID
 	ObjectKey   string
@@ -164,6 +177,30 @@ type Role struct {
 type RolePermission struct {
 	RoleID     uuid.UUID
 	Permission string
+}
+
+type StockLevel struct {
+	LocationID uuid.UUID
+	VariantID  uuid.UUID
+	OnHand     int32
+	Reserved   int32
+	UpdatedAt  time.Time
+}
+
+type StockMovement struct {
+	ID             uuid.UUID
+	LocationID     uuid.UUID
+	VariantID      uuid.UUID
+	Kind           string
+	OnHandDelta    int32
+	ReservedDelta  int32
+	OnHandAfter    int32
+	ReservedAfter  int32
+	Reason         *string
+	Ref            *string
+	ActorID        pgtype.UUID
+	IdempotencyKey *string
+	CreatedAt      time.Time
 }
 
 type User struct {

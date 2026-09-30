@@ -174,6 +174,40 @@ var (
 	ErrUnknownAddress = errs.New(errs.KindNotFound, "UNKNOWN_ADDRESS",
 		"Không tìm thấy địa chỉ")
 
+	// Kho và tồn kho (P3.1).
+	ErrInvalidLocationCode = errs.New(errs.KindValidation, "INVALID_LOCATION_CODE",
+		"Mã kho chỉ gồm chữ thường không dấu, số và dấu gạch ngang, tối đa 32 ký tự")
+	ErrLocationNameInvalid = errs.New(errs.KindValidation, "LOCATION_NAME_INVALID",
+		"Tên kho là bắt buộc và tối đa 100 ký tự")
+	ErrInvalidLocationKind = errs.New(errs.KindValidation, "INVALID_LOCATION_KIND",
+		"Loại kho phải là warehouse hoặc showroom")
+	ErrLocationAddressRequired = errs.New(errs.KindValidation, "LOCATION_ADDRESS_REQUIRED",
+		"Showroom phải có địa chỉ (tối đa 255 ký tự)")
+	ErrDuplicateLocationCode = errs.New(errs.KindConflict, "DUPLICATE_LOCATION_CODE",
+		"Mã kho này đã tồn tại")
+	ErrUnknownLocation = errs.New(errs.KindNotFound, "UNKNOWN_LOCATION",
+		"Không tìm thấy kho")
+	ErrLocationNotFound = errs.New(errs.KindValidation, "LOCATION_NOT_FOUND",
+		"Kho không tồn tại")
+	ErrLocationInactive = errs.New(errs.KindValidation, "LOCATION_INACTIVE",
+		"Kho đã ngừng hoạt động, không nhập hàng vào được")
+	ErrVariantNotFound = errs.New(errs.KindValidation, "VARIANT_NOT_FOUND",
+		"Phiên bản sản phẩm không tồn tại")
+	ErrInvalidMovementKind = errs.New(errs.KindValidation, "INVALID_MOVEMENT_KIND",
+		"Loại thao tác phải là receipt, adjustment hoặc count")
+	ErrInvalidQuantity = errs.New(errs.KindValidation, "INVALID_QUANTITY",
+		"Số lượng không hợp lệ")
+	ErrStockReasonRequired = errs.New(errs.KindValidation, "STOCK_REASON_REQUIRED",
+		"Điều chỉnh và kiểm kê phải ghi lý do (tối đa 500 ký tự; mã chứng từ tối đa 100)")
+	ErrInsufficientStock = errs.New(errs.KindConflict, "INSUFFICIENT_STOCK",
+		"Không đủ tồn kho — số tồn không được thấp hơn phần đã giữ cho đơn hàng")
+	ErrIdempotencyKeyReused = errs.New(errs.KindValidation, "IDEMPOTENCY_KEY_REUSED",
+		"Idempotency-Key này đã dùng cho một yêu cầu khác")
+	ErrInvalidIdempotencyKey = errs.New(errs.KindInvalid, "INVALID_IDEMPOTENCY_KEY",
+		"Idempotency-Key tối đa 100 ký tự")
+	ErrInvalidMovementFilter = errs.New(errs.KindInvalid, "INVALID_MOVEMENT_FILTER",
+		"variant_id, location_id, cursor phải là UUID; limit phải là số")
+
 	ErrInvalidPagination = errs.New(errs.KindInvalid, "INVALID_PAGINATION",
 		"Tham số phân trang không hợp lệ")
 
