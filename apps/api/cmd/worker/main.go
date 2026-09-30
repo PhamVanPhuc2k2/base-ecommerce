@@ -120,6 +120,11 @@ func run() error {
 	g.Go(func() error {
 		return rabbitmq.NewConsumer(cfg.RabbitMQ, rabbitmq.QueueMailer, log).Run(gctx, m.handle)
 	})
+	g.Go(func() error {
+		reservations := usecase.NewReservations(txManager, pgstore.NewReservationRepository(txManager),
+			pgstore.NewStockRepository(txManager))
+		return runExpirySweeper(gctx, reservations, log)
+	})
 	if err := g.Wait(); err != nil {
 		return err
 	}

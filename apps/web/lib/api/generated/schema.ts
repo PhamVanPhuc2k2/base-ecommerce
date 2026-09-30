@@ -552,6 +552,83 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/reservations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Giữ hàng cho một đơn — tự phân bổ theo ưu tiên kho
+         * @description Kho ứng viên: đang hoạt động và bán online, theo priority. Một kho đủ thì lấy cả ở đó, không thì gom theo ưu tiên. Thiếu bất kỳ dòng nào → 409 INSUFFICIENT_STOCK, errors[] chỉ dòng thiếu, không giữ gì. Gửi lại cùng ref + cùng hàng → 200 + giữ chỗ cũ + Idempotent-Replayed. P4 gọi use case trực tiếp; route này để vận hành và kiểm chứng.
+         */
+        post: operations["createReservation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/reservations/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Một lượt giữ hàng */
+        get: operations["getReservation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/reservations/{id}/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Nhả giữ chỗ (hủy đơn) — reserved giảm */
+        post: operations["releaseReservation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/reservations/{id}/commit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Xuất kho — on_hand và reserved cùng giảm */
+        post: operations["commitReservation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/media": {
         parameters: {
             query?: never;
@@ -829,7 +906,7 @@ export interface components {
              * @description Mã ổn định để frontend map sang thông điệp tiếng Việt.
              * @enum {string}
              */
-            code: "INTERNAL_ERROR" | "IMAGE_TOO_LARGE" | "INVALID_CREDENTIALS" | "INVALID_REFRESH_TOKEN" | "ACCOUNT_DISABLED" | "INVALID_OTP" | "EMAIL_ALREADY_VERIFIED" | "ADDRESS_LIMIT_REACHED" | "UNKNOWN_ADDRESS" | "INVALID_LOCATION_CODE" | "LOCATION_NAME_INVALID" | "INVALID_LOCATION_KIND" | "LOCATION_ADDRESS_REQUIRED" | "DUPLICATE_LOCATION_CODE" | "UNKNOWN_LOCATION" | "LOCATION_NOT_FOUND" | "LOCATION_INACTIVE" | "VARIANT_NOT_FOUND" | "INVALID_MOVEMENT_KIND" | "INVALID_QUANTITY" | "STOCK_REASON_REQUIRED" | "INSUFFICIENT_STOCK" | "IDEMPOTENCY_KEY_REUSED" | "INVALID_IDEMPOTENCY_KEY" | "INVALID_MOVEMENT_FILTER" | "FORBIDDEN" | "RATE_LIMITED" | "INVALID_PAGINATION" | "MALFORMED_REQUEST" | "METHOD_NOT_ALLOWED" | "PAYLOAD_TOO_LARGE" | "REQUEST_CANCELED" | "REQUEST_TIMEOUT" | "ROUTE_NOT_FOUND" | "UNAUTHENTICATED" | "VALIDATION_FAILED" | "INVALID_SKU" | "NAME_REQUIRED" | "NAME_TOO_LONG" | "INVALID_PRICE" | "UNSUPPORTED_CURRENCY" | "INVALID_SLUG" | "NO_IMAGE" | "PRICE_REQUIRED" | "INVALID_STATUS" | "CATEGORY_NOT_FOUND" | "BRAND_NOT_FOUND" | "CATEGORY_NAME_INVALID" | "BRAND_NAME_INVALID" | "CATEGORY_CYCLE" | "VARIANT_REQUIRED" | "INVALID_VARIANT_OPTIONS" | "INVALID_VARIANT_STATUS" | "NO_ACTIVE_VARIANT" | "INVALID_ATTRIBUTE_CODE" | "INVALID_EMAIL" | "WEAK_PASSWORD" | "INVALID_ROLE_CODE" | "ROLE_NAME_INVALID" | "UNKNOWN_PERMISSION" | "SYSTEM_ROLE_IMMUTABLE" | "CANNOT_CHANGE_OWN_ROLES" | "ROLE_NOT_FOUND" | "FULL_NAME_INVALID" | "UNSUPPORTED_IMAGE_TYPE" | "INVALID_IMAGE" | "UPLOAD_NOT_FOUND" | "ATTRIBUTE_NAME_INVALID" | "INVALID_ATTRIBUTE_TYPE" | "INVALID_ATTRIBUTE_OPTIONS" | "ATTRIBUTE_NOT_FOUND" | "DUPLICATE_ATTRIBUTE_ASSIGNMENT" | "ALREADY_PUBLISHED" | "DUPLICATE_SKU" | "DUPLICATE_SLUG" | "DUPLICATE_CATEGORY_SLUG" | "DUPLICATE_BRAND_SLUG" | "CATEGORY_HAS_CHILDREN" | "CATEGORY_HAS_PRODUCTS" | "BRAND_HAS_PRODUCTS" | "DUPLICATE_VARIANT_OPTIONS" | "DUPLICATE_ATTRIBUTE_CODE" | "EMAIL_TAKEN" | "DUPLICATE_ROLE_CODE" | "ROLE_IN_USE" | "ATTRIBUTE_IN_USE" | "PRODUCT_NOT_FOUND" | "UNKNOWN_CATEGORY" | "UNKNOWN_BRAND" | "UNKNOWN_VARIANT" | "UNKNOWN_ATTRIBUTE" | "UNKNOWN_MEDIA" | "UNKNOWN_ROLE" | "UNKNOWN_USER" | "INVALID_SORT" | "PAGE_TOO_DEEP";
+            code: "INTERNAL_ERROR" | "IMAGE_TOO_LARGE" | "INVALID_CREDENTIALS" | "INVALID_REFRESH_TOKEN" | "ACCOUNT_DISABLED" | "INVALID_OTP" | "EMAIL_ALREADY_VERIFIED" | "ADDRESS_LIMIT_REACHED" | "UNKNOWN_ADDRESS" | "INVALID_LOCATION_CODE" | "LOCATION_NAME_INVALID" | "INVALID_LOCATION_KIND" | "LOCATION_ADDRESS_REQUIRED" | "DUPLICATE_LOCATION_CODE" | "UNKNOWN_LOCATION" | "LOCATION_NOT_FOUND" | "LOCATION_INACTIVE" | "VARIANT_NOT_FOUND" | "INVALID_MOVEMENT_KIND" | "INVALID_QUANTITY" | "STOCK_REASON_REQUIRED" | "INSUFFICIENT_STOCK" | "IDEMPOTENCY_KEY_REUSED" | "INVALID_IDEMPOTENCY_KEY" | "INVALID_MOVEMENT_FILTER" | "INVALID_RESERVATION" | "RESERVATION_REF_REUSED" | "UNKNOWN_RESERVATION" | "RESERVATION_NOT_ACTIVE" | "FORBIDDEN" | "RATE_LIMITED" | "INVALID_PAGINATION" | "MALFORMED_REQUEST" | "METHOD_NOT_ALLOWED" | "PAYLOAD_TOO_LARGE" | "REQUEST_CANCELED" | "REQUEST_TIMEOUT" | "ROUTE_NOT_FOUND" | "UNAUTHENTICATED" | "VALIDATION_FAILED" | "INVALID_SKU" | "NAME_REQUIRED" | "NAME_TOO_LONG" | "INVALID_PRICE" | "UNSUPPORTED_CURRENCY" | "INVALID_SLUG" | "NO_IMAGE" | "PRICE_REQUIRED" | "INVALID_STATUS" | "CATEGORY_NOT_FOUND" | "BRAND_NOT_FOUND" | "CATEGORY_NAME_INVALID" | "BRAND_NAME_INVALID" | "CATEGORY_CYCLE" | "VARIANT_REQUIRED" | "INVALID_VARIANT_OPTIONS" | "INVALID_VARIANT_STATUS" | "NO_ACTIVE_VARIANT" | "INVALID_ATTRIBUTE_CODE" | "INVALID_EMAIL" | "WEAK_PASSWORD" | "INVALID_ROLE_CODE" | "ROLE_NAME_INVALID" | "UNKNOWN_PERMISSION" | "SYSTEM_ROLE_IMMUTABLE" | "CANNOT_CHANGE_OWN_ROLES" | "ROLE_NOT_FOUND" | "FULL_NAME_INVALID" | "UNSUPPORTED_IMAGE_TYPE" | "INVALID_IMAGE" | "UPLOAD_NOT_FOUND" | "ATTRIBUTE_NAME_INVALID" | "INVALID_ATTRIBUTE_TYPE" | "INVALID_ATTRIBUTE_OPTIONS" | "ATTRIBUTE_NOT_FOUND" | "DUPLICATE_ATTRIBUTE_ASSIGNMENT" | "ALREADY_PUBLISHED" | "DUPLICATE_SKU" | "DUPLICATE_SLUG" | "DUPLICATE_CATEGORY_SLUG" | "DUPLICATE_BRAND_SLUG" | "CATEGORY_HAS_CHILDREN" | "CATEGORY_HAS_PRODUCTS" | "BRAND_HAS_PRODUCTS" | "DUPLICATE_VARIANT_OPTIONS" | "DUPLICATE_ATTRIBUTE_CODE" | "EMAIL_TAKEN" | "DUPLICATE_ROLE_CODE" | "ROLE_IN_USE" | "ATTRIBUTE_IN_USE" | "PRODUCT_NOT_FOUND" | "UNKNOWN_CATEGORY" | "UNKNOWN_BRAND" | "UNKNOWN_VARIANT" | "UNKNOWN_ATTRIBUTE" | "UNKNOWN_MEDIA" | "UNKNOWN_ROLE" | "UNKNOWN_USER" | "INVALID_SORT" | "PAGE_TOO_DEEP";
             /**
              * @description Luôn có mặt trong response (không bao giờ bị lược bỏ), nhưng có
              *     thể là chuỗi rỗng nếu middleware RequestID chưa gán được giá trị.
@@ -1065,6 +1142,37 @@ export interface components {
                 /** @description Chỉ kho đang hoạt động và bán online */
                 online_available: number;
             };
+        };
+        ReserveRequest: {
+            /** @description Mã đơn — khóa idempotency */
+            ref: string;
+            items: {
+                /** Format: uuid */
+                variant_id: string;
+                quantity: number;
+            }[];
+            /** @description Bỏ trống = không hết hạn (COD) */
+            ttl_seconds?: number;
+        };
+        Reservation: {
+            /** Format: uuid */
+            id: string;
+            ref: string;
+            /** @enum {string} */
+            status: "active" | "committed" | "released" | "expired";
+            /** Format: date-time */
+            expires_at: string | null;
+            lines: {
+                /** Format: uuid */
+                variant_id: string;
+                /** Format: uuid */
+                location_id: string;
+                quantity: number;
+            }[];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
         };
         Address: {
             /** Format: uuid */
@@ -2408,6 +2516,130 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createReservation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReserveRequest"];
+            };
+        };
+        responses: {
+            /** @description Gửi lại cùng ref — giữ chỗ cũ */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Reservation"];
+                };
+            };
+            /** @description Đã giữ */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Reservation"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getReservation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Reservation"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    releaseReservation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Đã nhả */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Reservation"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    commitReservation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Đã xuất kho */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Reservation"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
             500: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };

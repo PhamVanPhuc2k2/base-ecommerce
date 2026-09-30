@@ -16,7 +16,7 @@
 | **P0.4** | Storefront Next.js | ✅ xong, đã merge |
 | **P1** | Catalog & PIM | ✅ **P1.1 → P1.5 xong** — xem [tổng quan](superpowers/specs/2026-09-29-p1-tong-quan.md) |
 | **P2** | Identity | ✅ **Xong** — tài khoản + phiên, RBAC, OTP email, trang tài khoản + sổ địa chỉ trên storefront, xem [tổng quan](superpowers/specs/2026-09-30-p2-tong-quan.md) |
-| **P3** | Inventory & Pricing | 🟡 **P3.1 xong** (kho + tồn + sổ cái) — còn P3.2 giữ chỗ, P3.3 bảng giá, P3.4 storefront, xem [tổng quan](superpowers/specs/2026-09-30-p3-tong-quan.md) |
+| **P3** | Inventory & Pricing | 🟡 **P3.1–P3.2 xong** (kho + tồn + sổ cái, giữ chỗ) — còn P3.3 bảng giá, P3.4 storefront, xem [tổng quan](superpowers/specs/2026-09-30-p3-tong-quan.md) |
 
 ---
 
@@ -229,6 +229,42 @@ Ngoài ra: `compose.prod.yml` thêm `web`, và mở `worker` + `outboxrelay` (v�
 comment dù P0.3 đã xong), kèm `RABBITMQ_URL` còn thiếu. Biến chung tách thành
 anchor `x-go-env` vì `<<` của YAML chỉ gộp nông. Thiếu `SITE_URL` thì compose từ
 chối chạy.
+
+---
+
+## P3.2 — Giữ chỗ tồn kho ✅
+
+- **Ba thao tác:** giữ, nhả, xuất kho. Mỗi lần đổi tồn ghi một dòng sổ cái
+  `reserve` / `release` / `commit`.
+- **Phân bổ:** kho đang hoạt động + bán online, theo ưu tiên. Một kho đủ thì
+  lấy cả ở đó; không thì gom theo ưu tiên. Thiếu bất kỳ dòng nào thì không giữ
+  gì.
+- **Chống deadlock:** khóa mọi dòng tồn của một đơn bằng MỘT câu `FOR UPDATE`,
+  theo thứ tự `(variant_id, location_id)`.
+- **Idempotency:** `ref` (mã đơn) là khóa idempotency.
+- **Hết hạn:** worker quét giữ chỗ hết hạn 30 giây/lần (`SKIP LOCKED`).
+- **P4:** gọi use case `Reservations` trực tiếp.
+- **Chi tiết:** [đặc tả](superpowers/specs/2026-09-30-p3-2-giu-cho.md).
+
+| # | Kiểm | Kết quả |
+|---|---|---|
+| 1 | `task check` | qua (100 mã lỗi) |
+| 2 | A (ưu tiên 10) = 3, B (20) = 10, C (5, KHÔNG bán online) = 100; giữ 2 | lấy ở A |
+| 3 | Giữ 5 khi A còn 1 | lấy cả 5 ở B — một kho đủ thì không tách |
+| 4 | Giữ 6 (A còn 1, B còn 5) | tách A 1 + B 5 |
+| 5 | Giữ Y 1 + X 1 khi X hết | 409, `errors[0].field = items[1].quantity`; X không đổi, Y **không bị giữ dở** |
+| 6 | Kho C sau 3 lượt giữ | vẫn (100, 0) — không bao giờ được phân bổ |
+| 7 | Nhả / xuất kho / xuất cái đã nhả | A (3, 1); B (5, 5) — `on_hand` và `reserved` cùng giảm; 409 `RESERVATION_NOT_ACTIVE` |
+| 8 | Cùng `ref` hai lần / khác hàng | 201 → 200 cùng id, chỉ giữ 1 lần / 422 `RESERVATION_REF_REUSED` |
+| 9 | **50 người song song giữ 1 cái, tồn 10 chia 2 kho** | đúng 10 thành công, 40 × 409; `reserved` A = 4, B = 6 |
+| 10 | 40 đơn song song, mỗi đơn 2 món, nửa ghi ngược thứ tự | 40 × 201; 0 lỗi `40P01` trong log |
+| 11 | `ttl_seconds = 60` | worker đổi sang `expired` sau 80 s |
+| 12 | Đối soát | Σ delta sổ cái = `stock_levels`; `reserved` = Σ dòng giữ chỗ active — 0 dòng lệch |
+
+**Thêm vào `pkg/errs`:** `(*Error).WithFields` — lỗi không phải
+VALIDATION_FAILED (ở đây INSUFFICIENT_STOCK) vẫn chỉ ra được dòng nào hỏng. Dựng
+literal `errs.Error{Code: X.Code}` thì `checkcodes` từ chối vì mã không còn là
+chuỗi viết thẳng.
 
 ---
 

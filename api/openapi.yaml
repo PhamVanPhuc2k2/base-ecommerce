@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: base-ecommerce API
-  version: 0.12.0
+  version: 0.13.0
   description: |
     Hợp đồng API. Đây là NGUỒN SỰ THẬT — sửa endpoint thì sửa file này trước.
 servers:
@@ -927,6 +927,105 @@ paths:
         "500": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  /admin/reservations:
+    post:
+      operationId: createReservation
+      summary: Giữ hàng cho một đơn — tự phân bổ theo ưu tiên kho
+      description: >-
+        Kho ứng viên: đang hoạt động và bán online, theo priority. Một kho đủ
+        thì lấy cả ở đó, không thì gom theo ưu tiên. Thiếu bất kỳ dòng nào →
+        409 INSUFFICIENT_STOCK, errors[] chỉ dòng thiếu, không giữ gì. Gửi lại
+        cùng ref + cùng hàng → 200 + giữ chỗ cũ + Idempotent-Replayed. P4 gọi
+        use case trực tiếp; route này để vận hành và kiểm chứng.
+      security: [{ bearerAuth: [] }]
+      x-required-permission: inventory.manage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReserveRequest" }
+      responses:
+        "201":
+          description: Đã giữ
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Reservation" }
+        "200":
+          description: Gửi lại cùng ref — giữ chỗ cũ
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Reservation" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /admin/reservations/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      operationId: getReservation
+      summary: Một lượt giữ hàng
+      security: [{ bearerAuth: [] }]
+      x-required-permission: inventory.manage
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Reservation" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /admin/reservations/{id}/release:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      operationId: releaseReservation
+      summary: Nhả giữ chỗ (hủy đơn) — reserved giảm
+      security: [{ bearerAuth: [] }]
+      x-required-permission: inventory.manage
+      responses:
+        "200":
+          description: Đã nhả
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Reservation" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /admin/reservations/{id}/commit:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      operationId: commitReservation
+      summary: Xuất kho — on_hand và reserved cùng giảm
+      security: [{ bearerAuth: [] }]
+      x-required-permission: inventory.manage
+      responses:
+        "200":
+          description: Đã xuất kho
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Reservation" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   /admin/media:
     post:
       operationId: createMedia
@@ -1427,6 +1526,11 @@ components:
             - IDEMPOTENCY_KEY_REUSED
             - INVALID_IDEMPOTENCY_KEY
             - INVALID_MOVEMENT_FILTER
+            # giữ chỗ (P3.2)
+            - INVALID_RESERVATION
+            - RESERVATION_REF_REUSED
+            - UNKNOWN_RESERVATION
+            - RESERVATION_NOT_ACTIVE
             # phân quyền (P2.2)
             - FORBIDDEN
             - RATE_LIMITED
@@ -1791,6 +1895,45 @@ components:
               required: [online_available]
               properties:
                 online_available: { type: integer, description: "Chỉ kho đang hoạt động và bán online" }
+
+    ReserveRequest:
+      type: object
+      additionalProperties: false
+      required: [ref, items]
+      properties:
+        ref: { type: string, maxLength: 100, description: "Mã đơn — khóa idempotency" }
+        items:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: object
+            additionalProperties: false
+            required: [variant_id, quantity]
+            properties:
+              variant_id: { type: string, format: uuid }
+              quantity:   { type: integer, minimum: 1, maximum: 1000 }
+        ttl_seconds: { type: integer, minimum: 60, maximum: 86400, description: "Bỏ trống = không hết hạn (COD)" }
+
+    Reservation:
+      type: object
+      required: [id, ref, status, expires_at, lines, created_at, updated_at]
+      properties:
+        id:         { type: string, format: uuid }
+        ref:        { type: string }
+        status:     { type: string, enum: [active, committed, released, expired] }
+        expires_at: { type: string, format: date-time, nullable: true }
+        lines:
+          type: array
+          items:
+            type: object
+            required: [variant_id, location_id, quantity]
+            properties:
+              variant_id:  { type: string, format: uuid }
+              location_id: { type: string, format: uuid }
+              quantity:    { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
 
     Address:
       type: object

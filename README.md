@@ -243,7 +243,7 @@ base-ecommerce/
 │   │   │   ├── healthcheck/                  # binary tĩnh cho HEALTHCHECK (distroless không có curl)
 │   │   │   ├── checkcodes/                   # go/ast: liệt kê mã lỗi cho check-openapi-codes.sh
 │   │   │   ├── admintool/                    # grant-role <email> <vai trò> — cấp super admin đầu tiên
-│   │   │   ├── worker/                       # consumer catalog.indexer + mailer (gửi thư), retry, DLQ
+│   │   │   ├── worker/                       # consumer catalog.indexer + mailer, retry, DLQ; quét giữ chỗ hết hạn
 │   │   │   └── outboxrelay/                  # poll outbox → publish RabbitMQ → đánh dấu đã gửi
 │   │   ├── internal/
 │   │   │   ├── domain/                       # ENTITIES — chỉ stdlib + danh sách trắng
@@ -258,6 +258,7 @@ base-ecommerce/
 │   │   │   │   ├── email.go                  # thư trong hàng đợi + sự kiện email.queued (chỉ mang id)
 │   │   │   │   ├── address.go                # địa chỉ giao hàng 2 cấp hành chính; chuẩn hóa SĐT di động
 │   │   │   │   ├── inventory.go              # kho, StockLevel.Apply (nhập/điều chỉnh/kiểm kê), dòng sổ cái
+│   │   │   │   ├── reservation.go            # giữ chỗ: Allocate (hàm thuần), Reserve/Release/Commit trên StockLevel
 │   │   │   │   ├── category.go               # cây danh mục, DescendantIDs, CheckMove chống vòng lặp
 │   │   │   │   ├── brand.go                  # thương hiệu; slug KHÔNG đổi theo tên
 │   │   │   │   ├── money.go                  # value object (bọc NUMERIC)
@@ -283,7 +284,8 @@ base-ecommerce/
 │   │   │   │   ├── rbac.go                   # Authorizer (quyền qua cache 5') + quản trị vai trò, xóa cache khi đổi
 │   │   │   │   ├── otp.go                    # xác minh email, quên/đặt lại mật khẩu (HMAC), Mailing gửi thư
 │   │   │   │   ├── address.go                # sổ địa chỉ: trần 10, luôn đúng một mặc định, khóa dòng người dùng
-│   │   │   │   └── inventory.go              # quản trị kho + tồn; Idempotency-Key cùng transaction với sổ cái
+│   │   │   │   ├── inventory.go              # quản trị kho + tồn; Idempotency-Key cùng transaction với sổ cái
+│   │   │   │   └── reservation.go            # giữ / nhả / xuất kho; ExpireDue cho worker
 │   │   │   ├── repository/                   # cài đặt interface của usecase (đi RA ngoài)
 │   │   │   │   ├── pgstore/                  # Postgres: sqlc + squirrel + mapping → domain
 │   │   │   │   │   ├── queries/              # *.sql cho sqlc
@@ -298,7 +300,8 @@ base-ecommerce/
 │   │   │   │   │   ├── role_repo.go          # roles, role_permissions, user_roles; lỗi FK → mã lỗi
 │   │   │   │   │   ├── otp_repo.go           # otp_codes + outbound_emails; lần sai commit không chờ đĩa
 │   │   │   │   │   ├── address_repo.go       # addresses; đổi mặc định: bỏ cờ cũ rồi mới đặt cờ mới
-│   │   │   │   │   └── inventory_repo.go     # locations, stock_levels (ensure + FOR UPDATE), stock_movements
+│   │   │   │   │   ├── inventory_repo.go     # locations, stock_levels (ensure + FOR UPDATE), stock_movements
+│   │   │   │   │   └── reservation_repo.go   # khóa tồn MỘT câu theo thứ tự cố định; SKIP LOCKED khi quét hết hạn
 │   │   │   │   ├── rediscache/               # cache-aside cho sản phẩm và cây danh mục
 │   │   │   │   ├── outboxpub/                # domain.Event → outbox.Record, cùng transaction
 │   │   │   │   └── outbox/                   # outbox + khử trùng lặp, dùng chung, KHÔNG biết domain
