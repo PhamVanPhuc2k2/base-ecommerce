@@ -208,6 +208,16 @@ var (
 	ErrInvalidMovementFilter = errs.New(errs.KindInvalid, "INVALID_MOVEMENT_FILTER",
 		"variant_id, location_id, cursor phải là UUID; limit phải là số")
 
+	// Giữ chỗ (P3.2).
+	ErrInvalidReservation = errs.New(errs.KindValidation, "INVALID_RESERVATION",
+		"Yêu cầu giữ hàng không hợp lệ: 1–50 dòng, không trùng phiên bản, mỗi dòng 1–1000, ttl 60–86400 giây, mã đơn tối đa 100 ký tự")
+	ErrReservationRefReused = errs.New(errs.KindValidation, "RESERVATION_REF_REUSED",
+		"Mã đơn này đã giữ hàng cho một danh sách khác")
+	ErrUnknownReservation = errs.New(errs.KindNotFound, "UNKNOWN_RESERVATION",
+		"Không tìm thấy lượt giữ hàng")
+	ErrReservationNotActive = errs.New(errs.KindConflict, "RESERVATION_NOT_ACTIVE",
+		"Lượt giữ hàng đã kết thúc (đã xuất, đã nhả hoặc đã hết hạn)")
+
 	ErrInvalidPagination = errs.New(errs.KindInvalid, "INVALID_PAGINATION",
 		"Tham số phân trang không hợp lệ")
 

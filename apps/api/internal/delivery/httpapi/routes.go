@@ -92,6 +92,11 @@ func (h *Handler) Mount(r chi.Router) {
 			r.Post("/stock/movements", httpx.Wrap(h.RecordStockMovement))
 			r.Get("/stock/movements", httpx.Wrap(h.ListStockMovements))
 			r.Get("/variants/{id}/stock", httpx.Wrap(h.VariantStock))
+			// P4 gọi use case trực tiếp; các route này để vận hành và kiểm chứng.
+			r.Post("/reservations", httpx.Wrap(h.CreateReservation))
+			r.Get("/reservations/{id}", httpx.Wrap(h.GetReservation))
+			r.Post("/reservations/{id}/release", httpx.Wrap(h.ReleaseReservation))
+			r.Post("/reservations/{id}/commit", httpx.Wrap(h.CommitReservation))
 		})
 
 		r.Group(func(r chi.Router) {

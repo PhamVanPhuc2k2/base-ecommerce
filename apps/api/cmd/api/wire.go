@@ -55,6 +55,7 @@ func newHandler(cfg *config.Config, db *postgres.Manager, cache *platformredis.C
 	}
 
 	roleRepo := pgstore.NewRoleRepository(db)
+	stockRepo := pgstore.NewStockRepository(db)
 
 	return httpapi.NewHandler(issuer, httpapi.Usecases{
 		CreateProduct:  usecase.NewCreateProduct(db, productRepo, events, c, rules),
@@ -81,7 +82,8 @@ func newHandler(cfg *config.Config, db *postgres.Manager, cache *platformredis.C
 		Auth:           auth,
 		Verification:   verification,
 		AddressBook:    usecase.NewAddressBook(db, userRepo, pgstore.NewAddressRepository(db)),
-		Inventory:      usecase.NewInventory(db, pgstore.NewLocationRepository(db), pgstore.NewStockRepository(db)),
+		Inventory:      usecase.NewInventory(db, pgstore.NewLocationRepository(db), stockRepo),
+		Reservations:   usecase.NewReservations(db, pgstore.NewReservationRepository(db), stockRepo),
 		Authorizer:     usecase.NewAuthorizer(roleRepo, c),
 		RoleAdmin:      usecase.NewRoleAdmin(db, roleRepo, c),
 	}), nil

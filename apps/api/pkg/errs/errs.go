@@ -77,6 +77,15 @@ func (e *Error) Error() string {
 
 func (e *Error) Unwrap() error { return e.cause }
 
+// WithFields trả BẢN SAO kèm lỗi theo trường — cho lỗi không phải
+// VALIDATION_FAILED mà vẫn cần chỉ ra dòng nào hỏng (ví dụ INSUFFICIENT_STOCK
+// cho từng dòng hàng). Không sửa e: e thường là biến sentinel dùng chung.
+func (e *Error) WithFields(fields ...FieldError) *Error {
+	c := *e
+	c.Fields = fields
+	return &c
+}
+
 // Is so sánh theo Code và Kind thay vì theo con trỏ, nhờ vậy errors.Is vẫn đúng
 // khi lỗi được tạo lại ở tầng khác hoặc đã bị bọc nhiều lần.
 //

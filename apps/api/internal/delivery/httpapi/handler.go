@@ -37,6 +37,7 @@ type Usecases struct {
 	Verification   *usecase.Verification
 	AddressBook    *usecase.AddressBook
 	Inventory      *usecase.Inventory
+	Reservations   *usecase.Reservations
 	Authorizer     *usecase.Authorizer
 	RoleAdmin      *usecase.RoleAdmin
 	UpdateVariant  *usecase.UpdateVariant

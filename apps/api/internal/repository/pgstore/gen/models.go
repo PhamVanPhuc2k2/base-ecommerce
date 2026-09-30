@@ -165,6 +165,22 @@ type RefreshToken struct {
 	CreatedAt time.Time
 }
 
+type Reservation struct {
+	ID        uuid.UUID
+	Ref       string
+	Status    string
+	ExpiresAt *time.Time
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type ReservationLine struct {
+	ReservationID uuid.UUID
+	VariantID     uuid.UUID
+	LocationID    uuid.UUID
+	Quantity      int32
+}
+
 type Role struct {
 	ID        uuid.UUID
 	Code      string
