@@ -219,6 +219,22 @@ type UserRepository interface {
 	ByIDForUpdate(ctx context.Context, id uuid.UUID) (*domain.User, error)
 	MarkEmailVerified(ctx context.Context, id uuid.UUID, at time.Time) error
 	UpdatePassword(ctx context.Context, id uuid.UUID, hash string, at time.Time) error
+	UpdateFullName(ctx context.Context, id uuid.UUID, name string, at time.Time) error
+}
+
+// ---- Sổ địa chỉ (P2.4) ----
+
+type AddressRepository interface {
+	List(ctx context.Context, userID uuid.UUID) ([]*domain.Address, error)
+	// ByIDForUpdate khóa dòng; (nil, nil) khi không có hoặc của người khác.
+	ByIDForUpdate(ctx context.Context, userID, id uuid.UUID) (*domain.Address, error)
+	Count(ctx context.Context, userID uuid.UUID) (int, error)
+	Insert(ctx context.Context, a *domain.Address) error
+	Update(ctx context.Context, a *domain.Address) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	MakeDefault(ctx context.Context, userID, id uuid.UUID) error
+	// NewestID trả uuid.Nil khi sổ trống.
+	NewestID(ctx context.Context, userID uuid.UUID) (uuid.UUID, error)
 }
 
 // RefreshToken là một dòng refresh_tokens. Hash là SHA-256 của token — token

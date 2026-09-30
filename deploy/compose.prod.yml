@@ -70,6 +70,11 @@ services:
     # Chỉ mở ra loopback. Reverse proxy (Caddy/nginx) trên cùng máy mới chạm tới;
     # không có gì từ mạng ngoài nói chuyện trực tiếp với API.
     ports: ["127.0.0.1:8080:8080"]
+    environment:
+      <<: *go-env
+      # Web (BFF) và reverse proxy trên máy chủ (đi qua gateway Docker) đều nằm
+      # trong dải này. Chỉ socket từ đây mới được đọc X-Forwarded-For.
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-172.16.0.0/12}
     healthcheck:
       # /healthcheck là binary tĩnh trong image — distroless không có shell/curl.
       test: ["CMD", "/healthcheck", "http://127.0.0.1:8080/healthz"]

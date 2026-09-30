@@ -5,6 +5,7 @@ package httpapi
 import (
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"time"
 
 	"base-ecommerce/api/pkg/errs"
@@ -27,7 +28,8 @@ type Module interface {
 //   - RequestID trước RequestLogger, nếu không log sẽ không có request_id.
 //   - Recoverer sau RequestLogger, để panic vẫn được ghi thành một dòng log request.
 //   - Timeout cuối cùng, chỉ bao quanh handler nghiệp vụ.
-func NewRouter(log *slog.Logger, h *health.Handler, handlerTimeout time.Duration, modules ...Module) http.Handler {
+func NewRouter(log *slog.Logger, h *health.Handler, handlerTimeout time.Duration,
+	trustedProxies []netip.Prefix, modules ...Module) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -39,10 +41,10 @@ func NewRouter(log *slog.Logger, h *health.Handler, handlerTimeout time.Duration
 	// (GHSA-3fxj-6jh8-hvhx). Nghĩa là client tự bịa header là đổi được IP —
 	// hỏng cả log lẫn rate limit theo IP ở P0.2.
 	//
-	// Khi lên production sau Caddy/Cloudflare, đổi dòng này sang
-	// middleware.ClientIPFromXFFTrustedProxies(n) với n = số proxy thật sự đứng
-	// trước. Đọc IP luôn qua middleware.GetClientIP(ctx), đừng đọc r.RemoteAddr.
+	// Đọc IP luôn qua middleware.GetClientIP(ctx), đừng đọc r.RemoteAddr.
 	r.Use(middleware.ClientIPFromRemoteAddr)
+	// ...rồi GHI ĐÈ bằng X-Forwarded-For, nhưng chỉ khi socket là proxy tin cậy.
+	r.Use(clientIPFromTrustedProxy(trustedProxies))
 
 	r.Use(observability.RequestLogger(log))
 	r.Use(middleware.Recoverer)

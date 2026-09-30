@@ -31,6 +31,12 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Group(func(r chi.Router) {
 		r.Use(h.RequireAuth)
 		r.Get("/me", httpx.Wrap(h.Me))
+		r.Patch("/me", httpx.Wrap(h.UpdateMe))
+		r.Get("/me/addresses", httpx.Wrap(h.ListAddresses))
+		r.Post("/me/addresses", httpx.Wrap(h.CreateAddress))
+		r.Patch("/me/addresses/{id}", httpx.Wrap(h.UpdateAddress))
+		r.Delete("/me/addresses/{id}", httpx.Wrap(h.DeleteAddress))
+		r.Post("/me/addresses/{id}/default", httpx.Wrap(h.SetDefaultAddress))
 		r.Post("/auth/email/verification", httpx.Wrap(h.RequestEmailVerification))
 		r.Post("/auth/email/verify", httpx.Wrap(h.VerifyEmail))
 	})

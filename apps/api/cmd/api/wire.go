@@ -80,6 +80,7 @@ func newHandler(cfg *config.Config, db *postgres.Manager, cache *platformredis.C
 		DeleteBrand:    usecase.NewDeleteBrand(db, brandRepo, c),
 		Auth:           auth,
 		Verification:   verification,
+		AddressBook:    usecase.NewAddressBook(db, userRepo, pgstore.NewAddressRepository(db)),
 		Authorizer:     usecase.NewAuthorizer(roleRepo, c),
 		RoleAdmin:      usecase.NewRoleAdmin(db, roleRepo, c),
 	}), nil

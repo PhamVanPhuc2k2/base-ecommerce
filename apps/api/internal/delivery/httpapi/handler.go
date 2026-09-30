@@ -35,6 +35,7 @@ type Usecases struct {
 	Sitemap        *usecase.SitemapProducts
 	Auth           *usecase.Auth
 	Verification   *usecase.Verification
+	AddressBook    *usecase.AddressBook
 	Authorizer     *usecase.Authorizer
 	RoleAdmin      *usecase.RoleAdmin
 	UpdateVariant  *usecase.UpdateVariant

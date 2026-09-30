@@ -89,6 +89,17 @@ func NewUser(email, passwordHash, fullName string) (*User, error) {
 		Status: UserActive, CreatedAt: now, UpdatedAt: now}, nil
 }
 
+// Rename đổi họ tên hiển thị — cùng luật với lúc đăng ký.
+func (u *User) Rename(fullName string) error {
+	name, err := normalizeTaxonomyName(fullName, ErrFullNameInvalid)
+	if err != nil {
+		return err
+	}
+	u.FullName = name
+	u.UpdatedAt = time.Now().UTC()
+	return nil
+}
+
 func (u *User) CanLogin() error {
 	if u.Status != UserActive {
 		return ErrAccountDisabled

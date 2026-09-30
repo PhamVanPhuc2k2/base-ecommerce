@@ -11,6 +11,19 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+type Address struct {
+	ID            uuid.UUID
+	UserID        uuid.UUID
+	RecipientName string
+	Phone         string
+	Province      string
+	Ward          string
+	Street        string
+	IsDefault     bool
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
 type AttributeDefinition struct {
 	ID         uuid.UUID
 	Code       string

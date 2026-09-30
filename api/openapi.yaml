@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: base-ecommerce API
-  version: 0.10.0
+  version: 0.11.0
   description: |
     Hợp đồng API. Đây là NGUỒN SỰ THẬT — sửa endpoint thì sửa file này trước.
 servers:
@@ -445,6 +445,128 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/User" }
         "401": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    patch:
+      operationId: updateMe
+      summary: Sửa họ tên
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [full_name]
+              properties:
+                full_name: { type: string, maxLength: 100 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /me/addresses:
+    get:
+      operationId: listAddresses
+      summary: Sổ địa chỉ — mặc định đứng đầu, rồi mới nhất
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Address" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createAddress
+      summary: Thêm địa chỉ (tối đa 10; địa chỉ đầu tiên tự thành mặc định)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AddressRequest" }
+      responses:
+        "201":
+          description: Đã thêm
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Address" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /me/addresses/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    patch:
+      operationId: updateAddress
+      summary: Sửa địa chỉ — trường không gửi thì giữ nguyên
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AddressRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Address" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteAddress
+      summary: Xóa địa chỉ — xóa địa chỉ mặc định thì địa chỉ mới nhất còn lại lên thay
+      security: [{ bearerAuth: [] }]
+      responses:
+        "204": { description: Đã xóa }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /me/addresses/{id}/default:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      operationId: setDefaultAddress
+      summary: Đặt làm địa chỉ mặc định
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Address" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
@@ -1125,6 +1247,9 @@ components:
             # OTP qua email (P2.3)
             - INVALID_OTP
             - EMAIL_ALREADY_VERIFIED
+            # sổ địa chỉ (P2.4)
+            - ADDRESS_LIMIT_REACHED
+            - UNKNOWN_ADDRESS
             # phân quyền (P2.2)
             - FORBIDDEN
             - RATE_LIMITED
@@ -1383,6 +1508,32 @@ components:
       properties:
         name:        { type: string, maxLength: 100 }
         permissions: { type: array, items: { type: string }, description: "THAY toàn bộ tập quyền." }
+
+    Address:
+      type: object
+      required: [id, recipient_name, phone, province, ward, street, is_default, updated_at]
+      properties:
+        id:             { type: string, format: uuid }
+        recipient_name: { type: string }
+        phone:          { type: string, description: "Đã chuẩn hóa: 0xxxxxxxxx" }
+        province:       { type: string, description: "Tỉnh/thành phố" }
+        ward:           { type: string, description: "Phường/xã (2 cấp hành chính, sau sắp xếp 2025)" }
+        street:         { type: string, description: "Số nhà, tên đường" }
+        is_default:     { type: boolean }
+        updated_at:     { type: string, format: date-time }
+
+    AddressRequest:
+      type: object
+      additionalProperties: false
+      description: >-
+        Tạo: mọi trường bắt buộc. Sửa: trường không gửi thì giữ nguyên. Lỗi
+        theo trường nằm ở errors[] với code INVALID_PHONE hoặc FIELD_INVALID.
+      properties:
+        recipient_name: { type: string, maxLength: 100 }
+        phone:          { type: string, description: "Di động VN; nhận +84 / 84 / dấu cách / dấu chấm" }
+        province:       { type: string, maxLength: 100 }
+        ward:           { type: string, maxLength: 100 }
+        street:         { type: string, maxLength: 255 }
 
     User:
       type: object

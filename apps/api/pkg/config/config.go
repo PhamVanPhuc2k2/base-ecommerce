@@ -7,6 +7,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/netip"
 	"os"
 	"strconv"
 	"strings"
@@ -35,6 +36,10 @@ type HTTP struct {
 	WriteTimeout    time.Duration
 	ReadTimeout     time.Duration
 	ShutdownTimeout time.Duration
+	// TrustedProxies: dải IP của proxy đứng trước API (storefront Next, Caddy).
+	// Chỉ request có SOCKET đến từ đây mới được đọc X-Forwarded-For. Rỗng =
+	// không tin ai — mặc định an toàn (đặc tả P2.4 mục 2.3).
+	TrustedProxies []netip.Prefix
 }
 
 type DB struct {
@@ -107,10 +112,10 @@ func (c *Config) IsProduction() bool { return c.Env == "production" }
 // String che các giá trị nhạy cảm để an toàn khi ghi log toàn bộ config.
 func (c *Config) String() string {
 	return fmt.Sprintf(
-		"Config{Env:%s Version:%s HTTP.Addr:%s DB.DSN:%s DB.MaxConns:%d Redis.Addr:%s "+
+		"Config{Env:%s Version:%s HTTP.Addr:%s HTTP.TrustedProxies:%v DB.DSN:%s DB.MaxConns:%d Redis.Addr:%s "+
 			"RabbitMQ.URL:%s S3.Endpoint:%s S3.PublicEndpoint:%s S3.Bucket:%s S3.SecretKey:%s JWTSecret:%s "+
 			"SMTP:%s:%d SMTP.User:%s SMTP.Password:%s MailFrom:%s}",
-		c.Env, c.Version, c.HTTP.Addr, redactDSN(c.DB.DSN), c.DB.MaxConns,
+		c.Env, c.Version, c.HTTP.Addr, c.HTTP.TrustedProxies, redactDSN(c.DB.DSN), c.DB.MaxConns,
 		c.Redis.Addr, redactDSN(c.RabbitMQ.URL),
 		c.S3.Endpoint, c.S3.PublicEndpoint, c.S3.Bucket, redactSecret(c.S3.SecretKey), redactSecret(c.Auth.JWTSecret),
 		c.Mail.Host, c.Mail.Port, c.Mail.Username, redactSecret(c.Mail.Password), c.Mail.From,
@@ -159,6 +164,7 @@ func Load() (*Config, error) {
 			HandlerTimeout:  l.dur("HTTP_HANDLER_TIMEOUT", 30*time.Second),
 			WriteTimeout:    l.dur("HTTP_WRITE_TIMEOUT", 35*time.Second),
 			ShutdownTimeout: l.dur("HTTP_SHUTDOWN_TIMEOUT", 30*time.Second),
+			TrustedProxies:  l.prefixes("TRUSTED_PROXIES"),
 		},
 		DB: DB{
 			DSN:             l.required("DATABASE_URL"),
@@ -257,6 +263,25 @@ func (l *loader) required(key string) string {
 		l.errs = append(l.errs, fmt.Errorf("thiếu biến môi trường bắt buộc %s", key))
 	}
 	return v
+}
+
+// prefixes đọc danh sách CIDR cách nhau bởi dấu phẩy, ví dụ
+// "172.16.0.0/12,127.0.0.1/32".
+func (l *loader) prefixes(key string) []netip.Prefix {
+	var out []netip.Prefix
+	for _, s := range strings.Split(os.Getenv(key), ",") {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		p, err := netip.ParsePrefix(s)
+		if err != nil {
+			l.errs = append(l.errs, fmt.Errorf("%s: %q không phải CIDR hợp lệ: %w", key, s, err))
+			continue
+		}
+		out = append(out, p.Masked())
+	}
+	return out
 }
 
 func (l *loader) num(key string, def int) int {
