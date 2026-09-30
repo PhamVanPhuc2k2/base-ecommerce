@@ -39,6 +39,9 @@ rỗng, xử lý lỗi) tách thành `ProductListing` — ba bản chép tay s�
 Hai URL cho cùng một nội dung chia đôi tín hiệu xếp hạng. 308 (vĩnh viễn, giữ
 method) chuyển cả link cũ đã được index sang URL mới, kèm mọi tham số khác.
 
+Làm trong `proxy.ts`, KHÔNG bằng `permanentRedirect()` trong page — đã đo:
+`loading.tsx` xả HTTP 200 trước, redirect thành meta refresh (xem TIEN-DO).
+
 ### 2.3. Bộ chọn phiên bản không đọc/ghi URL
 
 Trang chi tiết là ISR 60 giây. Đọc `searchParams` ở server làm trang thành
@@ -48,8 +51,11 @@ HTML đầy đủ cho Google) lấy việc chia sẻ link đúng một phiên b�
 render vẫn có MỌI tùy chọn và giá mặc định; JSON-LD `AggregateOffer` mang khoảng
 giá cho Google.
 
-Tổ hợp không tồn tại (không có phiên bản active nào khớp) thì nút bị vô hiệu —
-khách không chọn được thứ không bán.
+Giá trị không đi được với lựa chọn hiện tại hiện MỜ nhưng vẫn bấm được: bấm
+vào thì nhảy sang phiên bản có giá trị đó, giữ nhiều lựa chọn cũ nhất. (Bản đầu
+của đặc tả này ghi "vô hiệu hẳn" — đổi khi viết code: vô hiệu thì khách bị kẹt,
+không hiểu vì sao "Bạc" bấm không được khi đang chọn 16GB.) Giá trị không có ở
+phiên bản nào thì không hiện.
 
 ### 2.4. Sitemap: Route Handler, tính lúc chạy — không `generateSitemaps`
 

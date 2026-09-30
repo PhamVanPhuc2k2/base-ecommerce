@@ -14,7 +14,7 @@
 | **P0.2** | Module `catalog` (lát cắt dọc) | ✅ xong, đã merge |
 | **P0.3** | Outbox + relay + worker | ✅ xong, đã merge |
 | **P0.4** | Storefront Next.js | ✅ xong, đã merge |
-| **P1** | Catalog & PIM | 🟡 **P1.1 → P1.4 xong** — còn P1.5 (SEO & storefront), xem [tổng quan](superpowers/specs/2026-09-29-p1-tong-quan.md) |
+| **P1** | Catalog & PIM | ✅ **P1.1 → P1.5 xong** — xem [tổng quan](superpowers/specs/2026-09-29-p1-tong-quan.md) |
 
 ---
 
@@ -230,6 +230,50 @@ chối chạy.
 
 ---
 
+## P1.5 — SEO & storefront ✅
+
+Trang danh mục theo đường dẫn `/danh-muc/<slug>`, trang thương hiệu
+`/thuong-hieu[/<slug>]`, một `ProductListing` dùng chung cho cả ba trang danh
+sách; bộ chọn phiên bản; `BreadcrumbList` JSON-LD trên mọi breadcrumb; sitemap
+phân mảnh thay trần 20.000 sản phẩm. **Hoãn shadcn/ui** tới khi có form/dialog
+(giỏ hàng P4, admin UI sau P2). Chi tiết:
+[đặc tả](superpowers/specs/2026-09-30-p1-5-seo-storefront.md).
+
+| # | Kiểm | Kết quả |
+|---|---|---|
+| 2 | `/danh-muc?category=laptop&sort=price_asc` | **308** → `/danh-muc/laptop?sort=price_asc` (sau khi sửa — xem dưới) |
+| 3 | `/danh-muc/laptop` | 33 sp khớp API, canonical đúng, link danh mục theo đường dẫn |
+| 4 | `/danh-muc/<lạ>`, `/thuong-hieu/<lạ>` | **404 thật** |
+| 5 | `/thuong-hieu/asus` | khớp `?brand=` của API; lọc danh mục ở lại trong hãng |
+| 6 | Bộ chọn (Chrome, 3 phiên bản không đủ tổ hợp) | 5/5 bước đúng giá + SKU, kể cả hai lần "nhảy" sang phiên bản gần nhất; HTML không JS có đủ mọi tùy chọn |
+| 7 | `BreadcrumbList` + **danh mục tên `</script><script>alert(1)</script>`** | JSON-LD đúng, URL tuyệt đối; KHÔNG có `<script>alert` thô trong HTML |
+| 8 | `/sitemap.xml` | index hợp lệ: `pages.xml` + đúng `ceil(33/5000)` = 1 file sản phẩm |
+| 9 | 200.000 sản phẩm giả | trang cuối: không index → Seq Scan + sort **tràn đĩa**; có index → **Index Only Scan, Heap Fetches 0** |
+| 10 | 41 URL trong sitemap | tất cả 200; tên file lạ → 404 |
+| 11 | API chết | index còn `pages.xml`; file sản phẩm đã cache vẫn 200, chưa cache → **503 + Retry-After** |
+| 12 | Chrome, 6 trang | 0 lỗi Console/HTTP |
+
+**Ba lỗi tìm ra khi kiểm, đều im lặng nếu để lọt:**
+
+- **`permanentRedirect()` trong page trả HTTP 200.** `/danh-muc` nằm dưới
+  `loading.tsx`: Next xả 200 trước, rồi chèn `<meta http-equiv="refresh">`.
+  Trình duyệt vẫn chuyển trang, nhưng Google thấy 200 chứ không thấy 308. Dời
+  sang `proxy.ts` (chạy trước render). Cùng họ với soft 404 của P0.4.
+- **`/thuong-hieu` (ISR) được dựng sẵn LÚC BUILD** — khi `docker build` không
+  có API — nên thứ bị cache là trang lỗi "Không kết nối được", và nằm đó một giờ
+  sau MỖI lần deploy. Đổi sang render theo yêu cầu.
+- **Tôi tự gây ra một lỗ XSS rồi tự bắt được:** JSON-LD breadcrumb viết
+  `replaceAll('<', '\u003c')` trong source bị công cụ sửa file biến thành ký tự
+  `<` thật — tức không thoát gì. Phép thử tên danh mục chứa `</script>` ở mục 7
+  là để chắc nó đã đúng.
+
+Cũng dời `loading.tsx` của `/danh-muc` vào route group `(tat-ca)`: đặt ở
+`app/danh-muc/` nó bọc luôn `/danh-muc/<slug>` và biến slug lạ thành soft 404.
+Migration: goose coi MỌI dòng comment chứa chuỗi annotation là chỉ thị, kể cả
+giữa câu — đã ghi cảnh báo trong migration `sitemap_index`.
+
+---
+
 ## P1.4 — Media ✅
 
 MinIO giữ ảnh gốc, imgproxy thu nhỏ + đổi định dạng; upload bằng **presigned
@@ -384,7 +428,6 @@ chặn SELECT lẫn khóa FK khi ghi sản phẩm.
 | | |
 |---|---|
 | **Không có test tự động** | Quyết định của chủ dự án. Rủi ro đã ghi rõ ở [thiết kế 04](design/04-kiem-chung.md) mục 4 |
-| **Sitemap trần 20.000 sản phẩm** | `max_page 200 × limit 100`. P1 làm sitemap phân mảnh |
 | **Một bản `outboxrelay`** | `FOR UPDATE SKIP LOCKED` cho phép nhiều bản nhưng **phá vỡ thứ tự event** |
 | **At-least-once, không exactly-once** | Consumer bắt buộc idempotent. Không có cách nào bỏ yêu cầu này |
 | **Backoff cố định 30 giây** | `x-message-ttl` hết hạn theo thứ tự đầu hàng, nên không đặt TTL riêng từng message được |
@@ -393,11 +436,12 @@ chặn SELECT lẫn khóa FK khi ghi sản phẩm.
 | **File upload dở không ai dọn** | `media` pending mà không bao giờ `complete` để lại object mồ côi. Cần job dọn hoặc lifecycle rule của bucket |
 | **Ảnh cũ chỉ bị kiểm khi ghi lại ảnh** | Sản phẩm có URL cũ vẫn sửa được giá, phiên bản; chỉ lệnh đặt `images` hoặc publish mới kiểm |
 | **`imgproxy:latest`, `minio:latest` chưa ghim phiên bản** | Nên ghim tag trước production |
-| **`<Image priority>` đã deprecated ở Next 16** | Vẫn chạy (preload đúng srcset `/img/*`), nên đổi sang `preload` |
 | **Facet chọn một giá trị mỗi nhóm, đếm conjunctive** | "8GB hoặc 16GB" cần API hỗ trợ OR; số đếm áp cả bộ lọc của chính nhóm đó (P1.3) |
 | **Chưa lọc khoảng số** | `RAM ≥ 16` chưa có — chỉ lọc bằng đúng giá trị |
 | **Dữ liệu cũ chỉ bị kiểm ở lần ghi kế tiếp** | Bật chế độ chặt cho danh mục hay bỏ giá trị enum không sửa dữ liệu đã lưu; sản phẩm sai báo lỗi khi sửa lần sau |
-| **Chưa có bộ chọn phiên bản** | Trang chi tiết hiện bảng phiên bản tĩnh; chọn để đổi giá/ảnh/thêm vào giỏ cần client component — P1.5 và P4 |
+| **Bộ chọn phiên bản không ghi URL** | Không chia sẻ được link tới đúng một phiên bản — đổi lại giữ ISR và HTML đầy đủ (đặc tả P1.5 mục 2.3). Chưa đổi ảnh theo phiên bản |
+| **Chưa revalidate theo sự kiện** | Đổi giá thấy trên trang chi tiết sau tối đa 60 giây (ISR). Worker gọi `revalidateTag` — để P7 |
+| **Trang danh mục/thương hiệu không ISR** | `force-dynamic` vì bộ lọc trên query string; cache nằm ở Redis backend và CDN |
 | **Không xóa được variant** | Có chủ đích: đơn hàng (P4) sẽ trỏ vào variant. Ngừng bán là `inactive` |
 | **Số đếm lệch tối đa 60 giây** | Cache số đếm không vô hiệu hóa khi ghi — trang cuối có thể thiếu/thừa sản phẩm vừa đăng trong một phút (P1.1) |
 | **Chưa phát sự kiện `category.*`/`brand.*`** | Chưa consumer nào cần; phát mà thiếu binding thì relay thử lại mãi. P7 thêm cả hai cùng lúc |
