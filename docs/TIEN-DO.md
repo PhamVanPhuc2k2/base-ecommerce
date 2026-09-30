@@ -1,6 +1,6 @@
 # Tiến độ dự án
 
-Ảnh chụp trạng thái, cập nhật 29/09/2026. Chi tiết kỹ thuật nằm ở
+Ảnh chụp trạng thái, cập nhật 30/09/2026. Chi tiết kỹ thuật nằm ở
 [`docs/design/`](design/); đặc tả và kế hoạch từng giai đoạn ở
 [`docs/superpowers/`](superpowers/).
 
@@ -14,7 +14,7 @@
 | **P0.2** | Module `catalog` (lát cắt dọc) | ✅ xong, đã merge |
 | **P0.3** | Outbox + relay + worker | ✅ xong, đã merge |
 | **P0.4** | Storefront Next.js | ✅ xong, đã merge |
-| **P1** | Catalog & PIM | 🟡 **P1.1 xong** (quản trị danh mục, thương hiệu) — còn P1.2 → P1.5, xem [tổng quan](superpowers/specs/2026-09-29-p1-tong-quan.md) |
+| **P1** | Catalog & PIM | 🟡 **P1.1, P1.2 xong** — còn P1.3 → P1.5, xem [tổng quan](superpowers/specs/2026-09-29-p1-tong-quan.md) |
 
 ---
 
@@ -230,6 +230,44 @@ chối chạy.
 
 ---
 
+## P1.2 — Biến thể / SKU ✅
+
+`Product` thành aggregate chứa `Variant` (SKU, giá, options, active/inactive).
+`products.price` ở lại với nghĩa **giá "từ"**, domain tự tính lại sau mọi thay
+đổi variant. API quản trị variant; storefront hiện "Từ …", bảng phiên bản,
+JSON-LD `AggregateOffer`. Chi tiết: [đặc tả](superpowers/specs/2026-09-30-p1-2-bien-the.md).
+
+**Migration expand/contract đầu tiên của dự án**, làm đúng bốn bước:
+
+| Bước | Việc | Đã kiểm |
+|---|---|---|
+| 1 | Expand: tạo `product_variants`, backfill | 33/33 variant khớp sku, giá, tiền tệ, ngày tạo; down → up lại |
+| 2 | Code ghi CẢ `products.sku` (= SKU variant đầu) lẫn variant | Chạy trên schema expand: đọc sản phẩm cũ, tạo sản phẩm 2 variant, cột cũ vẫn được ghi |
+| 3 | Contract: `DROP COLUMN products.sku` | Down dựng lại cột: md5 của mọi cặp `(id, sku)` **trùng khớp** trước contract; index dựng lại đúng định nghĩa |
+| 4 | Code thôi ghi cột cũ | `sqlc generate`: model không còn `Sku` ở cấp sản phẩm |
+
+ID variant backfill = ID sản phẩm: Postgres 17 chưa có `uuidv7()`, còn
+`gen_random_uuid()` là v4 — phá quy ước "mọi ID là UUIDv7".
+
+| # | Kiểm (stack Docker) | Kết quả |
+|---|---|---|
+| 4 | Tạo 2 variant 25tr/20tr | `price` = 20tr; thiếu variant → 422 `VARIANT_REQUIRED` |
+| 5 | Variant 20tr → 30tr | `price` = 25tr trong response **và** trong DB |
+| 6 | Tắt variant rẻ nhất | `price` đổi theo; công khai chỉ thấy variant active |
+| 7 | Tắt variant active cuối / giá 0 khi live | 422 `NO_ACTIVE_VARIANT` (DB không đổi) / 422 `PRICE_REQUIRED` |
+| 8 | Options trùng (`" ram "` = `"ram"`) / SKU trùng | 409 `DUPLICATE_VARIANT_OPTIONS` / 409 `DUPLICATE_SKU` |
+| 9 | Variant của sản phẩm khác trên URL | 404 `UNKNOWN_VARIANT` |
+| 10 | Lọc/sắp theo giá | Theo giá "từ"; plan vẫn `Index Only Scan using products_live_price_idx` |
+| 11 | Một trang 24 sản phẩm | **Đúng 1** câu `VariantsByProducts` — không N+1 (đếm trong log Postgres) |
+| 12 | Web | "Từ 25.000.000 ₫", bảng phiên bản, JSON-LD `AggregateOffer` low/high/offerCount |
+
+**Thay đổi hợp đồng có chủ đích:** `Product.sku` bỏ (SKU nằm trong `variants`);
+`POST /admin/products` nhận `variants[]`; `PATCH` sản phẩm gửi `price` giờ trả
+400 `MALFORMED_REQUEST` — báo to thay vì âm thầm không đổi giá. Payload sự kiện
+`product.*` bỏ `sku`, còn `{slug}`.
+
+---
+
 ## P1.1 — Quản trị danh mục, thương hiệu ✅
 
 API quản trị danh mục (tạo, sửa, chuyển, xóa) và thương hiệu, `GET /brands`,
@@ -278,6 +316,8 @@ chặn SELECT lẫn khóa FK khi ghi sản phẩm.
 | **Trang lỗi trả HTTP 200** | API chết thì `/danh-muc` hiện `<ErrorState>` với status 200 — App Router không cho Server Component đặt 503. Crawler có thể index trang lỗi nếu API chết đúng lúc nó ghé |
 | **Dữ liệu mẫu dùng ảnh bịa** | `https://vi.du/anh.jpg` làm `/_next/image` trả 500. Kèm theo: `remotePatterns` đang cho `hostname: '**'` — lỗ hổng lạm dụng băng thông/SSRF, P1 phải siết về CDN thật (đã có TODO trong `next.config.ts`) |
 | **Ký hiệu ₫ không có trong Geist** | Hiện bằng font dự phòng — y như bản Google Fonts trước đây |
+| **Chưa có bộ chọn phiên bản** | Trang chi tiết hiện bảng phiên bản tĩnh; chọn để đổi giá/ảnh/thêm vào giỏ cần client component — P1.5 và P4 |
+| **Không xóa được variant** | Có chủ đích: đơn hàng (P4) sẽ trỏ vào variant. Ngừng bán là `inactive` |
 | **Số đếm lệch tối đa 60 giây** | Cache số đếm không vô hiệu hóa khi ghi — trang cuối có thể thiếu/thừa sản phẩm vừa đăng trong một phút (P1.1) |
 | **Chưa phát sự kiện `category.*`/`brand.*`** | Chưa consumer nào cần; phát mà thiếu binding thì relay thử lại mãi. P7 thêm cả hai cùng lúc |
 | **Tách hai instance Redis** | Hoãn tới P4 khi có giỏ hàng — P0 chỉ dùng vai trò cache |

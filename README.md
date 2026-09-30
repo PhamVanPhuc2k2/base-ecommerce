@@ -246,7 +246,8 @@ base-ecommerce/
 │   │   │   └── outboxrelay/                  # poll outbox → publish RabbitMQ → đánh dấu đã gửi
 │   │   ├── internal/
 │   │   │   ├── domain/                       # ENTITIES — chỉ stdlib + danh sách trắng
-│   │   │   │   ├── product.go                # entity + quy tắc nghiệp vụ + Validate()
+│   │   │   │   ├── product.go                # aggregate root: giá "từ", quy tắc bán hàng, Validate()
+│   │   │   │   ├── variant.go                # phiên bản: SKU, giá, options; chỉ sinh ra QUA Product
 │   │   │   │   ├── category.go               # cây danh mục, DescendantIDs, CheckMove chống vòng lặp
 │   │   │   │   ├── brand.go                  # thương hiệu; slug KHÔNG đổi theo tên
 │   │   │   │   ├── money.go                  # value object (bọc NUMERIC)
@@ -264,7 +265,8 @@ base-ecommerce/
 │   │   │   │   ├── create_category.go        # ghi danh mục: LOCK TABLE → đọc cây → kiểm → ghi
 │   │   │   │   ├── update_category.go        # ParentChange ba trạng thái
 │   │   │   │   ├── delete_category.go
-│   │   │   │   └── brand.go                  # List/Create/Update/DeleteBrand
+│   │   │   │   ├── brand.go                  # List/Create/Update/DeleteBrand
+│   │   │   │   └── variant.go                # AddVariant/UpdateVariant — không có xóa, chỉ inactive
 │   │   │   ├── repository/                   # cài đặt interface của usecase (đi RA ngoài)
 │   │   │   │   ├── pgstore/                  # Postgres: sqlc + squirrel + mapping → domain
 │   │   │   │   │   ├── queries/              # *.sql cho sqlc
