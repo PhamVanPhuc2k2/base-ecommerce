@@ -98,7 +98,7 @@ func run() error {
 
 	srv := &http.Server{
 		Addr:              cfg.HTTP.Addr,
-		Handler:           httpapi.NewRouter(log, h, cfg.HTTP.HandlerTimeout, appHandler),
+		Handler:           httpapi.NewRouter(log, h, cfg.HTTP.HandlerTimeout, cfg.HTTP.TrustedProxies, appHandler),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       cfg.HTTP.ReadTimeout,
 		WriteTimeout:      cfg.HTTP.WriteTimeout,

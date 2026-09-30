@@ -71,6 +71,10 @@ func (r *UserRepository) MarkEmailVerified(ctx context.Context, id uuid.UUID, at
 	return mapErr(gen.New(r.db.DB(ctx)).MarkEmailVerified(ctx, gen.MarkEmailVerifiedParams{ID: id, UpdatedAt: at}))
 }
 
+func (r *UserRepository) UpdateFullName(ctx context.Context, id uuid.UUID, name string, at time.Time) error {
+	return mapErr(gen.New(r.db.DB(ctx)).UpdateUserFullName(ctx, gen.UpdateUserFullNameParams{ID: id, FullName: name, UpdatedAt: at}))
+}
+
 func (r *UserRepository) UpdatePassword(ctx context.Context, id uuid.UUID, hash string, at time.Time) error {
 	return mapErr(gen.New(r.db.DB(ctx)).UpdatePassword(ctx, gen.UpdatePasswordParams{ID: id, PasswordHash: hash, UpdatedAt: at}))
 }

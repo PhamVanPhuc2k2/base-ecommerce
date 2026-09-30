@@ -251,6 +251,28 @@ func (a *Auth) Me(ctx context.Context, userID uuid.UUID) (*domain.User, error) {
 	return u, nil
 }
 
+// UpdateProfile đổi họ tên của người đang đăng nhập.
+func (a *Auth) UpdateProfile(ctx context.Context, userID uuid.UUID, fullName string) (*domain.User, error) {
+	var u *domain.User
+	err := a.tx.Run(ctx, func(ctx context.Context) error {
+		var err error
+		if u, err = a.users.ByIDForUpdate(ctx, userID); err != nil {
+			return err
+		}
+		if u == nil || u.CanLogin() != nil {
+			return domain.ErrInvalidCredentials
+		}
+		if err := u.Rename(fullName); err != nil {
+			return err
+		}
+		return a.users.UpdateFullName(ctx, u.ID, u.FullName, u.UpdatedAt)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return u, nil
+}
+
 // startSession sinh refresh token mới trong family và access token đi kèm.
 func (a *Auth) startSession(ctx context.Context, u *domain.User, family uuid.UUID) (*Session, error) {
 	raw, err := newRefreshToken()

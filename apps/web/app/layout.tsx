@@ -86,6 +86,18 @@ function SiteHeader() {
             Thương hiệu
           </Link>
         </nav>
+        {/*
+          Link TĨNH, không đọc cookie để hiện "Xin chào, An": đọc cookie trong
+          layout biến MỌI trang thành render động — mất ISR của danh mục và sản
+          phẩm (đặc tả P2.4 mục 2.5). Chưa đăng nhập thì proxy chuyển sang
+          /dang-nhap.
+        */}
+        <Link
+          href="/tai-khoan"
+          className="ml-auto text-sm font-medium text-gray-700 hover:text-brand"
+        >
+          Tài khoản
+        </Link>
       </div>
     </header>
   )

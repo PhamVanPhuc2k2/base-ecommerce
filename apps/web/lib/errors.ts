@@ -85,6 +85,8 @@ export const errorMessages: Record<string, string> = {
   WEAK_PASSWORD: 'Mật khẩu phải dài từ 8 đến 128 ký tự.',
   INVALID_OTP: 'Mã xác nhận không đúng hoặc đã hết hạn. Hãy kiểm tra lại hoặc yêu cầu mã mới.',
   EMAIL_ALREADY_VERIFIED: 'Email của bạn đã được xác minh.',
+  ADDRESS_LIMIT_REACHED: 'Sổ địa chỉ đã đủ 10 địa chỉ. Hãy xóa bớt trước khi thêm địa chỉ mới.',
+  UNKNOWN_ADDRESS: 'Không tìm thấy địa chỉ này.',
   CANNOT_CHANGE_OWN_ROLES: 'Bạn không thể tự thay đổi vai trò của chính mình.',
   DUPLICATE_ROLE_CODE: 'Mã vai trò này đã tồn tại.',
   FORBIDDEN: 'Bạn không có quyền thực hiện thao tác này.',

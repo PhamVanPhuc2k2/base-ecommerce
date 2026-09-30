@@ -167,6 +167,13 @@ var (
 	ErrEmailAlreadyVerified = errs.New(errs.KindConflict, "EMAIL_ALREADY_VERIFIED",
 		"Email đã được xác minh")
 
+	// Sổ địa chỉ (P2.4). Địa chỉ của người khác cũng là UNKNOWN_ADDRESS (404)
+	// chứ không phải 403 — 403 là thừa nhận id đó tồn tại.
+	ErrAddressLimitReached = errs.New(errs.KindValidation, "ADDRESS_LIMIT_REACHED",
+		"Sổ địa chỉ đã đủ 10 địa chỉ, hãy xóa bớt trước khi thêm")
+	ErrUnknownAddress = errs.New(errs.KindNotFound, "UNKNOWN_ADDRESS",
+		"Không tìm thấy địa chỉ")
+
 	ErrInvalidPagination = errs.New(errs.KindInvalid, "INVALID_PAGINATION",
 		"Tham số phân trang không hợp lệ")
 
