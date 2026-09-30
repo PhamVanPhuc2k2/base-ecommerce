@@ -1,12 +1,13 @@
 package httpapi
 
 import (
+	"base-ecommerce/api/internal/domain"
 	"base-ecommerce/api/pkg/httpx"
 
 	"github.com/go-chi/chi/v5"
 )
 
-// Mount gắn toàn bộ route của catalog vào router cha.
+// Mount gắn toàn bộ route vào router cha.
 func (h *Handler) Mount(r chi.Router) {
 	r.Get("/products", httpx.Wrap(h.ListProducts))
 	// Đoạn tĩnh "facets" thắng tham số {slug} trong chi, nên route này phải
@@ -18,37 +19,66 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Get("/categories", httpx.Wrap(h.GetCategories))
 	r.Get("/brands", httpx.Wrap(h.ListBrands))
 	r.Get("/sitemap/products", httpx.Wrap(h.SitemapProducts))
+	r.Get("/attributes", httpx.Wrap(h.ListAttributes))
+	r.Get("/categories/{slug}/attributes", httpx.Wrap(h.GetCategoryAttributes))
 
 	r.Post("/auth/register", httpx.Wrap(h.Register))
 	r.Post("/auth/login", httpx.Wrap(h.Login))
 	r.Post("/auth/refresh", httpx.Wrap(h.Refresh))
 	r.Post("/auth/logout", httpx.Wrap(h.Logout))
 	r.With(h.RequireAuth).Get("/me", httpx.Wrap(h.Me))
-	r.Get("/attributes", httpx.Wrap(h.ListAttributes))
-	r.Get("/categories/{slug}/attributes", httpx.Wrap(h.GetCategoryAttributes))
 
+	/*
+		/admin/*: Bearer token (RequireAuth) RỒI MỚI tới quyền (RequirePermission).
+		Thứ tự là cố ý: chưa biết là ai thì trả 401, không phải 403 — 403 cho
+		người lạ là nói cho họ biết endpoint tồn tại và cần quyền gì. Đặc tả
+		P2.2 mục 2.6.
+
+		Thay cho X-Admin-Key (P0.2 → P2.1): một khóa chung cho mọi thao tác, không
+		biết ai đã làm gì, lộ là mất tất cả.
+	*/
 	r.Route("/admin", func(r chi.Router) {
-		r.Use(RequireAdminKey(h.adminKey))
-		r.Post("/products", httpx.Wrap(h.CreateProduct))
-		r.Patch("/products/{id}", httpx.Wrap(h.UpdateProduct))
-		r.Post("/products/{id}/publish", httpx.Wrap(h.PublishProduct))
-		r.Post("/products/{id}/variants", httpx.Wrap(h.AddVariant))
-		r.Patch("/products/{id}/variants/{variantId}", httpx.Wrap(h.UpdateVariant))
+		r.Use(h.RequireAuth)
 
-		r.Post("/categories", httpx.Wrap(h.CreateCategory))
-		r.Patch("/categories/{id}", httpx.Wrap(h.UpdateCategory))
-		r.Delete("/categories/{id}", httpx.Wrap(h.DeleteCategory))
-		r.Put("/categories/{id}/attributes", httpx.Wrap(h.SetCategoryAttributes))
+		r.Group(func(r chi.Router) {
+			r.Use(h.RequirePermission(domain.PermCatalogProductsWrite))
+			r.Post("/products", httpx.Wrap(h.CreateProduct))
+			r.Patch("/products/{id}", httpx.Wrap(h.UpdateProduct))
+			r.Post("/products/{id}/publish", httpx.Wrap(h.PublishProduct))
+			r.Post("/products/{id}/variants", httpx.Wrap(h.AddVariant))
+			r.Patch("/products/{id}/variants/{variantId}", httpx.Wrap(h.UpdateVariant))
+		})
 
-		r.Post("/media", httpx.Wrap(h.CreateMedia))
-		r.Post("/media/{id}/complete", httpx.Wrap(h.CompleteMedia))
+		r.Group(func(r chi.Router) {
+			r.Use(h.RequirePermission(domain.PermCatalogTaxonomyWrite))
+			r.Post("/categories", httpx.Wrap(h.CreateCategory))
+			r.Patch("/categories/{id}", httpx.Wrap(h.UpdateCategory))
+			r.Delete("/categories/{id}", httpx.Wrap(h.DeleteCategory))
+			r.Put("/categories/{id}/attributes", httpx.Wrap(h.SetCategoryAttributes))
 
-		r.Post("/attributes", httpx.Wrap(h.CreateAttribute))
-		r.Patch("/attributes/{id}", httpx.Wrap(h.UpdateAttribute))
-		r.Delete("/attributes/{id}", httpx.Wrap(h.DeleteAttribute))
+			r.Post("/attributes", httpx.Wrap(h.CreateAttribute))
+			r.Patch("/attributes/{id}", httpx.Wrap(h.UpdateAttribute))
+			r.Delete("/attributes/{id}", httpx.Wrap(h.DeleteAttribute))
 
-		r.Post("/brands", httpx.Wrap(h.CreateBrand))
-		r.Patch("/brands/{id}", httpx.Wrap(h.UpdateBrand))
-		r.Delete("/brands/{id}", httpx.Wrap(h.DeleteBrand))
+			r.Post("/brands", httpx.Wrap(h.CreateBrand))
+			r.Patch("/brands/{id}", httpx.Wrap(h.UpdateBrand))
+			r.Delete("/brands/{id}", httpx.Wrap(h.DeleteBrand))
+		})
+
+		r.Group(func(r chi.Router) {
+			r.Use(h.RequirePermission(domain.PermMediaUpload))
+			r.Post("/media", httpx.Wrap(h.CreateMedia))
+			r.Post("/media/{id}/complete", httpx.Wrap(h.CompleteMedia))
+		})
+
+		r.Group(func(r chi.Router) {
+			r.Use(h.RequirePermission(domain.PermIAMRolesManage))
+			r.Get("/permissions", httpx.Wrap(h.ListPermissions))
+			r.Get("/roles", httpx.Wrap(h.ListRoles))
+			r.Post("/roles", httpx.Wrap(h.CreateRole))
+			r.Patch("/roles/{id}", httpx.Wrap(h.UpdateRole))
+			r.Delete("/roles/{id}", httpx.Wrap(h.DeleteRole))
+			r.Put("/users/{id}/roles", httpx.Wrap(h.SetUserRoles))
+		})
 	})
 }

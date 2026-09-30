@@ -126,6 +126,8 @@ type Cache interface {
 		load func(context.Context) (*domain.AttributeCatalog, error)) (*domain.AttributeCatalog, error)
 	ProductFacets(ctx context.Context, key string, ttl time.Duration,
 		load func(context.Context) (domain.FacetCounts, error)) (domain.FacetCounts, error)
+	UserPermissions(ctx context.Context, key string, ttl time.Duration,
+		load func(context.Context) (domain.PermissionSet, error)) (domain.PermissionSet, error)
 	Invalidate(ctx context.Context, keys ...string)
 }
 

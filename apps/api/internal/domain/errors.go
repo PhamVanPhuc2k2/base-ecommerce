@@ -135,6 +135,30 @@ var (
 	ErrRateLimited = errs.New(errs.KindRateLimited, "RATE_LIMITED",
 		"Bạn thao tác quá nhanh, vui lòng thử lại sau ít phút")
 
+	// Phân quyền (P2.2).
+	ErrForbidden = errs.New(errs.KindForbidden, "FORBIDDEN",
+		"Bạn không có quyền thực hiện thao tác này")
+	ErrInvalidRoleCode = errs.New(errs.KindValidation, "INVALID_ROLE_CODE",
+		"Mã vai trò chỉ gồm chữ thường không dấu, số và dấu gạch dưới")
+	ErrRoleNameInvalid = errs.New(errs.KindValidation, "ROLE_NAME_INVALID",
+		"Tên vai trò là bắt buộc và tối đa 100 ký tự")
+	ErrUnknownPermission = errs.New(errs.KindValidation, "UNKNOWN_PERMISSION",
+		"Có quyền không tồn tại trong danh sách quyền của hệ thống")
+	ErrSystemRoleImmutable = errs.New(errs.KindValidation, "SYSTEM_ROLE_IMMUTABLE",
+		"Không thể sửa hoặc xóa vai trò hệ thống")
+	ErrCannotChangeOwnRoles = errs.New(errs.KindValidation, "CANNOT_CHANGE_OWN_ROLES",
+		"Không thể tự thay đổi vai trò của chính mình")
+	ErrRoleNotFound = errs.New(errs.KindValidation, "ROLE_NOT_FOUND",
+		"Vai trò không tồn tại")
+	ErrDuplicateRoleCode = errs.New(errs.KindConflict, "DUPLICATE_ROLE_CODE",
+		"Mã vai trò này đã tồn tại")
+	ErrRoleInUse = errs.New(errs.KindConflict, "ROLE_IN_USE",
+		"Vai trò đang được gán cho người dùng, hãy gỡ trước khi xóa")
+	ErrUnknownRole = errs.New(errs.KindNotFound, "UNKNOWN_ROLE",
+		"Không tìm thấy vai trò")
+	ErrUnknownUser = errs.New(errs.KindNotFound, "UNKNOWN_USER",
+		"Không tìm thấy người dùng")
+
 	ErrInvalidPagination = errs.New(errs.KindInvalid, "INVALID_PAGINATION",
 		"Tham số phân trang không hợp lệ")
 

@@ -119,6 +119,20 @@ type RefreshToken struct {
 	CreatedAt time.Time
 }
 
+type Role struct {
+	ID        uuid.UUID
+	Code      string
+	Name      string
+	IsSystem  bool
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type RolePermission struct {
+	RoleID     uuid.UUID
+	Permission string
+}
+
 type User struct {
 	ID              uuid.UUID
 	Email           string
@@ -128,4 +142,9 @@ type User struct {
 	EmailVerifiedAt *time.Time
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+}
+
+type UserRole struct {
+	UserID uuid.UUID
+	RoleID uuid.UUID
 }

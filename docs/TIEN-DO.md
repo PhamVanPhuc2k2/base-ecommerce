@@ -15,7 +15,7 @@
 | **P0.3** | Outbox + relay + worker | ✅ xong, đã merge |
 | **P0.4** | Storefront Next.js | ✅ xong, đã merge |
 | **P1** | Catalog & PIM | ✅ **P1.1 → P1.5 xong** — xem [tổng quan](superpowers/specs/2026-09-29-p1-tong-quan.md) |
-| **P2** | Identity | 🟡 **P2.1 xong** (tài khoản + phiên) — còn P2.2 RBAC, P2.3 OTP email, P2.4 storefront, xem [tổng quan](superpowers/specs/2026-09-30-p2-tong-quan.md) |
+| **P2** | Identity | 🟡 **P2.1–P2.2 xong** (tài khoản + phiên, RBAC) — còn P2.3 OTP email, P2.4 storefront, xem [tổng quan](superpowers/specs/2026-09-30-p2-tong-quan.md) |
 
 ---
 
@@ -228,6 +228,34 @@ Ngoài ra: `compose.prod.yml` thêm `web`, và mở `worker` + `outboxrelay` (v�
 comment dù P0.3 đã xong), kèm `RABBITMQ_URL` còn thiếu. Biến chung tách thành
 anchor `x-go-env` vì `<<` của YAML chỉ gộp nông. Thiếu `SITE_URL` thì compose từ
 chối chạy.
+
+---
+
+## P2.2 — Phân quyền (RBAC) ✅
+
+Quyền cố định trong code (`catalog.products.write`, `catalog.taxonomy.write`,
+`media.upload`, `iam.roles.manage`), vai trò và phép gán nằm trong DB.
+`super_admin` là vai trò hệ thống: mọi quyền, không sửa/xóa được. **Bỏ hẳn
+`X-Admin-Key`** — mọi `/admin/*` đi qua Bearer token rồi mới tới quyền. Super
+admin đầu tiên cấp bằng `go run ./cmd/admintool grant-role <email> super_admin`.
+Chi tiết: [đặc tả](superpowers/specs/2026-09-30-p2-2-rbac.md).
+
+| # | Kiểm | Kết quả |
+|---|---|---|
+| 1 | `task check` | 8/8 bước qua |
+| 2 | `X-Admin-Key` cũ | 401 `UNAUTHENTICATED` |
+| 3 | Không token / khách thường | 401 / 403 `FORBIDDEN` (401 trước 403) |
+| 4 | `admintool grant-role` (email CHỮ HOA) | super admin vào được mọi `/admin/*`; email chưa đăng ký → exit 1 kèm hướng dẫn |
+| 5 | Vai trò "Biên tập sản phẩm" | tạo sản phẩm 201, tạo danh mục 403 |
+| 6 | Thêm quyền cho vai trò đang giữ (cache quyền đã nạp sẵn) | tạo danh mục 201 ngay request kế tiếp |
+| 7 | Gỡ vai trò, CÙNG access token còn hạn | 403 ngay; `/me` → `permissions: []` |
+| 8 | Sửa/xóa `super_admin`; tự đổi vai trò mình; quyền lạ; vai trò không tồn tại | 422 `SYSTEM_ROLE_IMMUTABLE` ×2, `CANNOT_CHANGE_OWN_ROLES`, `UNKNOWN_PERMISSION`, `ROLE_NOT_FOUND` |
+| 9 | Xóa vai trò còn người giữ | 409 `ROLE_IN_USE`; gỡ hết rồi xóa 204 |
+| 10 | `/me` | super admin đủ 4 quyền; khách `[]` |
+
+**Lỗi bắt được khi kiểm:** `/me` của khách thường MẤT trường `permissions` thay
+vì trả `[]` — `omitempty` bỏ cả slice rỗng chứ không chỉ `nil`. Đổi sang
+`*[]string`: `/me` luôn có trường, các endpoint khác vẫn không.
 
 ---
 

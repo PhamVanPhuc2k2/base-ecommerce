@@ -160,7 +160,6 @@ services:
       S3_ACCESS_KEY: app
       S3_SECRET_KEY: app-secret-dev
       S3_BUCKET: catalog
-      ADMIN_API_KEY: ${ADMIN_API_KEY:-dev-khoa-chi-dung-cho-may-local}
     ports: ["127.0.0.1:8080:8080"]
     depends_on:
       postgres: { condition: service_healthy }
@@ -211,10 +210,6 @@ services:
       # container.
       DATABASE_URL: postgres://app:app@postgres:5432/base_ecommerce?sslmode=disable
       RABBITMQ_URL: amqp://app:app@rabbitmq:5672/
-      # Relay không phục vụ request nào nên không cần khóa admin, nhưng
-      # config.Load đánh dấu ADMIN_API_KEY là bắt buộc cho MỌI binary dùng
-      # chung package config. Để trống thì tiến trình không khởi động được.
-      ADMIN_API_KEY: ${ADMIN_API_KEY:-dev-khoa-chi-dung-cho-may-local}
       # Relay chỉ cần vài kết nối: một cho vòng đẩy sự kiện, một cho job dọn.
       # Mặc định 20 mà nhân với số tiến trình thì Postgres hết slot rất nhanh.
       DB_MAX_CONNS: "3"
@@ -271,10 +266,6 @@ services:
       # container.
       DATABASE_URL: postgres://app:app@postgres:5432/base_ecommerce?sslmode=disable
       RABBITMQ_URL: amqp://app:app@rabbitmq:5672/
-      # Worker không phục vụ request nào nên không cần khóa admin, nhưng
-      # config.Load đánh dấu ADMIN_API_KEY là bắt buộc cho MỌI binary dùng
-      # chung package config. Để trống thì tiến trình không khởi động được.
-      ADMIN_API_KEY: ${ADMIN_API_KEY:-dev-khoa-chi-dung-cho-may-local}
       # Vòng lặp consume xử lý tuần tự nên một kết nối là đủ; để 3 cho thoải
       # mái. Mặc định 20 mà nhân với số tiến trình thì Postgres hết slot nhanh.
       DB_MAX_CONNS: "3"

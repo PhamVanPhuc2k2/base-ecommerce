@@ -49,7 +49,9 @@ func newHandler(cfg *config.Config, db *postgres.Manager, cache *platformredis.C
 		return nil, err
 	}
 
-	return httpapi.NewHandler(cfg.AdminKey, issuer, httpapi.Usecases{
+	roleRepo := pgstore.NewRoleRepository(db)
+
+	return httpapi.NewHandler(issuer, httpapi.Usecases{
 		CreateProduct:  usecase.NewCreateProduct(db, productRepo, events, c, rules),
 		UpdateProduct:  usecase.NewUpdateProduct(db, productRepo, events, c, rules),
 		PublishProduct: usecase.NewPublishProduct(db, productRepo, events, c, rules),
@@ -72,5 +74,7 @@ func newHandler(cfg *config.Config, db *postgres.Manager, cache *platformredis.C
 		UpdateBrand:    usecase.NewUpdateBrand(db, brandRepo, c),
 		DeleteBrand:    usecase.NewDeleteBrand(db, brandRepo, c),
 		Auth:           auth,
+		Authorizer:     usecase.NewAuthorizer(roleRepo, c),
+		RoleAdmin:      usecase.NewRoleAdmin(db, roleRepo, c),
 	}), nil
 }
