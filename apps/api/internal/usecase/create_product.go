@@ -19,14 +19,16 @@ type CreateProductInput struct {
 }
 
 type CreateProduct struct {
-	tx     TxManager
-	repo   ProductRepository
-	events EventPublisher
-	cache  Cache
+	tx      TxManager
+	repo    ProductRepository
+	events  EventPublisher
+	cache   Cache
+	schemas *AttributeSchemas
 }
 
-func NewCreateProduct(tx TxManager, repo ProductRepository, events EventPublisher, cache Cache) *CreateProduct {
-	return &CreateProduct{tx: tx, repo: repo, events: events, cache: cache}
+func NewCreateProduct(tx TxManager, repo ProductRepository, events EventPublisher, cache Cache,
+	schemas *AttributeSchemas) *CreateProduct {
+	return &CreateProduct{tx: tx, repo: repo, events: events, cache: cache, schemas: schemas}
 }
 
 func (uc *CreateProduct) Execute(ctx context.Context, in CreateProductInput) (*domain.Product, error) {
@@ -35,6 +37,11 @@ func (uc *CreateProduct) Execute(ctx context.Context, in CreateProductInput) (*d
 	p, err := domain.NewProduct(in.Name, in.ShortDescription,
 		in.CategoryID, in.BrandID, in.Variants, in.Attributes, in.Images)
 	if err != nil {
+		return nil, err
+	}
+	// Thuộc tính theo danh mục (P1.3). Trước transaction, như mọi validate
+	// khác: không giữ kết nối database trong lúc làm việc không cần nó.
+	if err := uc.schemas.check(ctx, p); err != nil {
 		return nil, err
 	}
 

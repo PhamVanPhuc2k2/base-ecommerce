@@ -154,6 +154,21 @@ func filtered(f usecase.ListFilter) (sq.SelectBuilder, error) {
 		}
 		base = base.Where("attributes @> ?::jsonb", string(b))
 	}
+
+	// Tùy chọn biến thể gộp vào MỘT EXISTS: ram=16GB&mau=den nghĩa là có MỘT
+	// phiên bản đang bán thỏa CẢ HAI — không phải một bản 16GB và một bản khác
+	// màu đen. Tách thành hai EXISTS là trả về sản phẩm khách không mua được
+	// đúng thứ mình lọc. Đặc tả P1.3 mục 2.8.
+	//
+	// json.Marshal sắp khóa map, nên cùng bộ lọc luôn ra cùng tham số.
+	if len(f.VariantOptions) > 0 {
+		b, err := json.Marshal(f.VariantOptions)
+		if err != nil {
+			return base, err
+		}
+		base = base.Where(`EXISTS (SELECT 1 FROM product_variants v
+			WHERE v.product_id = products.id AND v.status = 'active' AND v.options @> ?::jsonb)`, string(b))
+	}
 	return base, nil
 }
 
@@ -244,6 +259,76 @@ func (r *ProductRepository) List(ctx context.Context, f usecase.ListFilter) ([]*
 		}
 		out = append(out, p)
 	}
+	return out, nil
+}
+
+// Facets đếm số sản phẩm theo từng giá trị của các thuộc tính lọc được, trên
+// ĐÚNG tập kết quả của List (cùng filtered()). productCodes đọc từ
+// products.attributes, variantCodes từ options của variant active.
+//
+// Hai câu, mỗi câu một GROUP BY trên jsonb_each_text — không có câu nào mỗi
+// thuộc tính. Tập kết quả lấy qua FromSelect: squirrel tự đổi placeholder của
+// subquery về dạng ? để đánh số $n ở câu ngoài không lệch (squirrel #183).
+func (r *ProductRepository) Facets(ctx context.Context, f usecase.ListFilter,
+	productCodes, variantCodes []string) (domain.FacetCounts, error) {
+
+	base, err := filtered(f)
+	if err != nil {
+		return nil, err
+	}
+	var queries []sq.SelectBuilder
+	if len(productCodes) > 0 {
+		queries = append(queries, sq.Select("e.key", "e.value", "count(*)").
+			FromSelect(base.Columns("id", "attributes"), "p").
+			JoinClause("CROSS JOIN LATERAL jsonb_each_text(p.attributes) AS e(key, value)").
+			Where("e.key = ANY(?)", productCodes).
+			GroupBy("e.key", "e.value"))
+	}
+	if len(variantCodes) > 0 {
+		// count(DISTINCT p.id): hai phiên bản 16GB của cùng một sản phẩm vẫn
+		// là MỘT sản phẩm — con số hiện cạnh nút lọc là số sản phẩm sẽ thấy.
+		queries = append(queries, sq.Select("e.key", "e.value", "count(DISTINCT p.id)").
+			FromSelect(base.Columns("id"), "p").
+			Join("product_variants v ON v.product_id = p.id AND v.status = 'active'").
+			JoinClause("CROSS JOIN LATERAL jsonb_each_text(v.options) AS e(key, value)").
+			Where("e.key = ANY(?)", variantCodes).
+			GroupBy("e.key", "e.value"))
+	}
+
+	out := domain.FacetCounts{}
+	for _, q := range queries {
+		sqlStr, args, err := q.PlaceholderFormat(sq.Dollar).ToSql()
+		if err != nil {
+			return nil, err
+		}
+		rows, err := r.db.DB(ctx).Query(ctx, sqlStr, args...)
+		if err != nil {
+			return nil, mapErr(err)
+		}
+		for rows.Next() {
+			var fc domain.FacetCount
+			if err := rows.Scan(&fc.Code, &fc.Value, &fc.Count); err != nil {
+				rows.Close()
+				return nil, mapErr(err)
+			}
+			out = append(out, fc)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, mapErr(err)
+		}
+	}
+	// Thứ tự ổn định cho cache và cho giao diện: theo mã, rồi nhiều sản phẩm
+	// trước, rồi theo giá trị.
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Code != out[j].Code {
+			return out[i].Code < out[j].Code
+		}
+		if out[i].Count != out[j].Count {
+			return out[i].Count > out[j].Count
+		}
+		return out[i].Value < out[j].Value
+	})
 	return out, nil
 }
 

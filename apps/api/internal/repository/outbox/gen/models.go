@@ -11,6 +11,19 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AttributeDefinition struct {
+	ID         uuid.UUID
+	Code       string
+	Name       string
+	Type       string
+	Unit       string
+	Options    []string
+	Filterable bool
+	Variant    bool
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
 type Brand struct {
 	ID        uuid.UUID
 	Slug      string
@@ -27,6 +40,13 @@ type Category struct {
 	Position  int32
 	CreatedAt time.Time
 	UpdatedAt time.Time
+}
+
+type CategoryAttribute struct {
+	CategoryID  uuid.UUID
+	AttributeID uuid.UUID
+	Required    bool
+	Position    int32
 }
 
 type Outbox struct {

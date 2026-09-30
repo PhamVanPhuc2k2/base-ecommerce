@@ -60,6 +60,16 @@ export const errorMessages: Record<string, string> = {
   NO_ACTIVE_VARIANT: 'Sản phẩm đang bán cần còn ít nhất một phiên bản đang bán.',
   UNKNOWN_VARIANT: 'Không tìm thấy phiên bản này của sản phẩm.',
   VARIANT_REQUIRED: 'Sản phẩm cần có ít nhất một phiên bản.',
+  ATTRIBUTE_IN_USE:
+    'Thuộc tính này đang được dùng ở một số danh mục. Hãy gỡ khỏi các danh mục trước khi xóa.',
+  ATTRIBUTE_NAME_INVALID: 'Vui lòng nhập tên thuộc tính, tối đa 100 ký tự.',
+  ATTRIBUTE_NOT_FOUND: 'Không tìm thấy thuộc tính này.',
+  DUPLICATE_ATTRIBUTE_ASSIGNMENT: 'Mỗi thuộc tính chỉ được gán một lần cho một danh mục.',
+  DUPLICATE_ATTRIBUTE_CODE: 'Mã thuộc tính này đã tồn tại.',
+  INVALID_ATTRIBUTE_CODE: 'Mã thuộc tính chỉ gồm chữ thường không dấu, số và dấu gạch dưới.',
+  INVALID_ATTRIBUTE_OPTIONS: 'Danh sách giá trị của thuộc tính chưa hợp lệ.',
+  INVALID_ATTRIBUTE_TYPE: 'Kiểu thuộc tính không được hỗ trợ.',
+  UNKNOWN_ATTRIBUTE: 'Không tìm thấy thuộc tính này.',
 
   UNKNOWN: 'Đã có lỗi xảy ra. Vui lòng thử lại.',
   NETWORK_ERROR: 'Không kết nối được tới máy chủ. Vui lòng kiểm tra mạng rồi thử lại.',

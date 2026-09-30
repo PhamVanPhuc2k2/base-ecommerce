@@ -34,6 +34,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/products/facets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Số sản phẩm theo từng giá trị của các thuộc tính lọc được
+         * @description Cùng bộ tham số với GET /products (category, brand, price_min, price_max, attr.*); page/limit/sort bị bỏ qua. Số cạnh mỗi giá trị là số sản phẩm sẽ thấy nếu bấm thêm giá trị đó (đếm với MỌI bộ lọc đang áp, kể cả của chính nhóm đó). Không có `category` thì `data` rỗng — thuộc tính thuộc về danh mục. Cache 60 giây.
+         */
+        get: operations["listProductFacets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/products/{slug}": {
         parameters: {
             query?: never;
@@ -81,6 +101,103 @@ export interface paths {
          */
         get: operations["listBrands"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/attributes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Mọi định nghĩa thuộc tính
+         * @description Danh sách ngắn, không phân trang. Storefront dùng để đổi mã thuộc tính ra tên và đơn vị.
+         */
+        get: operations["listAttributes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/categories/{slug}/attributes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Tập thuộc tính HIỆU LỰC của danh mục (kể cả thừa kế từ danh mục cha)
+         * @description Rỗng nghĩa là danh mục ở chế độ tự do: sản phẩm dùng khóa thuộc tính tùy ý như trước 0.5.0. Có ít nhất một thì khóa lạ bị từ chối.
+         */
+        get: operations["getCategoryAttributes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/attributes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Tạo định nghĩa thuộc tính */
+        post: operations["createAttribute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/attributes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Xóa định nghĩa không còn gán cho danh mục nào */
+        delete: operations["deleteAttribute"];
+        options?: never;
+        head?: never;
+        /** Sửa tên, đơn vị, giá trị enum, cờ lọc */
+        patch: operations["updateAttribute"];
+        trace?: never;
+    };
+    "/admin/categories/{id}/attributes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Thay TOÀN BỘ thuộc tính gán cho danh mục
+         * @description Gửi danh sách rỗng là gỡ hết — danh mục (và con của nó, nếu không có gán riêng) về chế độ tự do. Danh mục con gán lại cùng thuộc tính thì cấu hình của con thắng.
+         */
+        put: operations["setCategoryAttributes"];
         post?: never;
         delete?: never;
         options?: never;
@@ -268,14 +385,16 @@ export interface components {
              * @description Mã ổn định để frontend map sang thông điệp tiếng Việt.
              * @enum {string}
              */
-            code: "INTERNAL_ERROR" | "INVALID_PAGINATION" | "MALFORMED_REQUEST" | "METHOD_NOT_ALLOWED" | "PAYLOAD_TOO_LARGE" | "REQUEST_CANCELED" | "REQUEST_TIMEOUT" | "ROUTE_NOT_FOUND" | "UNAUTHENTICATED" | "VALIDATION_FAILED" | "INVALID_SKU" | "NAME_REQUIRED" | "NAME_TOO_LONG" | "INVALID_PRICE" | "UNSUPPORTED_CURRENCY" | "INVALID_SLUG" | "NO_IMAGE" | "PRICE_REQUIRED" | "INVALID_STATUS" | "CATEGORY_NOT_FOUND" | "BRAND_NOT_FOUND" | "CATEGORY_NAME_INVALID" | "BRAND_NAME_INVALID" | "CATEGORY_CYCLE" | "VARIANT_REQUIRED" | "INVALID_VARIANT_OPTIONS" | "INVALID_VARIANT_STATUS" | "NO_ACTIVE_VARIANT" | "ALREADY_PUBLISHED" | "DUPLICATE_SKU" | "DUPLICATE_SLUG" | "DUPLICATE_CATEGORY_SLUG" | "DUPLICATE_BRAND_SLUG" | "CATEGORY_HAS_CHILDREN" | "CATEGORY_HAS_PRODUCTS" | "BRAND_HAS_PRODUCTS" | "DUPLICATE_VARIANT_OPTIONS" | "PRODUCT_NOT_FOUND" | "UNKNOWN_CATEGORY" | "UNKNOWN_BRAND" | "UNKNOWN_VARIANT" | "INVALID_SORT" | "PAGE_TOO_DEEP";
+            code: "INTERNAL_ERROR" | "INVALID_PAGINATION" | "MALFORMED_REQUEST" | "METHOD_NOT_ALLOWED" | "PAYLOAD_TOO_LARGE" | "REQUEST_CANCELED" | "REQUEST_TIMEOUT" | "ROUTE_NOT_FOUND" | "UNAUTHENTICATED" | "VALIDATION_FAILED" | "INVALID_SKU" | "NAME_REQUIRED" | "NAME_TOO_LONG" | "INVALID_PRICE" | "UNSUPPORTED_CURRENCY" | "INVALID_SLUG" | "NO_IMAGE" | "PRICE_REQUIRED" | "INVALID_STATUS" | "CATEGORY_NOT_FOUND" | "BRAND_NOT_FOUND" | "CATEGORY_NAME_INVALID" | "BRAND_NAME_INVALID" | "CATEGORY_CYCLE" | "VARIANT_REQUIRED" | "INVALID_VARIANT_OPTIONS" | "INVALID_VARIANT_STATUS" | "NO_ACTIVE_VARIANT" | "INVALID_ATTRIBUTE_CODE" | "ATTRIBUTE_NAME_INVALID" | "INVALID_ATTRIBUTE_TYPE" | "INVALID_ATTRIBUTE_OPTIONS" | "ATTRIBUTE_NOT_FOUND" | "DUPLICATE_ATTRIBUTE_ASSIGNMENT" | "ALREADY_PUBLISHED" | "DUPLICATE_SKU" | "DUPLICATE_SLUG" | "DUPLICATE_CATEGORY_SLUG" | "DUPLICATE_BRAND_SLUG" | "CATEGORY_HAS_CHILDREN" | "CATEGORY_HAS_PRODUCTS" | "BRAND_HAS_PRODUCTS" | "DUPLICATE_VARIANT_OPTIONS" | "DUPLICATE_ATTRIBUTE_CODE" | "ATTRIBUTE_IN_USE" | "PRODUCT_NOT_FOUND" | "UNKNOWN_CATEGORY" | "UNKNOWN_BRAND" | "UNKNOWN_VARIANT" | "UNKNOWN_ATTRIBUTE" | "INVALID_SORT" | "PAGE_TOO_DEEP";
             /**
              * @description Luôn có mặt trong response (không bao giờ bị lược bỏ), nhưng có
              *     thể là chuỗi rỗng nếu middleware RequestID chưa gán được giá trị.
              */
             request_id: string;
             errors?: {
+                /** @description Đường dẫn tới trường, ví dụ "attributes.ram" hay "variants[1].options.mau". */
                 field: string;
+                /** @description Mã lỗi CẤP TRƯỜNG (khác Problem.code). Với thuộc tính theo danh mục: UNKNOWN_ATTRIBUTE_KEY, INVALID_ATTRIBUTE_VALUE, ATTRIBUTE_REQUIRED, VARIANT_ATTRIBUTE_ON_PRODUCT, PRODUCT_ATTRIBUTE_ON_VARIANT. */
                 code: string;
                 message: string;
             }[];
@@ -390,6 +509,74 @@ export interface components {
             /** @enum {string} */
             status?: "active" | "inactive";
             position?: number;
+        };
+        Attribute: {
+            /** Format: uuid */
+            id: string;
+            /** @description Khóa trong attributes/options và trong tham số attr.<code>. Bất biến. */
+            code: string;
+            name: string;
+            /**
+             * @description Bất biến. number: số thập phân thuần ("16", "15.6") — đơn vị nằm ở `unit`, không nằm trong giá trị. boolean: "true"/"false".
+             * @enum {string}
+             */
+            type: "text" | "number" | "boolean" | "enum";
+            unit: string;
+            /** @description Giá trị cho phép của kiểu enum; rỗng với kiểu khác. */
+            options: string[];
+            /** @description Có hiện trong /products/facets không. */
+            filterable: boolean;
+            /** @description Bất biến. true: chỉ đặt trong Variant.options (RAM, màu). false: chỉ đặt trong Product.attributes (CPU). Đặt sai chỗ trả 422. */
+            variant: boolean;
+        };
+        CategoryAttribute: components["schemas"]["Attribute"] & {
+            /** @description Bắt buộc khi sản phẩm live. */
+            required: boolean;
+            position: number;
+            /** @description Gán ở danh mục cha, không ở chính danh mục này. */
+            inherited: boolean;
+        };
+        Facet: {
+            code: string;
+            name: string;
+            type: string;
+            unit: string;
+            variant: boolean;
+            /** @description Nhiều sản phẩm trước, rồi theo giá trị. */
+            values: {
+                value: string;
+                count: number;
+            }[];
+        };
+        CreateAttributeRequest: {
+            code: string;
+            name: string;
+            /** @enum {string} */
+            type: "text" | "number" | "boolean" | "enum";
+            unit?: string;
+            /** @description Bắt buộc với enum, cấm với kiểu khác. */
+            options?: string[];
+            /** @default false */
+            filterable: boolean;
+            /** @default false */
+            variant: boolean;
+        };
+        /** @description Không có code, type, variant — chúng bất biến; gửi lên trả 400 MALFORMED_REQUEST. Bỏ một giá trị enum đang dùng được phép: dữ liệu cũ không bị sửa, sản phẩm đó báo lỗi ở lần ghi kế tiếp. */
+        UpdateAttributeRequest: {
+            name?: string;
+            unit?: string;
+            options?: string[];
+            filterable?: boolean;
+        };
+        SetCategoryAttributesRequest: {
+            attributes: {
+                /** Format: uuid */
+                attribute_id: string;
+                /** @default false */
+                required: boolean;
+                /** @default 0 */
+                position: number;
+            }[];
         };
         Brand: {
             /** Format: uuid */
@@ -541,6 +728,37 @@ export interface operations {
             503: components["responses"]["Problem"];
         };
     };
+    listProductFacets: {
+        parameters: {
+            query?: {
+                category?: string;
+                brand?: string;
+                price_min?: string;
+                price_max?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Facet"][];
+                    };
+                };
+            };
+            400: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
     getProductBySlug: {
         parameters: {
             query?: never;
@@ -610,6 +828,177 @@ export interface operations {
                     };
                 };
             };
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listAttributes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Attribute"][];
+                    };
+                };
+            };
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getCategoryAttributes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CategoryAttribute"][];
+                    };
+                };
+            };
+            404: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createAttribute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAttributeRequest"];
+            };
+        };
+        responses: {
+            /** @description Đã tạo */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Attribute"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    deleteAttribute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Đã xóa */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateAttribute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAttributeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Attribute"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    setCategoryAttributes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetCategoryAttributesRequest"];
+            };
+        };
+        responses: {
+            /** @description Đã lưu */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
             500: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };

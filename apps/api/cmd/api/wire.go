@@ -26,20 +26,27 @@ func newCatalogHandler(db *postgres.Manager, cache *platformredis.Cache, adminKe
 	// domain lẫn usecase KHÔNG đổi một dòng nào — chỉ đúng dòng lắp ráp này.
 	events := outboxpub.New(outbox.NewRepository(db))
 
+	attributeRepo := pgstore.NewAttributeRepository(db)
+
 	treeUC := usecase.NewGetCategoryTree(categoryRepo, c)
+	schemas := usecase.NewAttributeSchemas(attributeRepo, c, treeUC)
 
 	return httpapi.NewHandler(adminKey, httpapi.Usecases{
-		CreateProduct:  usecase.NewCreateProduct(db, productRepo, events, c),
-		UpdateProduct:  usecase.NewUpdateProduct(db, productRepo, events, c),
-		PublishProduct: usecase.NewPublishProduct(db, productRepo, events, c),
+		CreateProduct:  usecase.NewCreateProduct(db, productRepo, events, c, schemas),
+		UpdateProduct:  usecase.NewUpdateProduct(db, productRepo, events, c, schemas),
+		PublishProduct: usecase.NewPublishProduct(db, productRepo, events, c, schemas),
 		GetProduct:     usecase.NewGetProduct(productRepo, c),
-		ListProducts:   usecase.NewListProducts(productRepo, treeUC, c),
+		ListProducts:   usecase.NewListProducts(productRepo, treeUC, c, schemas),
 		CategoryTree:   treeUC,
 		CreateCategory: usecase.NewCreateCategory(db, categoryRepo, c),
 		UpdateCategory: usecase.NewUpdateCategory(db, categoryRepo, c),
 		DeleteCategory: usecase.NewDeleteCategory(db, categoryRepo, c),
-		AddVariant:     usecase.NewAddVariant(db, productRepo, events, c),
-		UpdateVariant:  usecase.NewUpdateVariant(db, productRepo, events, c),
+		AddVariant:     usecase.NewAddVariant(db, productRepo, events, c, schemas),
+		UpdateVariant:  usecase.NewUpdateVariant(db, productRepo, events, c, schemas),
+		ListFacets:     usecase.NewListFacets(productRepo, treeUC, c, schemas),
+		ListAttributes: usecase.NewListAttributes(schemas),
+		CategoryAttrs:  usecase.NewCategoryAttributes(schemas),
+		AttributeAdmin: usecase.NewAttributeAdmin(db, attributeRepo, c),
 		ListBrands:     usecase.NewListBrands(brandRepo, c),
 		CreateBrand:    usecase.NewCreateBrand(db, brandRepo, c),
 		UpdateBrand:    usecase.NewUpdateBrand(db, brandRepo, c),
