@@ -14,7 +14,7 @@
 | **P0.2** | Module `catalog` (lát cắt dọc) | ✅ xong, đã merge |
 | **P0.3** | Outbox + relay + worker | ✅ xong, đã merge |
 | **P0.4** | Storefront Next.js | ✅ xong, đã merge |
-| **P1** | Catalog & PIM | 🟡 **P1.1, P1.2 xong** — còn P1.3 → P1.5, xem [tổng quan](superpowers/specs/2026-09-29-p1-tong-quan.md) |
+| **P1** | Catalog & PIM | 🟡 **P1.1 → P1.3 xong** — còn P1.4 (media), P1.5 (SEO & storefront), xem [tổng quan](superpowers/specs/2026-09-29-p1-tong-quan.md) |
 
 ---
 
@@ -230,6 +230,41 @@ chối chạy.
 
 ---
 
+## P1.3 — Thuộc tính động theo danh mục ✅
+
+Định nghĩa thuộc tính (kiểu text/number/boolean/enum, đơn vị, lọc được, thuộc
+tính biến thể), gán cho danh mục và **kế thừa xuống danh mục con**; validate ở
+mọi đường ghi; lọc theo tùy chọn biến thể; `GET /products/facets`; storefront
+có bộ lọc facet và bảng thông số dùng tên + đơn vị. Chi tiết:
+[đặc tả](superpowers/specs/2026-09-30-p1-3-thuoc-tinh-dong.md).
+
+**Quyết định lớn:** giữ JSONB, thêm bảng định nghĩa — không chuyển sang EAV
+(bộ lọc N thuộc tính thành N lần JOIN). Danh mục **chưa khai thuộc tính nào
+vẫn tự do như P0**, nên 33 sản phẩm hiện có không vỡ khi triển khai.
+
+| # | Kiểm (stack Docker) | Kết quả |
+|---|---|---|
+| 2 | Danh mục chưa khai | PATCH khóa tùy ý → 200, như P0 |
+| 3 | Gán `cpu` ở `laptop` | `laptop-gaming` thừa kế (`inherited: true`, `required: true`) |
+| 4 | Khóa lạ + text rỗng + boolean "có" + số "16GB" + enum "Đỏ" | **Một** lần 422 `VALIDATION_FAILED`, `errors[]` đủ **5** trường |
+| 5 | Thuộc tính sai cấp (biến thể ↔ sản phẩm) | 422 đúng từng trường |
+| 6 | Publish thiếu `required` | 422 `ATTRIBUTE_REQUIRED`; bản nháp vẫn lưu được |
+| 7 | Chuyển sản phẩm từ danh mục tự do sang danh mục chặt | Validate theo danh mục **mới** |
+| 8 | `ram=16&mau=Đen` | Chỉ sản phẩm có **một** phiên bản thỏa cả hai; `ram=8&mau=Đen` → rỗng |
+| 9 | Facet `laptop-gaming` | 6/6 giá trị: số facet **khớp** `total` khi bấm |
+| 10 | Xóa định nghĩa đang gán / PATCH `type` | 409 `ATTRIBUTE_IN_USE` / 400 |
+| 11 | `/danh-muc?category=laptop-gaming` | Nhóm RAM, Màu có số đếm; link `attr.*`; đổi danh mục bỏ `attr.*` cũ |
+| 12 | Trang chi tiết | "RAM: 16 GB · Màu: Đen" theo **thứ tự quản trị đặt** |
+
+**Lỗi tìm ra khi kiểm mục 12:** JSON từ Go có khóa sắp theo bảng chữ cái, nên
+"Màu" luôn đứng trước "RAM" dù quản trị đặt RAM lên đầu. Trang chi tiết giờ đọc
+`GET /categories/{slug}/attributes` để sắp theo `position`.
+
+Mục 11 chưa bấm Back bằng trình duyệt thật: facet dùng đúng cơ chế link của bộ
+lọc danh mục, cơ chế đó đã kiểm bằng Chrome ở P0.4.
+
+---
+
 ## P1.2 — Biến thể / SKU ✅
 
 `Product` thành aggregate chứa `Variant` (SKU, giá, options, active/inactive).
@@ -316,6 +351,9 @@ chặn SELECT lẫn khóa FK khi ghi sản phẩm.
 | **Trang lỗi trả HTTP 200** | API chết thì `/danh-muc` hiện `<ErrorState>` với status 200 — App Router không cho Server Component đặt 503. Crawler có thể index trang lỗi nếu API chết đúng lúc nó ghé |
 | **Dữ liệu mẫu dùng ảnh bịa** | `https://vi.du/anh.jpg` làm `/_next/image` trả 500. Kèm theo: `remotePatterns` đang cho `hostname: '**'` — lỗ hổng lạm dụng băng thông/SSRF, P1 phải siết về CDN thật (đã có TODO trong `next.config.ts`) |
 | **Ký hiệu ₫ không có trong Geist** | Hiện bằng font dự phòng — y như bản Google Fonts trước đây |
+| **Facet chọn một giá trị mỗi nhóm, đếm conjunctive** | "8GB hoặc 16GB" cần API hỗ trợ OR; số đếm áp cả bộ lọc của chính nhóm đó (P1.3) |
+| **Chưa lọc khoảng số** | `RAM ≥ 16` chưa có — chỉ lọc bằng đúng giá trị |
+| **Dữ liệu cũ chỉ bị kiểm ở lần ghi kế tiếp** | Bật chế độ chặt cho danh mục hay bỏ giá trị enum không sửa dữ liệu đã lưu; sản phẩm sai báo lỗi khi sửa lần sau |
 | **Chưa có bộ chọn phiên bản** | Trang chi tiết hiện bảng phiên bản tĩnh; chọn để đổi giá/ảnh/thêm vào giỏ cần client component — P1.5 và P4 |
 | **Không xóa được variant** | Có chủ đích: đơn hàng (P4) sẽ trỏ vào variant. Ngừng bán là `inactive` |
 | **Số đếm lệch tối đa 60 giây** | Cache số đếm không vô hiệu hóa khi ghi — trang cuối có thể thiếu/thừa sản phẩm vừa đăng trong một phút (P1.1) |

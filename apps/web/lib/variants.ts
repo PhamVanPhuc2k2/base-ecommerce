@@ -1,5 +1,5 @@
 import type { components } from '@/lib/api/generated/schema'
-import { formatAttrValue } from '@/lib/attributes'
+import { byPosition, formatAttrValue } from '@/lib/attributes'
 
 type Product = components['schemas']['Product']
 type Variant = components['schemas']['Variant']
@@ -44,8 +44,12 @@ export function hasPriceRange(p: Product): boolean {
  * chuỗi rỗng. Có định nghĩa thì dùng tên + đơn vị, không có (danh mục ở chế độ
  * tự do) thì hiện nguyên mã và giá trị.
  */
-export function optionsLabel(v: Variant, defs?: Map<string, Attribute>): string {
-  return Object.entries(v.options)
+export function optionsLabel(
+  v: Variant,
+  defs?: Map<string, Attribute>,
+  order: string[] = [],
+): string {
+  return byPosition(Object.entries(v.options), order)
     .map(([k, val]) => {
       const def = defs?.get(k)
       return `${def?.name ?? k}: ${formatAttrValue(def, val)}`

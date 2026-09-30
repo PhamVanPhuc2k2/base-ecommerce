@@ -248,6 +248,8 @@ base-ecommerce/
 │   │   │   ├── domain/                       # ENTITIES — chỉ stdlib + danh sách trắng
 │   │   │   │   ├── product.go                # aggregate root: giá "từ", quy tắc bán hàng, Validate()
 │   │   │   │   ├── variant.go                # phiên bản: SKU, giá, options; chỉ sinh ra QUA Product
+│   │   │   │   ├── attribute.go              # định nghĩa thuộc tính, tập hiệu lực kế thừa, CheckProduct
+│   │   │   │   ├── facet.go                  # số sản phẩm theo giá trị thuộc tính
 │   │   │   │   ├── category.go               # cây danh mục, DescendantIDs, CheckMove chống vòng lặp
 │   │   │   │   ├── brand.go                  # thương hiệu; slug KHÔNG đổi theo tên
 │   │   │   │   ├── money.go                  # value object (bọc NUMERIC)
@@ -266,7 +268,8 @@ base-ecommerce/
 │   │   │   │   ├── update_category.go        # ParentChange ba trạng thái
 │   │   │   │   ├── delete_category.go
 │   │   │   │   ├── brand.go                  # List/Create/Update/DeleteBrand
-│   │   │   │   └── variant.go                # AddVariant/UpdateVariant — không có xóa, chỉ inactive
+│   │   │   │   ├── variant.go                # AddVariant/UpdateVariant — không có xóa, chỉ inactive
+│   │   │   │   └── attribute.go              # AttributeSchemas (validate mọi đường ghi), quản trị thuộc tính
 │   │   │   ├── repository/                   # cài đặt interface của usecase (đi RA ngoài)
 │   │   │   │   ├── pgstore/                  # Postgres: sqlc + squirrel + mapping → domain
 │   │   │   │   │   ├── queries/              # *.sql cho sqlc
@@ -274,7 +277,8 @@ base-ecommerce/
 │   │   │   │   │   ├── mapping.go            # row → domain, và mapErr cho lỗi Postgres
 │   │   │   │   │   ├── product_repo.go       # List và Count dùng chung filtered()
 │   │   │   │   │   ├── category_repo.go      # LockForWrite; lỗi FK map theo thao tác
-│   │   │   │   │   └── brand_repo.go
+│   │   │   │   │   ├── brand_repo.go
+│   │   │   │   │   └── attribute_repo.go     # định nghĩa + phép gán; ReplaceAssignments trong transaction
 │   │   │   │   ├── rediscache/               # cache-aside cho sản phẩm và cây danh mục
 │   │   │   │   ├── outboxpub/                # domain.Event → outbox.Record, cùng transaction
 │   │   │   │   └── outbox/                   # outbox + khử trùng lặp, dùng chung, KHÔNG biết domain
@@ -994,7 +998,6 @@ Những phần này thuộc dự án con tương ứng, sẽ thiết kế khi t�
 
 | Hạng mục | Thuộc |
 |---|---|
-| Mô hình thuộc tính động của sản phẩm (JSONB vs EAV) | P1 |
 | Cơ chế RBAC và vòng đời refresh token | P2 |
 | Mô hình tồn kho đa kho + quy tắc giữ chỗ | P3 |
 | Máy quy tắc khuyến mãi | P9 |
