@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/shopspring/decimal"
 )
 
@@ -68,7 +67,7 @@ type Outbox struct {
 	Payload       []byte
 	TraceID       *string
 	CreatedAt     time.Time
-	PublishedAt   pgtype.Timestamptz
+	PublishedAt   *time.Time
 	Attempts      int32
 	LastError     *string
 }
@@ -93,7 +92,7 @@ type Product struct {
 	Images           []string
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
-	DeletedAt        pgtype.Timestamptz
+	DeletedAt        *time.Time
 }
 
 type ProductVariant struct {
@@ -107,4 +106,26 @@ type ProductVariant struct {
 	Position  int32
 	CreatedAt time.Time
 	UpdatedAt time.Time
+}
+
+type RefreshToken struct {
+	ID        uuid.UUID
+	FamilyID  uuid.UUID
+	UserID    uuid.UUID
+	TokenHash []byte
+	ExpiresAt time.Time
+	UsedAt    *time.Time
+	RevokedAt *time.Time
+	CreatedAt time.Time
+}
+
+type User struct {
+	ID              uuid.UUID
+	Email           string
+	PasswordHash    string
+	FullName        string
+	Status          string
+	EmailVerifiedAt *time.Time
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 }

@@ -115,6 +115,26 @@ var (
 	ErrUnknownMedia = errs.New(errs.KindNotFound, "UNKNOWN_MEDIA",
 		"Không tìm thấy ảnh")
 
+	// Tài khoản và phiên (P2.1).
+	ErrInvalidEmail = errs.New(errs.KindValidation, "INVALID_EMAIL",
+		"Địa chỉ email không hợp lệ")
+	ErrWeakPassword = errs.New(errs.KindValidation, "WEAK_PASSWORD",
+		"Mật khẩu phải dài từ 8 đến 128 ký tự")
+	ErrFullNameInvalid = errs.New(errs.KindValidation, "FULL_NAME_INVALID",
+		"Họ tên là bắt buộc và tối đa 100 ký tự")
+	ErrEmailTaken = errs.New(errs.KindConflict, "EMAIL_TAKEN",
+		"Email này đã được dùng để đăng ký")
+	// INVALID_CREDENTIALS dùng CHUNG cho "không có email này" và "sai mật khẩu":
+	// hai lỗi khác nhau thì kẻ dò biết ngay email nào đã đăng ký.
+	ErrInvalidCredentials = errs.New(errs.KindUnauthenticated, "INVALID_CREDENTIALS",
+		"Email hoặc mật khẩu không đúng")
+	ErrInvalidRefreshToken = errs.New(errs.KindUnauthenticated, "INVALID_REFRESH_TOKEN",
+		"Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại")
+	ErrAccountDisabled = errs.New(errs.KindForbidden, "ACCOUNT_DISABLED",
+		"Tài khoản đã bị khóa")
+	ErrRateLimited = errs.New(errs.KindRateLimited, "RATE_LIMITED",
+		"Bạn thao tác quá nhanh, vui lòng thử lại sau ít phút")
+
 	ErrInvalidPagination = errs.New(errs.KindInvalid, "INVALID_PAGINATION",
 		"Tham số phân trang không hợp lệ")
 

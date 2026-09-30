@@ -203,3 +203,48 @@ const (
 	// một lần ghi ảnh hưởng tới thì đắt hơn nhiều. Xem đặc tả P1.1 mục 2.5.
 	TTLProductCount = 60 * time.Second
 )
+
+// ---- Xác thực (P2.1) ----
+
+type UserRepository interface {
+	Insert(ctx context.Context, u *domain.User) error
+	// ByEmail / ByID trả (nil, nil) khi không có.
+	ByEmail(ctx context.Context, email string) (*domain.User, error)
+	ByID(ctx context.Context, id uuid.UUID) (*domain.User, error)
+}
+
+// RefreshToken là một dòng refresh_tokens. Hash là SHA-256 của token — token
+// thô không bao giờ rời khỏi use case trừ trong response cho chính chủ.
+type RefreshToken struct {
+	ID        uuid.UUID
+	FamilyID  uuid.UUID
+	UserID    uuid.UUID
+	Hash      []byte
+	ExpiresAt time.Time
+	UsedAt    *time.Time
+	RevokedAt *time.Time
+	CreatedAt time.Time
+}
+
+type RefreshTokenRepository interface {
+	Insert(ctx context.Context, t RefreshToken) error
+	// ByHashForUpdate khóa dòng (FOR UPDATE); (nil, nil) khi không có.
+	ByHashForUpdate(ctx context.Context, hash []byte) (*RefreshToken, error)
+	MarkUsed(ctx context.Context, id uuid.UUID, at time.Time) error
+	RevokeFamily(ctx context.Context, familyID uuid.UUID, at time.Time) error
+}
+
+type PasswordHasher interface {
+	Hash(plain string) (string, error)
+	Verify(plain, encoded string) (bool, error)
+}
+
+type TokenIssuer interface {
+	Issue(userID, sessionID uuid.UUID, now time.Time) (token string, expiresAt time.Time, err error)
+}
+
+// RateLimiter: ok=false khi vượt giới hạn, kèm thời gian phải chờ. Cài đặt
+// PHẢI fail-open (hỏng thì cho qua) — thiết kế 03 mục 7.
+type RateLimiter interface {
+	Allow(ctx context.Context, key string, limit int, window time.Duration) (ok bool, wait time.Duration)
+}

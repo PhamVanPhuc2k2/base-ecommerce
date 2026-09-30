@@ -22,6 +22,15 @@ sql:
             go_type: github.com/shopspring/decimal.Decimal
           - db_type: timestamptz
             go_type: time.Time
+          # Cột thời gian cho phép NULL (used_at, email_verified_at, deleted_at)
+          # thành *time.Time thay vì pgtype.Timestamptz — cùng quy ước với
+          # entry outbox bên dưới, để tầng repository không phải đổi kiểu tay.
+          - db_type: timestamptz
+            nullable: true
+            go_type:
+              import: time
+              type: Time
+              pointer: true
   - engine: postgresql
     schema: migrations
     queries: internal/repository/outbox/queries

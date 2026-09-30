@@ -251,6 +251,7 @@ base-ecommerce/
 │   │   │   │   ├── attribute.go              # định nghĩa thuộc tính, tập hiệu lực kế thừa, CheckProduct
 │   │   │   │   ├── facet.go                  # số sản phẩm theo giá trị thuộc tính
 │   │   │   │   ├── media.go                  # ảnh đã upload; dò định dạng bằng chữ ký byte
+│   │   │   │   ├── user.go                   # tài khoản; chuẩn hóa email, độ dài mật khẩu
 │   │   │   │   ├── category.go               # cây danh mục, DescendantIDs, CheckMove chống vòng lặp
 │   │   │   │   ├── brand.go                  # thương hiệu; slug KHÔNG đổi theo tên
 │   │   │   │   ├── money.go                  # value object (bọc NUMERIC)
@@ -271,7 +272,8 @@ base-ecommerce/
 │   │   │   │   ├── brand.go                  # List/Create/Update/DeleteBrand
 │   │   │   │   ├── variant.go                # AddVariant/UpdateVariant — không có xóa, chỉ inactive
 │   │   │   │   ├── attribute.go              # AttributeSchemas, quản trị thuộc tính
-│   │   │   │   └── media.go                  # upload (presigned POST) + ProductRules gộp lỗi thuộc tính và ảnh
+│   │   │   │   ├── media.go                  # upload (presigned POST) + ProductRules gộp lỗi thuộc tính và ảnh
+│   │   │   │   └── auth.go                   # đăng ký/đăng nhập/refresh xoay vòng/đăng xuất, rate limit
 │   │   │   ├── repository/                   # cài đặt interface của usecase (đi RA ngoài)
 │   │   │   │   ├── pgstore/                  # Postgres: sqlc + squirrel + mapping → domain
 │   │   │   │   │   ├── queries/              # *.sql cho sqlc
@@ -281,7 +283,8 @@ base-ecommerce/
 │   │   │   │   │   ├── category_repo.go      # LockForWrite; lỗi FK map theo thao tác
 │   │   │   │   │   ├── brand_repo.go
 │   │   │   │   │   ├── attribute_repo.go     # định nghĩa + phép gán; ReplaceAssignments trong transaction
-│   │   │   │   │   └── media_repo.go
+│   │   │   │   │   ├── media_repo.go
+│   │   │   │   │   └── user_repo.go          # users + refresh_tokens (FOR UPDATE khi refresh)
 │   │   │   │   ├── rediscache/               # cache-aside cho sản phẩm và cây danh mục
 │   │   │   │   ├── outboxpub/                # domain.Event → outbox.Record, cùng transaction
 │   │   │   │   └── outbox/                   # outbox + khử trùng lặp, dùng chung, KHÔNG biết domain
@@ -298,7 +301,9 @@ base-ecommerce/
 │   │   │   ├── postgres/                     # pgxpool, DBTX, txmanager
 │   │   │   ├── redis/                        # client + cache-aside, singleflight, jitter
 │   │   │   ├── rabbitmq/                     # topology + publisher có confirm + consumer manual ack
-│   │   │   └── objectstore/                  # S3/MinIO: presigned POST, stat, đọc byte đầu
+│   │   │   ├── objectstore/                  # S3/MinIO: presigned POST, stat, đọc byte đầu
+│   │   │   ├── password/                     # argon2id, chuỗi PHC
+│   │   │   └── authtoken/                    # JWT HS256 — chốt đúng một thuật toán
 │   │   ├── migrations/                       # goose
 │   │   ├── .air.api.toml                     # hot-reload cho cmd/api (task dev)
 │   │   ├── .air.worker.toml                  # hot-reload cho cmd/worker (task dev-worker)

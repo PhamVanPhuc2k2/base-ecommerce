@@ -15,6 +15,7 @@
 | **P0.3** | Outbox + relay + worker | ✅ xong, đã merge |
 | **P0.4** | Storefront Next.js | ✅ xong, đã merge |
 | **P1** | Catalog & PIM | ✅ **P1.1 → P1.5 xong** — xem [tổng quan](superpowers/specs/2026-09-29-p1-tong-quan.md) |
+| **P2** | Identity | 🟡 **P2.1 xong** (tài khoản + phiên) — còn P2.2 RBAC, P2.3 OTP email, P2.4 storefront, xem [tổng quan](superpowers/specs/2026-09-30-p2-tong-quan.md) |
 
 ---
 
@@ -227,6 +228,35 @@ Ngoài ra: `compose.prod.yml` thêm `web`, và mở `worker` + `outboxrelay` (v�
 comment dù P0.3 đã xong), kèm `RABBITMQ_URL` còn thiếu. Biến chung tách thành
 anchor `x-go-env` vì `<<` của YAML chỉ gộp nông. Thiếu `SITE_URL` thì compose từ
 chối chạy.
+
+---
+
+## P2.1 — Tài khoản và phiên đăng nhập ✅
+
+Đăng ký / đăng nhập bằng email + mật khẩu, refresh token xoay vòng có phát hiện
+dùng lại, đăng xuất, `GET /me`, rate limit. Chi tiết:
+[đặc tả](superpowers/specs/2026-09-30-p2-1-tai-khoan-phien.md).
+
+| # | Kiểm | Kết quả |
+|---|---|---|
+| 2 | Đăng ký → `/me` | 201 + `Cache-Control: no-store`; email lưu đã chuẩn hóa |
+| 3 | `ZZ.P21@Example.VN ` rồi đăng ký lại bằng CHỮ HOA | 409 `EMAIL_TAKEN`; đăng nhập chữ thường 200 |
+| 4 | Sai mật khẩu vs email không tồn tại | cùng 401 `INVALID_CREDENTIALS`; thời gian **phía server** 20,7 ms vs 20,4 ms (n=20, xen kẽ) |
+| 5 | Refresh rồi DÙNG LẠI token cũ | 401, và token MỚI cũng chết — family thu hồi 2/2 |
+| 6 | Đăng xuất → refresh | 401; đăng xuất token lạ vẫn 204 |
+| 7 | Token `alg: none`, hết hạn (chữ ký đúng), sai chữ ký, sai `iss`, thiếu `exp` | tất cả 401; token tự ký hợp lệ (đối chứng) 200 |
+| 8 | 6 lần đăng nhập sai | 5 × 401 rồi 429 + `Retry-After: 60` |
+| 9 | Redis chết | đăng nhập 200 (fail-open) |
+| 10 | DB và log | `$argon2id$v=19$m=19456,t=2,p=1$…`; `token_hash` 32 byte; không mật khẩu/token nào trong log |
+| 11 | `APP_ENV=production` + `JWT_SECRET` dev / khóa < 32 byte | từ chối khởi động |
+
+**Bẫy tránh được khi viết:** phát hiện dùng lại phải thu hồi cả family RỒI trả
+lỗi — trả lỗi ngay trong closure của `TxManager` là transaction rollback và
+lệnh thu hồi biến mất. Closure trả `nil` để commit, lỗi trả sau `Run`.
+
+**Đo sai rồi đo lại:** lần đầu đo thời gian phía client thấy 39,7 ms vs 23,8
+ms — tưởng lộ email qua thời gian. Lần đó loại "có tài khoản" luôn chạy trước
+trong mỗi cặp. Đo lại phía server, xen kẽ thứ tự: không có chênh lệch.
 
 ---
 
@@ -445,6 +475,10 @@ chặn SELECT lẫn khóa FK khi ghi sản phẩm.
 | **Không xóa được variant** | Có chủ đích: đơn hàng (P4) sẽ trỏ vào variant. Ngừng bán là `inactive` |
 | **Số đếm lệch tối đa 60 giây** | Cache số đếm không vô hiệu hóa khi ghi — trang cuối có thể thiếu/thừa sản phẩm vừa đăng trong một phút (P1.1) |
 | **Chưa phát sự kiện `category.*`/`brand.*`** | Chưa consumer nào cần; phát mà thiếu binding thì relay thử lại mãi. P7 thêm cả hai cùng lúc |
+| **Đăng ký lộ email đã tồn tại** | 409 `EMAIL_TAKEN` — giấu được cần luồng xác nhận qua thư (P2.3). Rate limit làm việc dò hàng loạt đắt (P2.1) |
+| **Đăng xuất không giết access token đang có** | Sống tối đa 15 phút — cái giá của JWT không tra DB mỗi request (P2.1) |
+| **Hai tab refresh cùng lúc = bị đăng xuất** | Không phân biệt được với token bị trộm. Storefront refresh ở server một chỗ nên hiếm (P2.1) |
+| **Chưa có job dọn refresh token hết hạn** | Bảng tăng dần; có index `expires_at` sẵn cho job dọn |
 | **Tách hai instance Redis** | Hoãn tới P4 khi có giỏ hàng — P0 chỉ dùng vai trò cache |
 
 ---

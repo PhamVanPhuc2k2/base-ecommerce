@@ -23,6 +23,7 @@ type Config struct {
 	Redis    Redis
 	RabbitMQ RabbitMQ
 	S3       S3
+	Auth     Auth
 }
 
 type HTTP struct {
@@ -46,6 +47,15 @@ type DB struct {
 type Redis struct {
 	Addr     string
 	PoolSize int
+}
+
+// Auth là cấu hình xác thực (P2.1).
+type Auth struct {
+	// JWTSecret ký access token HS256. Tối thiểu 32 byte — ngắn hơn thì dò
+	// được bằng vét cạn ngoại tuyến từ MỘT token lộ ra bất kỳ.
+	JWTSecret  string
+	AccessTTL  time.Duration
+	RefreshTTL time.Duration
 }
 
 // S3 là object storage giữ ảnh gốc (MinIO khi dev, S3/R2 khi production).
@@ -76,10 +86,10 @@ func (c *Config) IsProduction() bool { return c.Env == "production" }
 func (c *Config) String() string {
 	return fmt.Sprintf(
 		"Config{Env:%s Version:%s HTTP.Addr:%s DB.DSN:%s DB.MaxConns:%d Redis.Addr:%s "+
-			"RabbitMQ.URL:%s AdminKey:%s S3.Endpoint:%s S3.PublicEndpoint:%s S3.Bucket:%s S3.SecretKey:%s}",
+			"RabbitMQ.URL:%s AdminKey:%s S3.Endpoint:%s S3.PublicEndpoint:%s S3.Bucket:%s S3.SecretKey:%s JWTSecret:%s}",
 		c.Env, c.Version, c.HTTP.Addr, redactDSN(c.DB.DSN), c.DB.MaxConns,
 		c.Redis.Addr, redactDSN(c.RabbitMQ.URL), redactSecret(c.AdminKey),
-		c.S3.Endpoint, c.S3.PublicEndpoint, c.S3.Bucket, redactSecret(c.S3.SecretKey),
+		c.S3.Endpoint, c.S3.PublicEndpoint, c.S3.Bucket, redactSecret(c.S3.SecretKey), redactSecret(c.Auth.JWTSecret),
 	)
 }
 
@@ -106,7 +116,10 @@ func redactSecret(s string) string {
 	return fmt.Sprintf("(đã đặt, %d ký tự)", len(s))
 }
 
-const devS3Secret = "app-secret-dev"
+const (
+	devS3Secret  = "app-secret-dev"
+	devJWTSecret = "dev-jwt-secret-chi-dung-tren-may-local-0123456789"
+)
 
 func Load() (*Config, error) {
 	l := &loader{}
@@ -155,6 +168,13 @@ func Load() (*Config, error) {
 		},
 	}
 	c.S3.PublicEndpoint = l.str("S3_PUBLIC_ENDPOINT", c.S3.Endpoint)
+	// Mặc định dev để worker/relay (không dùng JWT) và `task run` chạy được
+	// ngay; production bị chặn dùng giá trị này — xem bên dưới.
+	c.Auth = Auth{
+		JWTSecret:  l.str("JWT_SECRET", devJWTSecret),
+		AccessTTL:  l.dur("JWT_ACCESS_TTL", 15*time.Minute),
+		RefreshTTL: l.dur("JWT_REFRESH_TTL", 30*24*time.Hour),
+	}
 
 	// WriteTimeout phải lớn hơn HandlerTimeout, nếu không response lỗi không
 	// bao giờ tới được client.
@@ -168,6 +188,13 @@ func Load() (*Config, error) {
 	// khởi động thay vì tin rằng người deploy nhớ đặt biến.
 	if c.IsProduction() && c.S3.SecretKey == devS3Secret {
 		l.errs = append(l.errs, errors.New("S3_SECRET_KEY đang là mật khẩu dev mặc định — production phải đặt giá trị thật"))
+	}
+
+	if len(c.Auth.JWTSecret) < 32 {
+		l.errs = append(l.errs, errors.New("JWT_SECRET phải dài ít nhất 32 byte"))
+	}
+	if c.IsProduction() && c.Auth.JWTSecret == devJWTSecret {
+		l.errs = append(l.errs, errors.New("JWT_SECRET đang là giá trị dev mặc định — production phải đặt giá trị thật (ai đọc repo cũng tự ký được token)"))
 	}
 
 	if c.HTTP.WriteTimeout <= c.HTTP.HandlerTimeout {

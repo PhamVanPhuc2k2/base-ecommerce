@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: base-ecommerce API
-  version: 0.7.0
+  version: 0.8.0
   description: |
     Hợp đồng API. Đây là NGUỒN SỰ THẬT — sửa endpoint thì sửa file này trước.
 servers:
@@ -206,6 +206,140 @@ paths:
                       total:       { type: integer }
                       total_pages: { type: integer }
         "400": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /auth/register:
+    post:
+      operationId: register
+      security: []
+      summary: Đăng ký bằng email + mật khẩu, trả phiên đăng nhập luôn
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterRequest" }
+      responses:
+        "201":
+          description: Đã tạo tài khoản và phiên
+          headers:
+            Cache-Control: { schema: { type: string, examples: ["no-store"] } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "429":
+          description: Quá nhiều lần thử — 5/phút theo IP và theo email.
+          headers:
+            Retry-After: { schema: { type: integer }, description: "Số giây phải chờ." }
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /auth/login:
+    post:
+      operationId: login
+      security: []
+      summary: Đăng nhập
+      description: >-
+        Email không tồn tại và sai mật khẩu trả CÙNG 401 INVALID_CREDENTIALS, cùng
+        thời gian phản hồi — không dò được email nào đã đăng ký.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: OK
+          headers:
+            Cache-Control: { schema: { type: string, examples: ["no-store"] } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "429":
+          description: Quá nhiều lần thử — 5/phút theo IP và theo email.
+          headers:
+            Retry-After: { schema: { type: integer }, description: "Số giây phải chờ." }
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /auth/refresh:
+    post:
+      operationId: refreshSession
+      security: []
+      summary: Đổi refresh token lấy cặp token mới (xoay vòng)
+      description: >-
+        Refresh token chỉ dùng được MỘT lần. Đưa lên lại một token đã dùng → 401
+        và CẢ chuỗi phiên bị thu hồi (dấu hiệu token bị đánh cắp).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RefreshRequest" }
+      responses:
+        "200":
+          description: OK
+          headers:
+            Cache-Control: { schema: { type: string, examples: ["no-store"] } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "429":
+          description: Quá nhiều lần thử — 5/phút theo IP và theo email.
+          headers:
+            Retry-After: { schema: { type: integer }, description: "Số giây phải chờ." }
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /auth/logout:
+    post:
+      operationId: logout
+      security: []
+      summary: Thu hồi cả chuỗi phiên của refresh token
+      description: Luôn 204, kể cả với token lạ — đăng xuất phải luôn "được".
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RefreshRequest" }
+      responses:
+        "204": { description: Đã đăng xuất }
+        "400": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /me:
+    get:
+      operationId: getMe
+      summary: Người đang đăng nhập
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "401": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
@@ -664,6 +798,13 @@ paths:
 
 components:
   securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >-
+        Access token từ /auth/login, sống 15 phút. Chỉ mang định danh người
+        dùng — quyền được tra mỗi request.
     adminKey:
       type: apiKey
       in: header
@@ -693,6 +834,11 @@ components:
             - INTERNAL_ERROR
             # 413 riêng của ảnh (P1.4)
             - IMAGE_TOO_LARGE
+            # xác thực (P2.1)
+            - INVALID_CREDENTIALS
+            - INVALID_REFRESH_TOKEN
+            - ACCOUNT_DISABLED
+            - RATE_LIMITED
             - INVALID_PAGINATION
             - MALFORMED_REQUEST
             - METHOD_NOT_ALLOWED
@@ -722,6 +868,9 @@ components:
             - INVALID_VARIANT_STATUS
             - NO_ACTIVE_VARIANT
             - INVALID_ATTRIBUTE_CODE
+            - INVALID_EMAIL
+            - WEAK_PASSWORD
+            - FULL_NAME_INVALID
             - UNSUPPORTED_IMAGE_TYPE
             - INVALID_IMAGE
             - UPLOAD_NOT_FOUND
@@ -741,6 +890,7 @@ components:
             - BRAND_HAS_PRODUCTS
             - DUPLICATE_VARIANT_OPTIONS
             - DUPLICATE_ATTRIBUTE_CODE
+            - EMAIL_TAKEN
             - ATTRIBUTE_IN_USE
             # catalog/domain — không tìm thấy (404). UNKNOWN_* là tài nguyên
             # trên đường dẫn; khác CATEGORY_NOT_FOUND/BRAND_NOT_FOUND (422) là
@@ -907,6 +1057,55 @@ components:
         options:  { type: object, additionalProperties: { type: string } }
         status:   { type: string, enum: [active, inactive] }
         position: { type: integer }
+
+    User:
+      type: object
+      required: [id, email, full_name, email_verified, created_at]
+      properties:
+        id:             { type: string, format: uuid }
+        email:          { type: string, description: "Đã chuẩn hóa: chữ thường, không khoảng trắng." }
+        full_name:      { type: string }
+        email_verified: { type: boolean }
+        created_at:     { type: string, format: date-time }
+
+    Session:
+      type: object
+      required: [access_token, token_type, expires_in, refresh_token, refresh_expires_at, user]
+      properties:
+        access_token:       { type: string }
+        token_type:         { type: string, enum: [Bearer] }
+        expires_in:         { type: integer, description: "Số giây access token còn sống." }
+        refresh_token:
+          type: string
+          description: >-
+            Dùng MỘT lần. Giữ ở server (cookie HttpOnly của storefront), không bao
+            giờ đưa cho JavaScript phía trình duyệt.
+        refresh_expires_at: { type: string, format: date-time }
+        user:               { $ref: "#/components/schemas/User" }
+
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password, full_name]
+      properties:
+        email:     { type: string, maxLength: 254 }
+        password:  { type: string, minLength: 8, maxLength: 128 }
+        full_name: { type: string, maxLength: 100 }
+
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:    { type: string }
+        password: { type: string }
+
+    RefreshRequest:
+      type: object
+      additionalProperties: false
+      required: [refresh_token]
+      properties:
+        refresh_token: { type: string }
 
     Media:
       type: object
