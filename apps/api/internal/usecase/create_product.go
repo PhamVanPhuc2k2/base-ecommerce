@@ -9,12 +9,11 @@ import (
 )
 
 type CreateProductInput struct {
-	SKU              string
 	Name             string
 	ShortDescription string
 	CategoryID       uuid.UUID
 	BrandID          uuid.UUID
-	Price            domain.Money
+	Variants         []domain.VariantInput
 	Attributes       map[string]string
 	Images           []string
 }
@@ -33,8 +32,8 @@ func NewCreateProduct(tx TxManager, repo ProductRepository, events EventPublishe
 func (uc *CreateProduct) Execute(ctx context.Context, in CreateProductInput) (*domain.Product, error) {
 	// Validate và sinh ID xảy ra TRƯỚC transaction: không giữ kết nối database
 	// trong lúc làm việc không cần database.
-	p, err := domain.NewProduct(in.SKU, in.Name, in.ShortDescription,
-		in.CategoryID, in.BrandID, in.Price, in.Attributes, in.Images)
+	p, err := domain.NewProduct(in.Name, in.ShortDescription,
+		in.CategoryID, in.BrandID, in.Variants, in.Attributes, in.Images)
 	if err != nil {
 		return nil, err
 	}

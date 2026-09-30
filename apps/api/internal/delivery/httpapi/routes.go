@@ -18,6 +18,8 @@ func (h *Handler) Mount(r chi.Router) {
 		r.Post("/products", httpx.Wrap(h.CreateProduct))
 		r.Patch("/products/{id}", httpx.Wrap(h.UpdateProduct))
 		r.Post("/products/{id}/publish", httpx.Wrap(h.PublishProduct))
+		r.Post("/products/{id}/variants", httpx.Wrap(h.AddVariant))
+		r.Patch("/products/{id}/variants/{variantId}", httpx.Wrap(h.UpdateVariant))
 
 		r.Post("/categories", httpx.Wrap(h.CreateCategory))
 		r.Patch("/categories/{id}", httpx.Wrap(h.UpdateCategory))

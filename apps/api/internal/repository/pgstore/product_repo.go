@@ -22,14 +22,29 @@ func NewProductRepository(db *postgres.Manager) *ProductRepository {
 	return &ProductRepository{db: db}
 }
 
+// Save ghi CẢ aggregate: dòng products rồi từng variant.
+//
+// Nhiều câu lệnh, nên PHẢI được gọi trong TxManager.Run — mọi use case ghi
+// đều làm vậy. Ngoài transaction thì hỏng giữa chừng để lại sản phẩm với giá
+// "từ" không khớp variant nào.
+//
+// Không xóa variant nào: domain không có thao tác xóa (đặc tả P1.2 mục 2.2),
+// nên upsert từng cái là đủ.
 func (r *ProductRepository) Save(ctx context.Context, p *domain.Product) error {
 	attrs, err := json.Marshal(p.Attributes)
 	if err != nil {
 		return err
 	}
-	return mapErr(gen.New(r.db.DB(ctx)).UpsertProduct(ctx, gen.UpsertProductParams{
-		ID:               p.ID,
-		Sku:              p.SKU,
+	if len(p.Variants) == 0 {
+		return domain.ErrVariantRequired
+	}
+	q := gen.New(r.db.DB(ctx))
+	if err := mapErr(q.UpsertProduct(ctx, gen.UpsertProductParams{
+		ID: p.ID,
+		// EXPAND/CONTRACT: products.sku vẫn NOT NULL tới migration contract.
+		// Ghi SKU của variant đầu tiên để code cũ còn đọc được cột này trong
+		// lúc chuyển đổi. Dòng này BIẾN MẤT cùng migration drop_products_sku.
+		Sku:              p.Variants[0].SKU,
 		Slug:             p.Slug,
 		Name:             p.Name,
 		ShortDescription: p.ShortDescription,
@@ -42,7 +57,24 @@ func (r *ProductRepository) Save(ctx context.Context, p *domain.Product) error {
 		Images:           p.Images,
 		CreatedAt:        p.CreatedAt,
 		UpdatedAt:        p.UpdatedAt,
-	}))
+	})); err != nil {
+		return err
+	}
+	for _, v := range p.Variants {
+		opts, err := json.Marshal(v.Options)
+		if err != nil {
+			return err
+		}
+		if err := mapErr(q.UpsertVariant(ctx, gen.UpsertVariantParams{
+			ID: v.ID, ProductID: p.ID, Sku: v.SKU,
+			Price: v.Price.Decimal(), Currency: v.Price.Currency(),
+			Options: opts, Status: string(v.Status), Position: int32(v.Position),
+			CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt,
+		})); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ByID đọc sản phẩm và KHÓA dòng đó (SELECT ... FOR UPDATE).
@@ -51,19 +83,31 @@ func (r *ProductRepository) Save(ctx context.Context, p *domain.Product) error {
 // ngay, vô hại — nhưng một endpoint đọc dùng hàm này sẽ xếp hàng sau mọi writer
 // đang chạy. Cần đọc thuần thì thêm một hàm riêng, đừng dùng lại hàm này.
 func (r *ProductRepository) ByID(ctx context.Context, id uuid.UUID) (*domain.Product, error) {
-	row, err := gen.New(r.db.DB(ctx)).ProductByID(ctx, id)
+	q := gen.New(r.db.DB(ctx))
+	row, err := q.ProductByID(ctx, id)
 	if err != nil {
 		return nil, mapErr(err)
 	}
-	return toDomain(row.Product)
+	// Variant KHÔNG cần FOR UPDATE riêng: mọi lần ghi variant đều đi qua dòng
+	// products vừa khóa ở trên, nên khóa của aggregate root là đủ.
+	vs, err := q.VariantsByProduct(ctx, id)
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	return toDomain(row.Product, vs)
 }
 
 func (r *ProductRepository) BySlug(ctx context.Context, slug string) (*domain.Product, error) {
-	row, err := gen.New(r.db.DB(ctx)).ProductBySlug(ctx, slug)
+	q := gen.New(r.db.DB(ctx))
+	row, err := q.ProductBySlug(ctx, slug)
 	if err != nil {
 		return nil, mapErr(err)
 	}
-	return toDomain(row.Product)
+	vs, err := q.VariantsByProduct(ctx, row.Product.ID)
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	return toDomain(row.Product, vs)
 }
 
 // filtered dựng phần FROM + WHERE dùng chung cho List và Count.
@@ -160,7 +204,7 @@ func (r *ProductRepository) List(ctx context.Context, f usecase.ListFilter) ([]*
 	}
 	defer rows.Close()
 
-	out := make([]*domain.Product, 0, f.Limit)
+	var prods []gen.Product
 	for rows.Next() {
 		var g gen.Product
 		if err := rows.Scan(
@@ -170,16 +214,40 @@ func (r *ProductRepository) List(ctx context.Context, f usecase.ListFilter) ([]*
 		); err != nil {
 			return nil, mapErr(err)
 		}
-		p, err := toDomain(g)
+		prods = append(prods, g)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("duyệt kết quả: %w", mapErr(err))
+	}
+	// Đóng TRƯỚC câu tiếp theo: trong transaction, pgx không cho chạy câu mới
+	// khi kết quả câu trước chưa đọc xong trên cùng kết nối.
+	rows.Close()
+
+	// Nạp variant cho CẢ trang bằng một câu (= ANY) rồi chia theo product_id.
+	// Một câu mỗi sản phẩm là 24 lượt đi về database cho một trang danh sách.
+	ids := make([]uuid.UUID, len(prods))
+	for i, g := range prods {
+		ids[i] = g.ID
+	}
+	byProduct := map[uuid.UUID][]gen.ProductVariant{}
+	if len(ids) > 0 {
+		vs, err := gen.New(r.db.DB(ctx)).VariantsByProducts(ctx, ids)
+		if err != nil {
+			return nil, mapErr(err)
+		}
+		for _, v := range vs {
+			byProduct[v.ProductID] = append(byProduct[v.ProductID], v)
+		}
+	}
+
+	out := make([]*domain.Product, 0, len(prods))
+	for _, g := range prods {
+		p, err := toDomain(g, byProduct[g.ID])
 		if err != nil {
 			return nil, err
 		}
 		out = append(out, p)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("duyệt kết quả: %w", mapErr(err))
-	}
-
 	return out, nil
 }
 

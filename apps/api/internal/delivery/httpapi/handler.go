@@ -26,6 +26,8 @@ type Usecases struct {
 	CreateCategory *usecase.CreateCategory
 	UpdateCategory *usecase.UpdateCategory
 	DeleteCategory *usecase.DeleteCategory
+	AddVariant     *usecase.AddVariant
+	UpdateVariant  *usecase.UpdateVariant
 	ListBrands     *usecase.ListBrands
 	CreateBrand    *usecase.CreateBrand
 	UpdateBrand    *usecase.UpdateBrand
@@ -46,7 +48,7 @@ func (h *Handler) GetProduct(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	return httpx.JSON(w, http.StatusOK, toProductDTO(p))
+	return httpx.JSON(w, http.StatusOK, toProductDTO(p, publicVariants))
 }
 
 func (h *Handler) ListProducts(w http.ResponseWriter, r *http.Request) error {
@@ -95,7 +97,7 @@ func (h *Handler) ListProducts(w http.ResponseWriter, r *http.Request) error {
 
 	items := make([]productDTO, 0, len(res.Items))
 	for _, p := range res.Items {
-		items = append(items, toProductDTO(p))
+		items = append(items, toProductDTO(p, publicVariants))
 	}
 
 	totalPages := (res.Total + res.Limit - 1) / res.Limit
@@ -137,14 +139,18 @@ func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	price, err := domain.NewMoney(req.Price, req.Currency)
-	if err != nil {
-		return err
+	variants := make([]domain.VariantInput, 0, len(req.Variants))
+	for _, v := range req.Variants {
+		in, err := v.toInput()
+		if err != nil {
+			return err
+		}
+		variants = append(variants, in)
 	}
 
 	p, err := h.uc.CreateProduct.Execute(r.Context(), usecase.CreateProductInput{
-		SKU: req.SKU, Name: req.Name, ShortDescription: req.ShortDescription,
-		CategoryID: req.CategoryID, BrandID: req.BrandID, Price: price,
+		Name: req.Name, ShortDescription: req.ShortDescription,
+		CategoryID: req.CategoryID, BrandID: req.BrandID, Variants: variants,
 		Attributes: req.Attributes, Images: req.Images,
 	})
 	if err != nil {
@@ -152,7 +158,7 @@ func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	w.Header().Set("Location", "/api/v1/products/"+p.Slug)
-	return httpx.JSON(w, http.StatusCreated, toProductDTO(p))
+	return httpx.JSON(w, http.StatusCreated, toProductDTO(p, adminVariants))
 }
 
 func (h *Handler) UpdateProduct(w http.ResponseWriter, r *http.Request) error {
@@ -164,31 +170,15 @@ func (h *Handler) UpdateProduct(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	// Chỉ dựng Money khi client thật sự gửi giá. Bản trước gọi NewMoney vô
-	// điều kiện, nên một lệnh PATCH chỉ đổi tên cũng ăn 422 INVALID_PRICE —
-	// tức là không PATCH nổi một trường nào nếu không gửi kèm giá.
-	var price *domain.Money
-	if req.Price != nil {
-		currency := domain.SupportedCurrency
-		if req.Currency != nil {
-			currency = *req.Currency
-		}
-		m, mErr := domain.NewMoney(*req.Price, currency)
-		if mErr != nil {
-			return mErr
-		}
-		price = &m
-	}
-
 	p, err := h.uc.UpdateProduct.Execute(r.Context(), usecase.UpdateProductInput{
 		ID: id, Name: req.Name, ShortDescription: req.ShortDescription,
-		Price: price, Attributes: req.Attributes, Images: req.Images,
+		Attributes: req.Attributes, Images: req.Images,
 		CategoryID: req.CategoryID, BrandID: req.BrandID,
 	})
 	if err != nil {
 		return err
 	}
-	return httpx.JSON(w, http.StatusOK, toProductDTO(p))
+	return httpx.JSON(w, http.StatusOK, toProductDTO(p, adminVariants))
 }
 
 func (h *Handler) PublishProduct(w http.ResponseWriter, r *http.Request) error {
@@ -200,5 +190,5 @@ func (h *Handler) PublishProduct(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	return httpx.JSON(w, http.StatusOK, toProductDTO(p))
+	return httpx.JSON(w, http.StatusOK, toProductDTO(p, adminVariants))
 }

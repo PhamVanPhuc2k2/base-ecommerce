@@ -11,8 +11,32 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// toDomain chuyển dòng sqlc thành entity.
-func toDomain(r gen.Product) (*domain.Product, error) {
+// toDomain chuyển dòng sqlc thành entity, kèm các variant của nó.
+//
+// Price đọc từ cột products.price (giá "từ" đã lưu) chứ không tính lại từ
+// variants: đó chính là con số mà trang danh sách dùng để lọc và sắp xếp, nên
+// trang chi tiết phải hiện đúng con số đó. Domain tính lại nó sau mọi lần ghi.
+func toDomain(r gen.Product, rows []gen.ProductVariant) (*domain.Product, error) {
+	variants := make([]*domain.Variant, 0, len(rows))
+	for _, v := range rows {
+		opts := map[string]string{}
+		if len(v.Options) > 0 {
+			if err := json.Unmarshal(v.Options, &opts); err != nil {
+				return nil, err
+			}
+		}
+		variants = append(variants, &domain.Variant{
+			ID:        v.ID,
+			SKU:       v.Sku,
+			Price:     domain.MoneyFromDecimal(v.Price, v.Currency),
+			Options:   opts,
+			Status:    domain.VariantStatus(v.Status),
+			Position:  int(v.Position),
+			CreatedAt: v.CreatedAt.UTC(),
+			UpdatedAt: v.UpdatedAt.UTC(),
+		})
+	}
+
 	attrs := map[string]string{}
 	if len(r.Attributes) > 0 {
 		if err := json.Unmarshal(r.Attributes, &attrs); err != nil {
@@ -21,7 +45,7 @@ func toDomain(r gen.Product) (*domain.Product, error) {
 	}
 	return &domain.Product{
 		ID:               r.ID,
-		SKU:              r.Sku,
+		Variants:         variants,
 		Slug:             r.Slug,
 		Name:             r.Name,
 		ShortDescription: r.ShortDescription,
@@ -59,7 +83,7 @@ func mapErr(err error) error {
 	switch pgErr.Code {
 	case "23505": // unique_violation
 		switch pgErr.ConstraintName {
-		case "products_sku_uq":
+		case "products_sku_uq", "product_variants_sku_uq":
 			return domain.ErrDuplicateSKU
 		case "products_slug_uq":
 			return domain.ErrDuplicateSlug
@@ -83,6 +107,14 @@ func mapErr(err error) error {
 			return domain.ErrInvalidPrice
 		case "products_status_check":
 			return domain.ErrInvalidStatus
+		case "product_variants_currency_vnd":
+			return domain.ErrUnsupportedCurrency
+		case "product_variants_price_check":
+			return domain.ErrInvalidPrice
+		case "product_variants_status_check":
+			return domain.ErrInvalidVariantStatus
+		case "product_variants_options_object":
+			return domain.ErrInvalidVariantOptions
 		}
 	}
 	return err
