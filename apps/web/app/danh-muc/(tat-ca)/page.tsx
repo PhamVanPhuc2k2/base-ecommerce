@@ -1,8 +1,7 @@
 import type { Metadata } from 'next'
-import { permanentRedirect } from 'next/navigation'
 import { ProductListing } from '@/components/product-listing'
 import { categoryHref } from '@/lib/categories'
-import { clearAttrs, hrefCurrent, hrefWith, toSearchParams } from '@/lib/search-params'
+import { clearAttrs, hrefWith, toSearchParams } from '@/lib/search-params'
 
 const BASE_PATH = '/danh-muc'
 
@@ -41,18 +40,8 @@ function categoryLink(params: URLSearchParams) {
 export default async function Page({ searchParams }: PageProps<'/danh-muc'>) {
   const params = toSearchParams(await searchParams)
 
-  /*
-    `?category=<slug>` là URL của P0.4–P1.4. Từ P1.5 danh mục nằm trong ĐƯỜNG
-    DẪN. Chuyển 308 (vĩnh viễn) kèm mọi tham số còn lại: link cũ đã được index
-    dồn tín hiệu xếp hạng sang URL mới, thay vì hai URL cùng một nội dung chia
-    đôi nó. Đặc tả P1.5 mục 2.2.
-  */
-  const legacy = params.get('category')
-  if (legacy !== null && legacy !== '') {
-    const rest = new URLSearchParams(params)
-    rest.delete('category')
-    permanentRedirect(hrefCurrent(categoryHref(legacy), rest))
-  }
+  // `?category=<slug>` cũ được proxy.ts chuyển 308 TRƯỚC khi tới đây — không
+  // làm ở page vì loading.tsx đã xả HTTP 200 trước khi page chạy.
 
   return (
     <ProductListing

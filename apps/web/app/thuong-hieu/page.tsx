@@ -9,8 +9,14 @@ import { brandHref } from '@/lib/brands'
 
 type Brand = components['schemas']['Brand']
 
-/** Danh sách hãng đổi rất chậm — ISR một giờ, cùng nhịp với `GET /brands`. */
-export const revalidate = 3600
+/**
+ * Render theo yêu cầu, KHÔNG ISR — đã ĐO: với `revalidate = 3600` Next dựng sẵn
+ * trang này lúc `next build`, khi đó (trong `docker build`) API không chạy, nên
+ * thứ được cache là trang LỖI "Không kết nối được tới máy chủ" — và nó nằm đó
+ * suốt một giờ sau MỖI lần deploy. Dữ liệu vẫn được cache ở tầng dưới: Redis
+ * trong backend giữ danh sách thương hiệu 6 giờ.
+ */
+export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
   title: 'Thương hiệu',
@@ -22,7 +28,7 @@ export default async function Page() {
   const crumbs = [{ label: 'Trang chủ', href: '/' }, { label: 'Thương hiệu' }]
   let brands: Brand[]
   try {
-    brands = (await apiGet<{ data: Brand[] }>('/brands', { tags: ['brands'], revalidate })).data
+    brands = (await apiGet<{ data: Brand[] }>('/brands', { tags: ['brands'] })).data
   } catch (e) {
     // Bắt tại trang, cùng lý do với ProductListing: error.tsx không còn đọc
     // được code/requestId.
