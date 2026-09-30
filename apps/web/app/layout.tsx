@@ -82,6 +82,9 @@ function SiteHeader() {
           <Link href="/danh-muc" className="text-gray-700 hover:text-brand">
             Danh mục sản phẩm
           </Link>
+          <Link href="/thuong-hieu" className="ml-6 text-gray-700 hover:text-brand">
+            Thương hiệu
+          </Link>
         </nav>
       </div>
     </header>

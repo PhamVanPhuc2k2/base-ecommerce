@@ -9,19 +9,13 @@ type Product = components['schemas']['Product']
 /**
  * Một ô sản phẩm trong lưới danh mục.
  *
- * `priority` chỉ bật cho vài ô ĐẦU TIÊN của lưới (README mục 7.6): đó là ảnh
+ * `preload` chỉ bật cho vài ô ĐẦU TIÊN của lưới (README mục 7.6): đó là ảnh
  * nằm trên màn hình đầu, và ảnh lớn nhất trên màn hình đầu chính là thứ Google
- * đo bằng chỉ số LCP. Bật `priority` cho cả lưới thì phản tác dụng — trình
+ * đo bằng chỉ số LCP. Bật `preload` cho cả lưới thì phản tác dụng — trình
  * duyệt tải song song 24 ảnh, tranh băng thông với nhau, và ảnh quan trọng
  * nhất về CHẬM hơn là khi không bật gì cả.
  */
-export function ProductCard({
-  product,
-  priority = false,
-}: {
-  product: Product
-  priority?: boolean
-}) {
+export function ProductCard({ product, preload = false }: { product: Product; preload?: boolean }) {
   // noUncheckedIndexedAccess biến images[0] thành `string | undefined`, nên
   // trường hợp mảng rỗng buộc phải xử lý — đúng ý: sản phẩm "draft" chưa kịp
   // gắn ảnh vẫn có thể lọt vào danh sách nội bộ sau này.
@@ -58,7 +52,7 @@ export function ProductCard({
               // object-contain chứ không object-cover: ảnh sản phẩm máy tính do
               // nhà cung cấp gửi có tỉ lệ lung tung, cover sẽ cắt mất góc máy.
               className="object-contain transition group-hover:scale-105"
-              priority={priority}
+              preload={preload}
             />
           )}
         </div>

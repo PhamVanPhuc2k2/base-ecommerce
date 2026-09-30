@@ -12,7 +12,7 @@
  * chiều cao.
  *
  * ---------------------------------------------------------------------------
- * VÌ SAO FILE NÀY NẰM Ở `app/danh-muc/` CHỨ KHÔNG PHẢI `app/` — đừng dời lên
+ * VÌ SAO FILE NÀY NẰM Ở `app/danh-muc/(tat-ca)/` — đừng dời lên cấp nào hết
  * ---------------------------------------------------------------------------
  * Ban đầu nó ở `app/loading.tsx`, tức là bọc MỌI trang con trong một Suspense
  * boundary. Hệ quả đo được ở Task 5, trên bản production standalone:
@@ -26,9 +26,13 @@
  * nặng và hỏng câm: khách vẫn thấy trang 404 tiếng Việt đúng đắn, còn Google
  * đọc 200 và giữ lại mọi URL sản phẩm đã chết trong chỉ mục ("soft 404").
  *
- * Đặt ở `app/danh-muc/` thì khung xương chỉ áp cho đúng trang nó được vẽ ra để
- * phục vụ — trang danh mục, cũng là trang `force-dynamic` chờ API lâu nhất —
- * còn trang chi tiết sản phẩm giữ được mã trạng thái thật. Trang chi tiết chưa
+ * Đặt ở `app/danh-muc/` thì khung xương chỉ áp cho trang danh mục — ĐÚNG tới
+ * P1.4. Từ P1.5 có `/danh-muc/<slug>`, là route CON của `app/danh-muc/`, nên
+ * một `loading.tsx` ở đó lại bọc trang danh mục theo slug và biến
+ * `/danh-muc/<slug-lạ>` thành soft 404 y như trên. Vì vậy file này nằm trong
+ * route group `(tat-ca)` cùng với `page.tsx` của `/danh-muc`: route group
+ * không đổi URL, nhưng giới hạn boundary vào đúng trang đó. Trang chi tiết và
+ * trang danh mục theo slug giữ được mã trạng thái thật. Trang chi tiết chưa
  * cần khung xương riêng: nó chạy ISR nên hầu hết lượt xem đã có sẵn HTML.
  * Muốn thêm sau này thì phải chấp nhận đánh đổi ở trên — xem chú thích trong
  * app/san-pham/[slug]/page.tsx.

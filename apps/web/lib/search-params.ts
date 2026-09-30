@@ -82,3 +82,16 @@ export function hrefCurrent(pathname: string, current: URLSearchParams): string 
   const qs = next.toString()
   return qs === '' ? pathname : `${pathname}?${qs}`
 }
+
+/**
+ * Bản vá xóa mọi `attr.*` đang có — dùng khi đổi danh mục. Thuộc tính thuộc về
+ * danh mục (P1.3): giữ `attr.ram=16` khi chuyển từ Laptop sang Chuột chỉ cho
+ * ra một trang rỗng khó hiểu.
+ */
+export function clearAttrs(params: URLSearchParams): Record<string, undefined> {
+  const patch: Record<string, undefined> = {}
+  for (const key of params.keys()) {
+    if (key.startsWith('attr.')) patch[key] = undefined
+  }
+  return patch
+}
