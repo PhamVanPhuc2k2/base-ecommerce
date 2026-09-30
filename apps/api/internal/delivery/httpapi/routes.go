@@ -18,6 +18,12 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Get("/categories", httpx.Wrap(h.GetCategories))
 	r.Get("/brands", httpx.Wrap(h.ListBrands))
 	r.Get("/sitemap/products", httpx.Wrap(h.SitemapProducts))
+
+	r.Post("/auth/register", httpx.Wrap(h.Register))
+	r.Post("/auth/login", httpx.Wrap(h.Login))
+	r.Post("/auth/refresh", httpx.Wrap(h.Refresh))
+	r.Post("/auth/logout", httpx.Wrap(h.Logout))
+	r.With(h.RequireAuth).Get("/me", httpx.Wrap(h.Me))
 	r.Get("/attributes", httpx.Wrap(h.ListAttributes))
 	r.Get("/categories/{slug}/attributes", httpx.Wrap(h.GetCategoryAttributes))
 

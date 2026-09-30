@@ -29,6 +29,9 @@ x-go-env: &go-env
   # broker. Tên service `rabbitmq`, cổng TRONG container.
   RABBITMQ_URL: ${RABBITMQ_URL}
   ADMIN_API_KEY: ${ADMIN_API_KEY}
+  # Ký access token (P2.1). BẮT BUỘC ≥ 32 byte ngẫu nhiên; config từ chối khởi
+  # động nếu thiếu hoặc còn giá trị dev. Đổi nó = đăng xuất MỌI người sau 15 phút.
+  JWT_SECRET: ${JWT_SECRET:?JWT_SECRET phải được đặt}
   HTTP_HANDLER_TIMEOUT: ${HTTP_HANDLER_TIMEOUT:-30s}
   # PHẢI lớn hơn HTTP_HANDLER_TIMEOUT — config từ chối khởi động nếu sai.
   HTTP_WRITE_TIMEOUT: ${HTTP_WRITE_TIMEOUT:-35s}

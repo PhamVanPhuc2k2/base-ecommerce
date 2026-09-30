@@ -85,7 +85,10 @@ func run() error {
 		return fmt.Errorf("cấu hình object storage: %w", err)
 	}
 
-	catalogHandler := newCatalogHandler(txManager, cache, store, cfg.AdminKey)
+	appHandler, err := newHandler(cfg, txManager, cache, rdb, store, log)
+	if err != nil {
+		return fmt.Errorf("ráp handler: %w", err)
+	}
 
 	h := health.New(cfg.Version,
 		postgres.NewHealthChecker(pool),
@@ -95,7 +98,7 @@ func run() error {
 
 	srv := &http.Server{
 		Addr:              cfg.HTTP.Addr,
-		Handler:           httpapi.NewRouter(log, h, cfg.HTTP.HandlerTimeout, catalogHandler),
+		Handler:           httpapi.NewRouter(log, h, cfg.HTTP.HandlerTimeout, appHandler),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       cfg.HTTP.ReadTimeout,
 		WriteTimeout:      cfg.HTTP.WriteTimeout,

@@ -128,6 +128,100 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Đăng ký bằng email + mật khẩu, trả phiên đăng nhập luôn */
+        post: operations["register"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Đăng nhập
+         * @description Email không tồn tại và sai mật khẩu trả CÙNG 401 INVALID_CREDENTIALS, cùng thời gian phản hồi — không dò được email nào đã đăng ký.
+         */
+        post: operations["login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Đổi refresh token lấy cặp token mới (xoay vòng)
+         * @description Refresh token chỉ dùng được MỘT lần. Đưa lên lại một token đã dùng → 401 và CẢ chuỗi phiên bị thu hồi (dấu hiệu token bị đánh cắp).
+         */
+        post: operations["refreshSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Thu hồi cả chuỗi phiên của refresh token
+         * @description Luôn 204, kể cả với token lạ — đăng xuất phải luôn "được".
+         */
+        post: operations["logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Người đang đăng nhập */
+        get: operations["getMe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/attributes": {
         parameters: {
             query?: never;
@@ -445,7 +539,7 @@ export interface components {
              * @description Mã ổn định để frontend map sang thông điệp tiếng Việt.
              * @enum {string}
              */
-            code: "INTERNAL_ERROR" | "IMAGE_TOO_LARGE" | "INVALID_PAGINATION" | "MALFORMED_REQUEST" | "METHOD_NOT_ALLOWED" | "PAYLOAD_TOO_LARGE" | "REQUEST_CANCELED" | "REQUEST_TIMEOUT" | "ROUTE_NOT_FOUND" | "UNAUTHENTICATED" | "VALIDATION_FAILED" | "INVALID_SKU" | "NAME_REQUIRED" | "NAME_TOO_LONG" | "INVALID_PRICE" | "UNSUPPORTED_CURRENCY" | "INVALID_SLUG" | "NO_IMAGE" | "PRICE_REQUIRED" | "INVALID_STATUS" | "CATEGORY_NOT_FOUND" | "BRAND_NOT_FOUND" | "CATEGORY_NAME_INVALID" | "BRAND_NAME_INVALID" | "CATEGORY_CYCLE" | "VARIANT_REQUIRED" | "INVALID_VARIANT_OPTIONS" | "INVALID_VARIANT_STATUS" | "NO_ACTIVE_VARIANT" | "INVALID_ATTRIBUTE_CODE" | "UNSUPPORTED_IMAGE_TYPE" | "INVALID_IMAGE" | "UPLOAD_NOT_FOUND" | "ATTRIBUTE_NAME_INVALID" | "INVALID_ATTRIBUTE_TYPE" | "INVALID_ATTRIBUTE_OPTIONS" | "ATTRIBUTE_NOT_FOUND" | "DUPLICATE_ATTRIBUTE_ASSIGNMENT" | "ALREADY_PUBLISHED" | "DUPLICATE_SKU" | "DUPLICATE_SLUG" | "DUPLICATE_CATEGORY_SLUG" | "DUPLICATE_BRAND_SLUG" | "CATEGORY_HAS_CHILDREN" | "CATEGORY_HAS_PRODUCTS" | "BRAND_HAS_PRODUCTS" | "DUPLICATE_VARIANT_OPTIONS" | "DUPLICATE_ATTRIBUTE_CODE" | "ATTRIBUTE_IN_USE" | "PRODUCT_NOT_FOUND" | "UNKNOWN_CATEGORY" | "UNKNOWN_BRAND" | "UNKNOWN_VARIANT" | "UNKNOWN_ATTRIBUTE" | "UNKNOWN_MEDIA" | "INVALID_SORT" | "PAGE_TOO_DEEP";
+            code: "INTERNAL_ERROR" | "IMAGE_TOO_LARGE" | "INVALID_CREDENTIALS" | "INVALID_REFRESH_TOKEN" | "ACCOUNT_DISABLED" | "RATE_LIMITED" | "INVALID_PAGINATION" | "MALFORMED_REQUEST" | "METHOD_NOT_ALLOWED" | "PAYLOAD_TOO_LARGE" | "REQUEST_CANCELED" | "REQUEST_TIMEOUT" | "ROUTE_NOT_FOUND" | "UNAUTHENTICATED" | "VALIDATION_FAILED" | "INVALID_SKU" | "NAME_REQUIRED" | "NAME_TOO_LONG" | "INVALID_PRICE" | "UNSUPPORTED_CURRENCY" | "INVALID_SLUG" | "NO_IMAGE" | "PRICE_REQUIRED" | "INVALID_STATUS" | "CATEGORY_NOT_FOUND" | "BRAND_NOT_FOUND" | "CATEGORY_NAME_INVALID" | "BRAND_NAME_INVALID" | "CATEGORY_CYCLE" | "VARIANT_REQUIRED" | "INVALID_VARIANT_OPTIONS" | "INVALID_VARIANT_STATUS" | "NO_ACTIVE_VARIANT" | "INVALID_ATTRIBUTE_CODE" | "INVALID_EMAIL" | "WEAK_PASSWORD" | "FULL_NAME_INVALID" | "UNSUPPORTED_IMAGE_TYPE" | "INVALID_IMAGE" | "UPLOAD_NOT_FOUND" | "ATTRIBUTE_NAME_INVALID" | "INVALID_ATTRIBUTE_TYPE" | "INVALID_ATTRIBUTE_OPTIONS" | "ATTRIBUTE_NOT_FOUND" | "DUPLICATE_ATTRIBUTE_ASSIGNMENT" | "ALREADY_PUBLISHED" | "DUPLICATE_SKU" | "DUPLICATE_SLUG" | "DUPLICATE_CATEGORY_SLUG" | "DUPLICATE_BRAND_SLUG" | "CATEGORY_HAS_CHILDREN" | "CATEGORY_HAS_PRODUCTS" | "BRAND_HAS_PRODUCTS" | "DUPLICATE_VARIANT_OPTIONS" | "DUPLICATE_ATTRIBUTE_CODE" | "EMAIL_TAKEN" | "ATTRIBUTE_IN_USE" | "PRODUCT_NOT_FOUND" | "UNKNOWN_CATEGORY" | "UNKNOWN_BRAND" | "UNKNOWN_VARIANT" | "UNKNOWN_ATTRIBUTE" | "UNKNOWN_MEDIA" | "INVALID_SORT" | "PAGE_TOO_DEEP";
             /**
              * @description Luôn có mặt trong response (không bao giờ bị lược bỏ), nhưng có
              *     thể là chuỗi rỗng nếu middleware RequestID chưa gán được giá trị.
@@ -570,6 +664,40 @@ export interface components {
             /** @enum {string} */
             status?: "active" | "inactive";
             position?: number;
+        };
+        User: {
+            /** Format: uuid */
+            id: string;
+            /** @description Đã chuẩn hóa: chữ thường, không khoảng trắng. */
+            email: string;
+            full_name: string;
+            email_verified: boolean;
+            /** Format: date-time */
+            created_at: string;
+        };
+        Session: {
+            access_token: string;
+            /** @enum {string} */
+            token_type: "Bearer";
+            /** @description Số giây access token còn sống. */
+            expires_in: number;
+            /** @description Dùng MỘT lần. Giữ ở server (cookie HttpOnly của storefront), không bao giờ đưa cho JavaScript phía trình duyệt. */
+            refresh_token: string;
+            /** Format: date-time */
+            refresh_expires_at: string;
+            user: components["schemas"]["User"];
+        };
+        RegisterRequest: {
+            email: string;
+            password: string;
+            full_name: string;
+        };
+        LoginRequest: {
+            email: string;
+            password: string;
+        };
+        RefreshRequest: {
+            refresh_token: string;
         };
         Media: {
             /** Format: uuid */
@@ -957,6 +1085,180 @@ export interface operations {
                 };
             };
             400: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    register: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterRequest"];
+            };
+        };
+        responses: {
+            /** @description Đã tạo tài khoản và phiên */
+            201: {
+                headers: {
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            /** @description Quá nhiều lần thử — 5/phút theo IP và theo email. */
+            429: {
+                headers: {
+                    /** @description Số giây phải chờ. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    login: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            /** @description Quá nhiều lần thử — 5/phút theo IP và theo email. */
+            429: {
+                headers: {
+                    /** @description Số giây phải chờ. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    refreshSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RefreshRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            /** @description Quá nhiều lần thử — 5/phút theo IP và theo email. */
+            429: {
+                headers: {
+                    /** @description Số giây phải chờ. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    logout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RefreshRequest"];
+            };
+        };
+        responses: {
+            /** @description Đã đăng xuất */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            401: components["responses"]["Problem"];
             500: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };

@@ -107,3 +107,25 @@ type ProductVariant struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
+
+type RefreshToken struct {
+	ID        uuid.UUID
+	FamilyID  uuid.UUID
+	UserID    uuid.UUID
+	TokenHash []byte
+	ExpiresAt time.Time
+	UsedAt    *time.Time
+	RevokedAt *time.Time
+	CreatedAt time.Time
+}
+
+type User struct {
+	ID              uuid.UUID
+	Email           string
+	PasswordHash    string
+	FullName        string
+	Status          string
+	EmailVerifiedAt *time.Time
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
