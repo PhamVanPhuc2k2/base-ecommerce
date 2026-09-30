@@ -242,6 +242,7 @@ base-ecommerce/
 │   │   │   ├── api/                          # HTTP server; wire.go ráp repository → usecase → delivery
 │   │   │   ├── healthcheck/                  # binary tĩnh cho HEALTHCHECK (distroless không có curl)
 │   │   │   ├── checkcodes/                   # go/ast: liệt kê mã lỗi cho check-openapi-codes.sh
+│   │   │   ├── admintool/                    # grant-role <email> <vai trò> — cấp super admin đầu tiên
 │   │   │   ├── worker/                       # consumer catalog.indexer: khử trùng lặp, retry, DLQ
 │   │   │   └── outboxrelay/                  # poll outbox → publish RabbitMQ → đánh dấu đã gửi
 │   │   ├── internal/
@@ -252,6 +253,7 @@ base-ecommerce/
 │   │   │   │   ├── facet.go                  # số sản phẩm theo giá trị thuộc tính
 │   │   │   │   ├── media.go                  # ảnh đã upload; dò định dạng bằng chữ ký byte
 │   │   │   │   ├── user.go                   # tài khoản; chuẩn hóa email, độ dài mật khẩu
+│   │   │   │   ├── permission.go             # quyền cố định trong code, Role, PermissionSet
 │   │   │   │   ├── category.go               # cây danh mục, DescendantIDs, CheckMove chống vòng lặp
 │   │   │   │   ├── brand.go                  # thương hiệu; slug KHÔNG đổi theo tên
 │   │   │   │   ├── money.go                  # value object (bọc NUMERIC)
@@ -273,7 +275,8 @@ base-ecommerce/
 │   │   │   │   ├── variant.go                # AddVariant/UpdateVariant — không có xóa, chỉ inactive
 │   │   │   │   ├── attribute.go              # AttributeSchemas, quản trị thuộc tính
 │   │   │   │   ├── media.go                  # upload (presigned POST) + ProductRules gộp lỗi thuộc tính và ảnh
-│   │   │   │   └── auth.go                   # đăng ký/đăng nhập/refresh xoay vòng/đăng xuất, rate limit
+│   │   │   │   ├── auth.go                   # đăng ký/đăng nhập/refresh xoay vòng/đăng xuất, rate limit
+│   │   │   │   └── rbac.go                   # Authorizer (quyền qua cache 5') + quản trị vai trò, xóa cache khi đổi
 │   │   │   ├── repository/                   # cài đặt interface của usecase (đi RA ngoài)
 │   │   │   │   ├── pgstore/                  # Postgres: sqlc + squirrel + mapping → domain
 │   │   │   │   │   ├── queries/              # *.sql cho sqlc
@@ -284,7 +287,8 @@ base-ecommerce/
 │   │   │   │   │   ├── brand_repo.go
 │   │   │   │   │   ├── attribute_repo.go     # định nghĩa + phép gán; ReplaceAssignments trong transaction
 │   │   │   │   │   ├── media_repo.go
-│   │   │   │   │   └── user_repo.go          # users + refresh_tokens (FOR UPDATE khi refresh)
+│   │   │   │   │   ├── user_repo.go          # users + refresh_tokens (FOR UPDATE khi refresh)
+│   │   │   │   │   └── role_repo.go          # roles, role_permissions, user_roles; lỗi FK → mã lỗi
 │   │   │   │   ├── rediscache/               # cache-aside cho sản phẩm và cây danh mục
 │   │   │   │   ├── outboxpub/                # domain.Event → outbox.Record, cùng transaction
 │   │   │   │   └── outbox/                   # outbox + khử trùng lặp, dùng chung, KHÔNG biết domain
