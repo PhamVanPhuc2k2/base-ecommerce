@@ -48,6 +48,7 @@ func newCatalogHandler(db *postgres.Manager, cache *platformredis.Cache, store *
 		AddVariant:     usecase.NewAddVariant(db, productRepo, events, c, rules),
 		UpdateVariant:  usecase.NewUpdateVariant(db, productRepo, events, c, rules),
 		Media:          usecase.NewMediaUploads(db, mediaRepo, store),
+		Sitemap:        usecase.NewSitemapProducts(productRepo),
 		ListFacets:     usecase.NewListFacets(productRepo, treeUC, c, schemas),
 		ListAttributes: usecase.NewListAttributes(schemas),
 		CategoryAttrs:  usecase.NewCategoryAttributes(schemas),

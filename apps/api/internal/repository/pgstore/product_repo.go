@@ -353,3 +353,27 @@ func (r *ProductRepository) Count(ctx context.Context, f usecase.ListFilter) (in
 	}
 	return total, nil
 }
+
+// Sitemap đọc một trang cho sitemap phân mảnh — Index Only Scan trên
+// products_live_id_idx (đo ở migration sitemap_index).
+func (r *ProductRepository) Sitemap(ctx context.Context, offset, limit int) ([]usecase.SitemapEntry, error) {
+	rows, err := gen.New(r.db.DB(ctx)).SitemapProducts(ctx, gen.SitemapProductsParams{
+		PageSize: int32(limit), PageOffset: int32(offset),
+	})
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	out := make([]usecase.SitemapEntry, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, usecase.SitemapEntry{Slug: row.Slug, UpdatedAt: row.UpdatedAt.UTC()})
+	}
+	return out, nil
+}
+
+func (r *ProductRepository) CountLive(ctx context.Context) (int, error) {
+	n, err := gen.New(r.db.DB(ctx)).CountLiveProducts(ctx)
+	if err != nil {
+		return 0, mapErr(err)
+	}
+	return int(n), nil
+}

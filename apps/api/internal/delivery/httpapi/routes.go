@@ -17,6 +17,7 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Get("/products/{slug}", httpx.Wrap(h.GetProduct))
 	r.Get("/categories", httpx.Wrap(h.GetCategories))
 	r.Get("/brands", httpx.Wrap(h.ListBrands))
+	r.Get("/sitemap/products", httpx.Wrap(h.SitemapProducts))
 	r.Get("/attributes", httpx.Wrap(h.ListAttributes))
 	r.Get("/categories/{slug}/attributes", httpx.Wrap(h.GetCategoryAttributes))
 
