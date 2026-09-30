@@ -10,11 +10,16 @@
  * `status`: cùng một 404 có thể là PRODUCT_NOT_FOUND hay ROUTE_NOT_FOUND, hai
  * thông điệp hoàn toàn khác nhau đối với khách.
  */
+/** Một lỗi theo trường của VALIDATION_FAILED (`errors[]` trong problem+json). */
+export type FieldError = { field: string; code: string; message: string }
+
 export class ApiError extends Error {
   constructor(
     readonly code: string,
     readonly status: number,
     readonly requestId?: string,
+    /** Lỗi theo trường — chỉ có với VALIDATION_FAILED, để form tô đỏ đúng ô. */
+    readonly fields: FieldError[] = [],
   ) {
     // Message này dành cho log của server, KHÔNG phải cho khách đọc. Thông điệp
     // tiếng Việt hiển thị lấy từ messageFor(code).

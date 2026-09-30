@@ -1,4 +1,4 @@
-import { ApiError } from './error'
+import { ApiError, type FieldError } from './error'
 
 /**
  * URL gốc của backend Go, đọc LÚC CHẠY.
@@ -78,35 +78,88 @@ export async function apiGet<T>(path: string, opts?: GetOptions): Promise<T> {
     throw err
   }
 
-  if (!res.ok) {
-    // Hai đường lỗi còn lại đều là "có response nhưng không OK". Phải lấy được
-    // `code` và `request_id` nếu có, mà tuyệt đối không đánh mất `res.status`.
-    let code = 'UNKNOWN'
-    let requestId: string | undefined
-    try {
-      // ĐƯỜNG LỖI 1 — body đúng chuẩn problem+json do backend Go sinh ra.
-      const body: unknown = await res.json()
-      if (body !== null && typeof body === 'object') {
-        const problem = body as { code?: unknown; request_id?: unknown }
-        if (typeof problem.code === 'string' && problem.code !== '') code = problem.code
-        if (typeof problem.request_id === 'string' && problem.request_id !== '') {
-          requestId = problem.request_id
-        }
-      }
-    } catch {
-      // ĐƯỜNG LỖI 2 — body KHÔNG phải JSON.
-      // Ví dụ thật: API chết nhưng còn proxy/ingress đứng trước, proxy trả trang
-      // HTML "502 Bad Gateway" của chính nó. `res.json()` sẽ ném lỗi parse.
-      // Nuốt lỗi parse ở đây là CỐ Ý: cái đáng giữ là `res.status` thật (502),
-      // nếu để lỗi parse bay lên thì mã trạng thái duy nhất nói lên chuyện gì
-      // đang xảy ra sẽ biến mất, và trang lại nhận một lỗi không có `code`.
-      // Không có request_id vì response này không do backend của mình sinh ra.
-    }
-    throw new ApiError(code, res.status, requestId)
-  }
+  if (!res.ok) throw await errorFrom(res)
 
   // Response OK. Ở đây `res.json()` vẫn có thể ném nếu backend trả rác, nhưng đó
   // là lỗi lập trình phía server chứ không phải trạng thái bình thường cần bọc —
   // để nó nổ lên error boundary kèm nguyên văn thông tin gỡ lỗi.
   return (await res.json()) as T
+}
+
+/** Tùy chọn của một lời gọi KHÔNG cache (ghi, hoặc đọc dữ liệu riêng của khách). */
+type SendOptions = {
+  method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
+  body?: unknown
+  /** Access token — storefront là BFF, gắn Bearer thay trình duyệt (P2.4). */
+  token?: string
+  /**
+   * Chuỗi X-Forwarded-For của request gốc. Không chuyển tiếp thì API thấy mọi
+   * khách cùng một IP (của server Next) và rate limit theo IP gộp tất cả làm
+   * một — đặc tả P2.4 mục 2.3.
+   */
+  forwardedFor?: string | null
+}
+
+/**
+ * Gọi API KHÔNG qua cache của Next — cho mọi thứ gắn với một khách cụ thể.
+ * Trả `undefined` khi response không có body (202, 204).
+ *
+ * @throws {ApiError} cùng ba đường lỗi như apiGet, kèm `fields` khi 422 theo trường
+ */
+export async function apiSend<T = undefined>(path: string, opts: SendOptions = {}): Promise<T> {
+  const headers: Record<string, string> = { Accept: 'application/json' }
+  if (opts.body !== undefined) headers['Content-Type'] = 'application/json'
+  if (opts.token) headers.Authorization = `Bearer ${opts.token}`
+  if (opts.forwardedFor) headers['X-Forwarded-For'] = opts.forwardedFor
+
+  let res: Response
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      method: opts.method ?? 'POST',
+      headers,
+      body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+      // no-store: dữ liệu của MỘT khách lọt vào data cache dùng chung là lộ
+      // thông tin khách này cho khách khác.
+      cache: 'no-store',
+      signal: AbortSignal.timeout(API_TIMEOUT_MS),
+    })
+  } catch (cause) {
+    const err = new ApiError('NETWORK_ERROR', 0)
+    err.cause = cause
+    throw err
+  }
+  if (!res.ok) throw await errorFrom(res)
+  const text = await res.text()
+  return (text === '' ? undefined : JSON.parse(text)) as T
+}
+
+/**
+ * Dựng ApiError từ response không OK. Phải lấy được `code` và `request_id`
+ * nếu có, mà tuyệt đối không đánh mất `res.status`.
+ */
+async function errorFrom(res: Response): Promise<ApiError> {
+  let code = 'UNKNOWN'
+  let requestId: string | undefined
+  let fields: FieldError[] = []
+  try {
+    // ĐƯỜNG LỖI 1 — body đúng chuẩn problem+json do backend Go sinh ra.
+    const body: unknown = await res.json()
+    if (body !== null && typeof body === 'object') {
+      const problem = body as { code?: unknown; request_id?: unknown; errors?: unknown }
+      if (typeof problem.code === 'string' && problem.code !== '') code = problem.code
+      if (typeof problem.request_id === 'string' && problem.request_id !== '') {
+        requestId = problem.request_id
+      }
+      if (Array.isArray(problem.errors)) fields = problem.errors as FieldError[]
+    }
+  } catch {
+    // ĐƯỜNG LỖI 2 — body KHÔNG phải JSON.
+    // Ví dụ thật: API chết nhưng còn proxy/ingress đứng trước, proxy trả trang
+    // HTML "502 Bad Gateway" của chính nó. `res.json()` sẽ ném lỗi parse.
+    // Nuốt lỗi parse ở đây là CỐ Ý: cái đáng giữ là `res.status` thật (502),
+    // nếu để lỗi parse bay lên thì mã trạng thái duy nhất nói lên chuyện gì
+    // đang xảy ra sẽ biến mất, và trang lại nhận một lỗi không có `code`.
+    // Không có request_id vì response này không do backend của mình sinh ra.
+  }
+  return new ApiError(code, res.status, requestId, fields)
 }

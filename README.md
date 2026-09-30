@@ -256,6 +256,7 @@ base-ecommerce/
 │   │   │   │   ├── permission.go             # quyền cố định trong code, Role, PermissionSet
 │   │   │   │   ├── otp.go                    # mã OTP: mục đích, 10 phút, 5 lần sai, chờ 60 giây
 │   │   │   │   ├── email.go                  # thư trong hàng đợi + sự kiện email.queued (chỉ mang id)
+│   │   │   │   ├── address.go                # địa chỉ giao hàng 2 cấp hành chính; chuẩn hóa SĐT di động
 │   │   │   │   ├── category.go               # cây danh mục, DescendantIDs, CheckMove chống vòng lặp
 │   │   │   │   ├── brand.go                  # thương hiệu; slug KHÔNG đổi theo tên
 │   │   │   │   ├── money.go                  # value object (bọc NUMERIC)
@@ -279,7 +280,8 @@ base-ecommerce/
 │   │   │   │   ├── media.go                  # upload (presigned POST) + ProductRules gộp lỗi thuộc tính và ảnh
 │   │   │   │   ├── auth.go                   # đăng ký/đăng nhập/refresh xoay vòng/đăng xuất, rate limit
 │   │   │   │   ├── rbac.go                   # Authorizer (quyền qua cache 5') + quản trị vai trò, xóa cache khi đổi
-│   │   │   │   └── otp.go                    # xác minh email, quên/đặt lại mật khẩu (HMAC), Mailing gửi thư
+│   │   │   │   ├── otp.go                    # xác minh email, quên/đặt lại mật khẩu (HMAC), Mailing gửi thư
+│   │   │   │   └── address.go                # sổ địa chỉ: trần 10, luôn đúng một mặc định, khóa dòng người dùng
 │   │   │   ├── repository/                   # cài đặt interface của usecase (đi RA ngoài)
 │   │   │   │   ├── pgstore/                  # Postgres: sqlc + squirrel + mapping → domain
 │   │   │   │   │   ├── queries/              # *.sql cho sqlc
@@ -292,7 +294,8 @@ base-ecommerce/
 │   │   │   │   │   ├── media_repo.go
 │   │   │   │   │   ├── user_repo.go          # users + refresh_tokens (FOR UPDATE khi refresh)
 │   │   │   │   │   ├── role_repo.go          # roles, role_permissions, user_roles; lỗi FK → mã lỗi
-│   │   │   │   │   └── otp_repo.go           # otp_codes + outbound_emails; lần sai commit không chờ đĩa
+│   │   │   │   │   ├── otp_repo.go           # otp_codes + outbound_emails; lần sai commit không chờ đĩa
+│   │   │   │   │   └── address_repo.go       # addresses; đổi mặc định: bỏ cờ cũ rồi mới đặt cờ mới
 │   │   │   │   ├── rediscache/               # cache-aside cho sản phẩm và cây danh mục
 │   │   │   │   ├── outboxpub/                # domain.Event → outbox.Record, cùng transaction
 │   │   │   │   └── outbox/                   # outbox + khử trùng lặp, dùng chung, KHÔNG biết domain
@@ -325,7 +328,11 @@ base-ecommerce/
 │       ├── lib/
 │       │   ├── api/generated/                # sinh từ openapi.yaml — KHÔNG sửa tay
 │       │   ├── api/error.ts                  # ApiError — mọi hỏng hóc về đúng một dạng
-│       │   ├── api/server.ts                 # apiGet(), chỉ gọi từ Server Component
+│       │   ├── api/server.ts                 # apiGet() có cache; apiSend() no-store, gắn Bearer + X-Forwarded-For
+│       │   ├── auth/cookies.ts               # cookie phiên httpOnly, safeNext chống open redirect (thuần — proxy dùng được)
+│       │   ├── auth/session.ts               # authed(): gọi API thay khách, 401 → trang đăng nhập
+│       │   ├── auth/actions.ts               # Server Action: đăng nhập/ký/xuất, OTP, hồ sơ, sổ địa chỉ
+│       │   ├── auth/form-state.ts            # FormState cho useActionState; lỗi API → lỗi theo ô
 │       │   ├── errors.ts                     # mã lỗi → thông điệp tiếng Việt, một chỗ duy nhất
 │       │   ├── format.ts                     # formatVND (nhận chuỗi decimal), formatDate
 │       │   ├── search-params.ts              # dựng link lọc: giữ tham số khác, luôn reset page
@@ -348,11 +355,15 @@ base-ecommerce/
 │       │   ├── sitemap.xml/route.ts          # sitemap INDEX, số file tính lúc chạy
 │       │   ├── sitemaps/[file]/route.ts      # pages.xml + products-<n>.xml (5.000/file)
 │       │   ├── robots.ts                     # chặn /admin, trỏ Sitemap:
+│       │   ├── (xac-thuc)/                   # /dang-nhap, /dang-ky, /quen-mat-khau, /dat-lai-mat-khau — noindex
+│       │   ├── tai-khoan/page.tsx            # thông tin, xác minh email, sửa họ tên, đăng xuất
+│       │   ├── tai-khoan/dia-chi/page.tsx    # sổ địa chỉ: thêm/sửa/xóa/đặt mặc định
 │       │   ├── error.tsx                     # lưới an toàn cuối; production KHÔNG còn mã lỗi để đọc
 │       │   ├── global-error.tsx              # phủ cả lỗi ném từ layout.tsx; tự khai <html>/<body>
 │       │   └── not-found.tsx                 # 404 tiếng Việt, dẫn về trang danh mục
-│       ├── proxy.ts                          # ?category= cũ → 308 /danh-muc/<slug> (trước render — xem file)
+│       ├── proxy.ts                          # ?category= cũ → 308; /tai-khoan/*: bắt đăng nhập + làm mới token (gộp refresh trùng)
 │       ├── components/
+│       │   ├── form.tsx                      # Field, SubmitButton, FormAlert — form tài khoản, chưa cần shadcn
 │       │   ├── breadcrumb.tsx                # đường dẫn phân cấp + JSON-LD BreadcrumbList
 │       │   ├── product-listing.tsx           # danh sách dùng chung: danh mục, danh mục theo slug, thương hiệu
 │       │   ├── variant-selector.tsx          # bộ chọn phiên bản (client), không đọc/ghi URL

@@ -15,7 +15,7 @@
 | **P0.3** | Outbox + relay + worker | ✅ xong, đã merge |
 | **P0.4** | Storefront Next.js | ✅ xong, đã merge |
 | **P1** | Catalog & PIM | ✅ **P1.1 → P1.5 xong** — xem [tổng quan](superpowers/specs/2026-09-29-p1-tong-quan.md) |
-| **P2** | Identity | 🟡 **P2.1–P2.3 xong** (tài khoản + phiên, RBAC, OTP email) — còn P2.4 storefront + sổ địa chỉ, xem [tổng quan](superpowers/specs/2026-09-30-p2-tong-quan.md) |
+| **P2** | Identity | ✅ **Xong** — tài khoản + phiên, RBAC, OTP email, trang tài khoản + sổ địa chỉ trên storefront, xem [tổng quan](superpowers/specs/2026-09-30-p2-tong-quan.md) |
 
 ---
 
@@ -228,6 +228,46 @@ Ngoài ra: `compose.prod.yml` thêm `web`, và mở `worker` + `outboxrelay` (v�
 comment dù P0.3 đã xong), kèm `RABBITMQ_URL` còn thiếu. Biến chung tách thành
 anchor `x-go-env` vì `<<` của YAML chỉ gộp nông. Thiếu `SITE_URL` thì compose từ
 chối chạy.
+
+---
+
+## P2.4 — Storefront: tài khoản + sổ địa chỉ ✅
+
+- **Trang:** `/dang-nhap`, `/dang-ky`, `/quen-mat-khau`, `/dat-lai-mat-khau`,
+  `/tai-khoan` (xác minh email, sửa họ tên, đăng xuất), `/tai-khoan/dia-chi`.
+- **Phiên là BFF bằng cookie httpOnly** `bec_at`/`bec_rt`. Token không bao giờ
+  tới JavaScript phía trình duyệt; API vẫn chỉ nhận Bearer.
+- **`proxy.ts`** chặn `/tai-khoan/*` và làm mới token trước khi render.
+- **API mới:** sổ địa chỉ (`/me/addresses`), `PATCH /me`, `TRUSTED_PROXIES`.
+- **Mã nguồn đo bằng trình duyệt thật** (Puppeteer + Chrome) qua đúng các form
+  và Server Action.
+- **Chi tiết:** [đặc tả](superpowers/specs/2026-09-30-p2-4-storefront-tai-khoan.md).
+
+| # | Kiểm | Kết quả |
+|---|---|---|
+| 1 | `task check`, `npm run lint/typecheck/build` | qua |
+| 2 | `/tai-khoan/dia-chi?x=1` chưa đăng nhập | 307 → `/dang-nhap?next=%2Ftai-khoan%2Fdia-chi%3Fx%3D1` |
+| 3 | Đăng ký trên trang → nhập mã từ Mailpit | cookie HttpOnly + SameSite=Lax, `bec_at` sống 839 s (token 900 s − 60); mã sai hiện lỗi; mã đúng → "Đã xác minh" |
+| 4 | Xóa `bec_at`, mở `/tai-khoan` | trang render bình thường; `bec_at` mới, `bec_rt` đã xoay vòng |
+| 5 | Hai request SONG SONG chỉ mang `bec_rt` | cả hai 200, cùng nhận một token mới; API chỉ thấy MỘT lần refresh; token mới dùng tiếp được (phiên không bị thu hồi) |
+| 6 | `next=//evil.com`, `next=https://evil.com/x` | về `localhost:3000/tai-khoan`; `next=/tai-khoan/dia-chi` thì về đúng đó; sai mật khẩu giữ lại ô email |
+| 7 | 6 lần đăng nhập sai qua web từ IP 203.0.113.7 (6 email khác nhau), rồi 1 lần từ 198.51.100.9 | `[401×5, 429]` rồi `401` — rate limit tính theo IP khách |
+| 8 | Nối thẳng API từ mạng 10.99.0.0/24, gửi `X-Forwarded-For: 6.6.6.6` | log ghi IP socket 10.99.0.3; cùng header từ container web (tin cậy) → 6.6.6.6 |
+| 9 | Sổ địa chỉ trên trang | SĐT `0123` báo lỗi ở đúng ô (`aria-invalid`), giữ các ô khác; `+84 912.345.678` lưu `0912345678`; đặt mặc định, xóa địa chỉ mặc định → địa chỉ còn lại lên thay; sửa có điền sẵn |
+| 10 | Người B sửa/xóa/đặt mặc định địa chỉ của A; id rác | cả bốn 404 `UNKNOWN_ADDRESS`; địa chỉ thứ 11 → 422 `ADDRESS_LIMIT_REACHED`, luôn đúng 1 mặc định |
+| 11 | Quên → đặt lại trên trang → đăng nhập | email điền sẵn; sau đặt lại về `/dang-nhap?da-doi-mat-khau=1`; mật khẩu cũ bị từ chối, mới vào được |
+| 12 | Đăng xuất | về `/`, không còn cookie `bec_*`, refresh token cũ 401 |
+| 13 | Trang sản phẩm có bị động hóa không | không đổi so với `main` — xem phát hiện dưới |
+
+**Phát hiện, KHÔNG do P2.4:** `/san-pham/[slug]` trả `Cache-Control: private,
+no-store` — trang render động, không phải "ISR 60 s" như ghi ở P1.5. Đã build
+lại chính `main` để so: y hệt. Cần điều tra riêng (cache dữ liệu ở tầng fetch
+vẫn còn, mất là cache HTML).
+
+**Lỗi của script kiểm, không phải của code** — ghi lại để lần sau khỏi mất công:
+cắt cookie `bec_rt=` bằng `slice(6)` (dài 7 ký tự) làm token gửi lại thừa dấu
+`=`; và `waitForNetworkIdle` treo vì prefetch của `<Link>` — chờ response POST
+của Server Action thay vào.
 
 ---
 
@@ -540,6 +580,9 @@ chặn SELECT lẫn khóa FK khi ghi sản phẩm.
 | **Chưa phát sự kiện `category.*`/`brand.*`** | Chưa consumer nào cần; phát mà thiếu binding thì relay thử lại mãi. P7 thêm cả hai cùng lúc |
 | **Đăng ký lộ email đã tồn tại** | 409 `EMAIL_TAKEN`. Quên / đặt lại mật khẩu đã kín (P2.3), nhưng đăng ký thì chưa: giấu được cần đăng ký trả 202 rồi gửi thư "bạn đã có tài khoản" — đổi hợp đồng API, để lúc làm màn hình đăng ký (P2.4) cân nhắc. Rate limit làm việc dò hàng loạt đắt (P2.1) |
 | **Đăng xuất không giết access token đang có** | Sống tối đa 15 phút — cái giá của JWT không tra DB mỗi request (P2.1) |
+| **Gộp refresh chỉ trong MỘT tiến trình web** | `proxy.ts` giữ Map trong bộ nhớ. Chạy nhiều bản web thì hai bản vẫn có thể cùng refresh một token và API thu hồi phiên — lúc đó gộp qua Redis (P2.4) |
+| **Header không hiện tên người đăng nhập** | Link "Tài khoản" tĩnh để trang danh mục/sản phẩm không bị render động vì đọc cookie; hiện tên bằng đảo client khi có giỏ hàng (P4) |
+| **Dev: request từ máy host tới web/api trông như đến từ proxy tin cậy** | Đi qua gateway Docker 172.x.0.1, nằm trong `TRUSTED_PROXIES`. Production: api/web chỉ mở loopback, người duy nhất đi qua gateway là reverse proxy (P2.4) |
 | **Quên mật khẩu phát mã ở goroutine nền** | Tiến trình tắt đúng lúc đó thì mã không được phát, người dùng bấm gửi lại. Cái giá của việc không để thời gian phản hồi lộ email (P2.3) |
 | **Hai tab refresh cùng lúc = bị đăng xuất** | Không phân biệt được với token bị trộm. Storefront refresh ở server một chỗ nên hiếm (P2.1) |
 | **Chưa có job dọn refresh token hết hạn** | Bảng tăng dần; có index `expires_at` sẵn cho job dọn |
